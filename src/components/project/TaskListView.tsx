@@ -145,8 +145,15 @@ function AssigneePicker({ task }: { task: Task }) {
   const { updateTask, teamMembers, projects } = useAppStore();
   const { open, setOpen, ref } = usePopover();
   const project = projects.find(p => p.id === task.projectId);
-  const members = project ? teamMembers.filter(m => project.teamMemberIds.includes(m.id)) : teamMembers;
-  const assignee = members.find(m => m.id === task.assigneeId);
+  const members = project
+    ? teamMembers.filter(m =>
+        project.teamMemberIds.includes(m.id) ||
+        m.permission === 'Admin' ||
+        m.permission === 'Gerente'
+      )
+    : teamMembers;
+  // Always search all teamMembers so the avatar shows even if member isn't in the filtered list
+  const assignee = teamMembers.find(m => m.id === task.assigneeId);
 
   return (
     <div ref={ref} className="relative flex justify-end pr-2">
