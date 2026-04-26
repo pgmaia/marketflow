@@ -94,7 +94,13 @@ export function TaskModal() {
   const project = projects.find(p => p.id === task.projectId);
   const projectPhases = project?.phases?.map(p => p.name) ?? ['Production'];
   const assignee = teamMembers.find(m => m.id === task.assigneeId);
-  const projectMembers = project ? teamMembers.filter(m => project.teamMemberIds.includes(m.id)) : [];
+  const projectMembers = project
+    ? teamMembers.filter(m =>
+        project.teamMemberIds.includes(m.id) ||
+        m.permission === 'Admin' ||
+        m.permission === 'Gerente'
+      )
+    : [];
   const update = (field: keyof Task, value: any) => updateTask(task.id, { [field]: value });
   const today = new Date().toISOString().split('T')[0];
   const isOverdue = task.dueDate < today && task.status !== 'Done';
