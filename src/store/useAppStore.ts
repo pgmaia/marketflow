@@ -66,6 +66,7 @@ interface AppState {
 
   // Project CRUD
   addProject: (project: Project) => void;
+  updateProject: (id: string, patch: Partial<Pick<Project, 'name' | 'description' | 'color' | 'startDate' | 'endDate'>>) => void;
   deleteProject: (id: string) => void;
 
   // Task CRUD
@@ -307,6 +308,9 @@ export const useAppStore = create<AppState>()(
       })),
 
       addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
+      updateProject: (id, patch) => set((s) => ({
+        projects: s.projects.map(p => p.id === id ? { ...p, ...patch } : p),
+      })),
       deleteProject: (id) => set((s) => {
         const project = s.projects.find(p => p.id === id);
         if (!project) return s;

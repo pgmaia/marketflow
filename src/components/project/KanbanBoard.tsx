@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2 } from 'lucide-react';
+import { Plus, LayoutGrid, List, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil } from 'lucide-react';
 import type { Task } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { PhaseColumn } from './PhaseColumn';
@@ -7,6 +7,7 @@ import { TeamPanel } from './TeamPanel';
 import { TaskListView } from './TaskListView';
 import { ApplyTemplateModal } from '../templates/ApplyTemplateModal';
 import { PhaseEditor } from './PhaseEditor';
+import { EditProjectModal } from './EditProjectModal';
 
 type ViewMode = 'board' | 'list';
 const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista' };
@@ -18,6 +19,7 @@ export function KanbanBoard() {
   const [showDone, setShowDone] = useState(true);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showPhaseEditor, setShowPhaseEditor] = useState(false);
+  const [showEditProject, setShowEditProject] = useState(false);
   const [showProblems, setShowProblems] = useState(false);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
@@ -100,6 +102,15 @@ export function KanbanBoard() {
             <div className="flex items-center gap-2.5 mb-2.5">
               <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: project.color }} />
               <h1 className="text-[20px] font-bold text-[#111] leading-tight truncate tracking-tight">{project.name}</h1>
+              {isAdminOrManager && (
+                <button
+                  onClick={() => setShowEditProject(true)}
+                  title="Editar projeto"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-300 hover:text-[#FF5C35] transition-colors shrink-0"
+                >
+                  <Pencil size={13} />
+                </button>
+              )}
             </div>
             <div className="flex items-center gap-4 ml-5">
               <span className="text-[12px] text-[#999]">
@@ -382,6 +393,10 @@ export function KanbanBoard() {
           phases={project.phases}
           onClose={() => setShowPhaseEditor(false)}
         />
+      )}
+
+      {showEditProject && (
+        <EditProjectModal project={project} onClose={() => setShowEditProject(false)} />
       )}
 
       {confirmDeleteProject && (

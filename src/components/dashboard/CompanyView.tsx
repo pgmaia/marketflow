@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle } from 'lucide-react';
+import { Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { ProgressBar } from '../shared/ProgressBar';
 import { AvatarGroup } from '../shared/Avatar';
 import { DEFAULT_PHASES } from '../../data/seed';
+import { EditProjectModal } from '../project/EditProjectModal';
 
 // ─── Confirm delete modal ─────────────────────────────────────────────────────
 
@@ -223,9 +224,13 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
 // ─── Company view ─────────────────────────────────────────────────────────────
 
 export function CompanyView() {
-  const { companies, activeCompanyId, projects, tasks, teamMembers, setActiveProject, deleteCompany, deleteProject, setActiveCompany } = useAppStore();
+  const { companies, activeCompanyId, projects, tasks, teamMembers, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany } = useAppStore();
   const [showNewProject, setShowNewProject] = useState(false);
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { type: 'company' } | { type: 'project'; id: string; name: string }>(null);
+
+  const currentUser = teamMembers.find(m => m.id === currentUserId);
+  const isAdminOrManager = currentUser?.permission === 'Admin' || currentUser?.permission === 'Gerente';
 
   const company = companies.find(c => c.id === activeCompanyId);
   if (!company) return null;
@@ -363,6 +368,15 @@ export function CompanyView() {
                       <div><AvatarGroup members={members} max={3} size="sm" /></div>
 
                       <div className="flex justify-end items-center gap-1">
+                        {isAdminOrManager && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditProjectId(project.id); }}
+                            className="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-blue-50 text-gray-300 hover:text-blue-500 transition-all"
+                            title="Editar projeto"
+                          >
+                            <Pencil size={12} />
+                          </button>
+                        )}
                         <button
                           onClick={e => { e.stopPropagation(); setConfirmDelete({ type: 'project', id: project.id, name: project.name }); }}
                           className="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-400 transition-all"
@@ -398,6 +412,13 @@ export function CompanyView() {
           onClose={() => setShowNewProject(false)}
         />
       )}
+
+      {editProjectId && (() => {
+        const proj = projects.find(p => p.id === editProjectId);
+        return proj ? (
+          <EditProjectModal project={proj} onClose={() => setEditProjectId(null)} />
+        ) : null;
+      })()}
 
       {confirmDelete?.type === 'company' && (
         <ConfirmDeleteModal
