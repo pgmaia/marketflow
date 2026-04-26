@@ -19,6 +19,8 @@ interface AppState {
   currentUserId: string | null;
   isAuthenticated: boolean;
   darkMode: boolean;
+  memberPasswords: Record<string, string>;
+  deletedMemberIds: string[];
 
   // Navigation
   activeCompanyId: string | null;
@@ -36,6 +38,8 @@ interface AppState {
   login: (email: string, password: string) => boolean;
   logout: () => void;
   toggleDarkMode: () => void;
+  addTeamMember: (data: Omit<TeamMember, 'id'>, password: string) => void;
+  deleteTeamMember: (id: string) => void;
   setMemberProjectAccess: (memberId: string, projectId: string, hasAccess: boolean) => void;
   setMemberAllAccess: (memberId: string, hasAccess: boolean) => void;
   setFilters: (filters: Partial<AppFilters>) => void;
@@ -195,6 +199,8 @@ export const useAppStore = create<AppState>()(
       currentUserId: null,
       isAuthenticated: false,
       darkMode: false,
+      memberPasswords: {},
+      deletedMemberIds: [],
 
       setActiveCompany: (id) => set({ activeCompanyId: id, activeProjectId: null, view: id ? 'company' : 'dashboard' }),
       setActiveProject: (id) => set({ activeProjectId: id, view: id ? 'project' : 'company' }),
@@ -206,12 +212,41 @@ export const useAppStore = create<AppState>()(
           m => m.email?.toLowerCase() === email.trim().toLowerCase()
         );
         if (!member) return false;
-        if (MEMBER_PASSWORDS[member.id] !== password) return false;
+        const expectedPw = MEMBER_PASSWORDS[member.id] ?? get().memberPasswords[member.id];
+        if (!expectedPw || expectedPw !== password) return false;
         set({ isAuthenticated: true, currentUserId: member.id });
         return true;
       },
       logout: () => set({ isAuthenticated: false }),
       toggleDarkMode: () => set(s => ({ darkMode: !s.darkMode })),
+
+      addTeamMember: (data, password) => set((s) => {
+        const id = `tm-${Date.now()}`;
+        const newMember: TeamMember = { id, ...data };
+        return {
+          teamMembers: [...s.teamMembers, newMember],
+          memberPasswords: { ...s.memberPasswords, [id]: password },
+          memberAccess: { ...s.memberAccess, [id]: s.projects.map(p => p.id) },
+        };
+      }),
+
+      deleteTeamMember: (id) => set((s) => {
+        const newMemberPasswords = { ...s.memberPasswords };
+        delete newMemberPasswords[id];
+        const newMemberAccess = { ...s.memberAccess };
+        delete newMemberAccess[id];
+        return {
+          teamMembers: s.teamMembers.filter(m => m.id !== id),
+          memberPasswords: newMemberPasswords,
+          memberAccess: newMemberAccess,
+          deletedMemberIds: [...s.deletedMemberIds, id],
+          tasks: s.tasks.map(t => t.assigneeId === id ? { ...t, assigneeId: undefined } : t),
+          projects: s.projects.map(p => ({
+            ...p,
+            teamMemberIds: p.teamMemberIds.filter(mid => mid !== id),
+          })),
+        };
+      }),
       setFilters: (filters) => set((s) => ({ filters: { ...s.filters, ...filters } })),
 
       setActiveFlow: (id) => set({ activeFlowId: id, view: 'flow' }),
@@ -532,7 +567,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'marketflow-store',
-      version: 8,
+      version: 9,
       migrate: (persistedState: any) => {
         // v0 → v1: add phases to projects that were saved without them
         if (persistedState?.projects) {
@@ -606,6 +641,10 @@ export const useAppStore = create<AppState>()(
             }
           });
         }
+        // v8 → v9: add memberPasswords and deletedMemberIds
+        if (!persistedState.memberPasswords) persistedState.memberPasswords = {};
+        if (!persistedState.deletedMemberIds) persistedState.deletedMemberIds = [];
+
         return persistedState;
       },
       partialize: (state) => ({
@@ -622,6 +661,8 @@ export const useAppStore = create<AppState>()(
         currentUserId: state.currentUserId,
         isAuthenticated: state.isAuthenticated,
         darkMode: state.darkMode,
+        memberPasswords: state.memberPasswords,
+        deletedMemberIds: state.deletedMemberIds,
       }),
       merge: (persisted: any, current) => {
         const merged = { ...current, ...persisted };
@@ -630,14 +671,18 @@ export const useAppStore = create<AppState>()(
         if (!merged.trash) merged.trash = [];
         if (merged.currentUserId === undefined) merged.currentUserId = null;
         if (merged.isAuthenticated === undefined) merged.isAuthenticated = false;
+        if (!merged.memberPasswords) merged.memberPasswords = {};
+        if (!merged.deletedMemberIds) merged.deletedMemberIds = [];
         // Always ensure all seed members are present with up-to-date email/permission
+        // (skipping any that were explicitly deleted by an admin)
         if (merged.teamMembers) {
           merged.teamMembers = merged.teamMembers.map((m: any) => {
             const seed = seedTeamMembers.find(s => s.id === m.id);
             return seed ? { ...m, email: m.email ?? seed.email, permission: m.permission ?? seed.permission } : m;
           });
+          const deletedIds: string[] = merged.deletedMemberIds ?? [];
           seedTeamMembers.forEach(s => {
-            if (!merged.teamMembers.find((m: any) => m.id === s.id)) {
+            if (!deletedIds.includes(s.id) && !merged.teamMembers.find((m: any) => m.id === s.id)) {
               merged.teamMembers.unshift(s);
             }
           });
