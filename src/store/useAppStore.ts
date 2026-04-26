@@ -358,19 +358,42 @@ export const useAppStore = create<AppState>()(
           const template = s.templates.find((t) => t.id === templateId);
           if (!template) return s;
           const today = new Date().toISOString().split('T')[0];
-          const newTasks: Task[] = template.tasks.map((tt, i) => ({
-            id: `t${Date.now()}-${i}`,
-            projectId,
-            phase: tt.phase,
-            title: tt.title,
-            type: tt.type,
-            status: 'Not Started' as TaskStatus,
-            priority: tt.priority,
-            description: tt.description,
-            notes: tt.notes,
-            dueDate: today,
-            createdAt: today,
-          }));
+          const ts = Date.now();
+          const newTasks: Task[] = [];
+
+          template.tasks.forEach((tt, i) => {
+            const parentId = `t${ts}-${i}`;
+            newTasks.push({
+              id: parentId,
+              projectId,
+              phase: tt.phase,
+              title: tt.title,
+              type: tt.type,
+              status: 'Not Started' as TaskStatus,
+              priority: tt.priority,
+              description: tt.description,
+              notes: tt.notes,
+              dueDate: today,
+              createdAt: today,
+            });
+            (tt.subtasks ?? []).forEach((st, j) => {
+              newTasks.push({
+                id: `t${ts}-${i}-s${j}`,
+                projectId,
+                phase: tt.phase,
+                title: st.title,
+                type: st.type,
+                status: 'Not Started' as TaskStatus,
+                priority: st.priority,
+                description: st.description,
+                notes: st.notes,
+                dueDate: today,
+                createdAt: today,
+                parentTaskId: parentId,
+              });
+            });
+          });
+
           return { tasks: [...s.tasks, ...newTasks] };
         }),
 

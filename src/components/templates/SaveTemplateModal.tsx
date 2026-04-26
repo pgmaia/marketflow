@@ -10,10 +10,13 @@ interface Props {
 }
 
 export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
-  const { addTemplate } = useAppStore();
+  const { addTemplate, tasks: allTasks } = useAppStore();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // For each selected task, collect its subtasks from the global task list
+  const subtasksOf = (taskId: string) => allTasks.filter(t => t.parentTaskId === taskId);
 
   const handleSave = () => {
     const trimmed = name.trim();
@@ -23,14 +26,27 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
       id: `tpl-${Date.now()}`,
       name: trimmed,
       description: description.trim() || undefined,
-      tasks: tasks.map(t => ({
-        title: t.title,
-        type: t.type,
-        phase: t.phase,
-        priority: t.priority,
-        description: t.description,
-        notes: t.notes,
-      })),
+      tasks: tasks.map(t => {
+        const subs = subtasksOf(t.id);
+        return {
+          title: t.title,
+          type: t.type,
+          phase: t.phase,
+          priority: t.priority,
+          description: t.description,
+          notes: t.notes,
+          subtasks: subs.length > 0
+            ? subs.map(s => ({
+                title: s.title,
+                type: s.type,
+                phase: s.phase,
+                priority: s.priority,
+                description: s.description,
+                notes: s.notes,
+              }))
+            : undefined,
+        };
+      }),
       createdAt: new Date().toISOString().split('T')[0],
     };
 
@@ -52,7 +68,10 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
               </div>
               <div>
                 <p className="text-[14px] font-bold text-gray-900">Salvar como template</p>
-                <p className="text-[11px] text-gray-400">{tasks.length} {tasks.length === 1 ? 'tarefa selecionada' : 'tarefas selecionadas'}</p>
+                <p className="text-[11px] text-gray-400">
+                  {tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}
+                  {(() => { const subCount = tasks.reduce((n, t) => n + subtasksOf(t.id).length, 0); return subCount > 0 ? ` · ${subCount} subtarefa${subCount > 1 ? 's' : ''}` : ''; })()}
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
@@ -61,14 +80,30 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
           </div>
 
           {/* Task preview */}
-          <div className="px-6 py-4 bg-gray-50/60 border-b border-gray-100 max-h-40 overflow-y-auto">
-            {tasks.map(t => (
-              <div key={t.id} className="flex items-center gap-2 py-1.5">
-                <Tag size={11} className="text-gray-300 shrink-0" />
-                <span className="text-[12px] text-gray-600 truncate">{t.title}</span>
-                <span className="ml-auto text-[10px] text-gray-400 shrink-0">{t.phase}</span>
-              </div>
-            ))}
+          <div className="px-6 py-4 bg-gray-50/60 border-b border-gray-100 max-h-48 overflow-y-auto">
+            {tasks.map(t => {
+              const subs = subtasksOf(t.id);
+              return (
+                <div key={t.id}>
+                  <div className="flex items-center gap-2 py-1.5">
+                    <Tag size={11} className="text-gray-300 shrink-0" />
+                    <span className="text-[12px] text-gray-600 truncate">{t.title}</span>
+                    {subs.length > 0 && (
+                      <span className="text-[10px] text-gray-400 shrink-0 bg-gray-200/70 px-1.5 py-0.5 rounded-full">
+                        {subs.length} sub
+                      </span>
+                    )}
+                    <span className="ml-auto text-[10px] text-gray-400 shrink-0">{t.phase}</span>
+                  </div>
+                  {subs.map(s => (
+                    <div key={s.id} className="flex items-center gap-2 py-1 pl-6">
+                      <span className="w-1 h-1 rounded-full bg-gray-300 shrink-0" />
+                      <span className="text-[11px] text-gray-400 truncate">{s.title}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
 
           {/* Form */}

@@ -72,7 +72,9 @@ export function ApplyTemplateModal({ projectId, onClose }: Props) {
                       )}
                     </div>
 
-                    <span className="text-[11px] text-gray-400 shrink-0">{tpl.tasks.length} tarefas</span>
+                    <span className="text-[11px] text-gray-400 shrink-0">
+                      {tpl.tasks.reduce((n, t) => n + 1 + (t.subtasks?.length ?? 0), 0)} tarefas
+                    </span>
 
                     <button
                       onClick={() => handleApply(tpl.id)}
@@ -117,11 +119,20 @@ export function ApplyTemplateModal({ projectId, onClose }: Props) {
                   {isExpanded && (
                     <div className="border-t border-gray-50 bg-gray-50/50">
                       {tpl.tasks.map((t, i) => (
-                        <div key={i} className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-50 last:border-0">
-                          <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
-                          <span className="flex-1 text-[12px] text-gray-600 truncate">{t.title}</span>
-                          <span className="text-[10px] text-gray-400 shrink-0">{t.phase}</span>
-                          <span className="text-[10px] text-gray-400 shrink-0">{t.priority}</span>
+                        <div key={i}>
+                          <div className="flex items-center gap-3 px-6 py-2.5 border-b border-gray-50">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0" />
+                            <span className="flex-1 text-[12px] text-gray-600 truncate">{t.title}</span>
+                            <span className="text-[10px] text-gray-400 shrink-0">{t.phase}</span>
+                            <span className="text-[10px] text-gray-400 shrink-0">{t.priority}</span>
+                          </div>
+                          {(t.subtasks ?? []).map((s, j) => (
+                            <div key={j} className="flex items-center gap-3 pl-10 pr-6 py-2 border-b border-gray-50 last:border-0 bg-gray-50/80">
+                              <span className="w-1 h-1 rounded-full bg-gray-200 shrink-0" />
+                              <span className="flex-1 text-[11px] text-gray-400 truncate">{s.title}</span>
+                              <span className="text-[10px] text-gray-300 shrink-0">{s.priority}</span>
+                            </div>
+                          ))}
                         </div>
                       ))}
                     </div>

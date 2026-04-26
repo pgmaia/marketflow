@@ -76,6 +76,7 @@ export interface TemplateTask {
   priority: TaskPriority;
   description?: string;
   notes?: string;
+  subtasks?: Array<Omit<TemplateTask, 'subtasks'>>;
 }
 
 export interface TaskTemplate {
