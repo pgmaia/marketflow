@@ -101,6 +101,19 @@ export interface AppFilters {
   dueDateRange: 'all' | 'overdue' | 'this-week' | 'this-month';
 }
 
+export interface PersonalTask {
+  id: string;
+  ownerId: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate: string; // ISO date string
+  type: TaskType;
+  notes?: string;
+  createdAt: string;
+}
+
 // ── Trash (30-day archive) ────────────────────────────────────────────────────
 
 export type TrashItem =

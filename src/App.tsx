@@ -10,6 +10,7 @@ import { UserManagementView } from './components/users/UserManagementView';
 import { FlowView } from './components/flow/FlowView';
 import { TrashView } from './components/trash/TrashView';
 import { LoginView } from './components/auth/LoginView';
+import { ScheduleView } from './components/schedule/ScheduleView';
 
 export default function App() {
   const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode } = useAppStore();
@@ -52,6 +53,7 @@ export default function App() {
           {view === 'users' && <UserManagementView />}
           {view === 'flow' && <FlowView />}
           {view === 'trash' && <TrashView />}
+          {view === 'schedule' && <ScheduleView />}
         </main>
       </div>
 

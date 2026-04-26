@@ -1,14 +1,15 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, TeamMember, AppFilters, TaskStatus, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, TeamMember, AppFilters, TaskStatus, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask } from '../types';
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
 
-type AppView = 'dashboard' | 'company' | 'project' | 'users' | 'flow' | 'trash';
+type AppView = 'dashboard' | 'company' | 'project' | 'users' | 'flow' | 'trash' | 'schedule';
 
 interface AppState {
   companies: Company[];
   projects: Project[];
   tasks: Task[];
+  personalTasks: PersonalTask[];
   teamMembers: TeamMember[];
   templates: TaskTemplate[];
   phaseTemplates: PhaseTemplate[];
@@ -43,6 +44,11 @@ interface AppState {
   setMemberProjectAccess: (memberId: string, projectId: string, hasAccess: boolean) => void;
   setMemberAllAccess: (memberId: string, hasAccess: boolean) => void;
   setFilters: (filters: Partial<AppFilters>) => void;
+
+  // Personal Tasks
+  addPersonalTask: (task: Omit<PersonalTask, 'id' | 'createdAt'>) => void;
+  updatePersonalTask: (id: string, updates: Partial<PersonalTask>) => void;
+  deletePersonalTask: (id: string) => void;
 
   // Flow actions
   setActiveFlow: (id: string | null) => void;
@@ -185,6 +191,7 @@ export const useAppStore = create<AppState>()(
       companies: seedCompanies,
       projects: seedProjects,
       tasks: seedTasks,
+      personalTasks: [],
       teamMembers: seedTeamMembers,
       templates: [],
       phaseTemplates: [],
@@ -249,6 +256,20 @@ export const useAppStore = create<AppState>()(
         };
       }),
       setFilters: (filters) => set((s) => ({ filters: { ...s.filters, ...filters } })),
+
+      addPersonalTask: (taskData) => set((s) => ({
+        personalTasks: [...s.personalTasks, {
+          id: `pt-${Date.now()}`,
+          createdAt: new Date().toISOString().split('T')[0],
+          ...taskData,
+        }],
+      })),
+      updatePersonalTask: (id, updates) => set((s) => ({
+        personalTasks: s.personalTasks.map(t => t.id === id ? { ...t, ...updates } : t),
+      })),
+      deletePersonalTask: (id) => set((s) => ({
+        personalTasks: s.personalTasks.filter(t => t.id !== id),
+      })),
 
       setActiveFlow: (id) => set({ activeFlowId: id, view: 'flow' }),
       addFlow: (flow) => set((s) => ({ flows: [...s.flows, flow] })),
@@ -594,7 +615,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'marketflow-store',
-      version: 9,
+      version: 10,
       migrate: (persistedState: any) => {
         // v0 → v1: add phases to projects that were saved without them
         if (persistedState?.projects) {
@@ -671,11 +692,14 @@ export const useAppStore = create<AppState>()(
         // v8 → v9: add memberPasswords and deletedMemberIds
         if (!persistedState.memberPasswords) persistedState.memberPasswords = {};
         if (!persistedState.deletedMemberIds) persistedState.deletedMemberIds = [];
+        // v9 → v10: add personalTasks
+        if (!persistedState.personalTasks) persistedState.personalTasks = [];
 
         return persistedState;
       },
       partialize: (state) => ({
         tasks: state.tasks,
+        personalTasks: state.personalTasks,
         companies: state.companies,
         projects: state.projects,
         teamMembers: state.teamMembers,
@@ -700,6 +724,7 @@ export const useAppStore = create<AppState>()(
         if (merged.isAuthenticated === undefined) merged.isAuthenticated = false;
         if (!merged.memberPasswords) merged.memberPasswords = {};
         if (!merged.deletedMemberIds) merged.deletedMemberIds = [];
+        if (!merged.personalTasks) merged.personalTasks = [];
         // Always ensure all seed members are present with up-to-date email/permission
         // (skipping any that were explicitly deleted by an admin)
         if (merged.teamMembers) {
