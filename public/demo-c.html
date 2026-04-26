@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280, height=800, initial-scale=1">
+<title>MarketFlow - Opção C - Glassmorphism Dark</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d25;
+    --card: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.06);
+    --card-hover: rgba(255,255,255,0.07);
+    --text-primary: #e4e4e7;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --accent: #FF5C35;
+    --accent-glow: rgba(255,92,53,0.35);
+    --sidebar-bg: rgba(20,20,25,0.8);
+    --glass-blur: 20px;
+  }
+
+  html, body {
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    position: relative;
+  }
+
+  /* Option banner */
+  .option-banner {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 1000;
+    background: rgba(255,92,53,0.12);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,92,53,0.25);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+
+  /* ========== SIDEBAR ========== */
+  .sidebar {
+    width: 240px;
+    min-width: 240px;
+    height: 100%;
+    background: var(--sidebar-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border-right: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sidebar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 1px;
+    height: 100%;
+    background: linear-gradient(180deg, rgba(255,92,53,0.15) 0%, rgba(255,92,53,0.03) 50%, rgba(255,92,53,0.1) 100%);
+  }
+
+  .sidebar-logo {
+    padding: 20px 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 36px;
+  }
+
+  .logo-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #FF5C35 0%, #FF8C6B 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(255,92,53,0.4), 0 0 40px rgba(255,92,53,0.15);
+    font-weight: 800;
+    font-size: 14px;
+    color: #fff;
+  }
+
+  .logo-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar-nav {
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 12px 8px 6px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 400;
+    position: relative;
+  }
+
+  .nav-item:hover {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
+  }
+
+  .nav-item.active {
+    background: rgba(255,255,255,0.07);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 16px;
+    border-radius: 0 3px 3px 0;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+
+  .nav-icon {
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+  }
+
+  .nav-item.active .nav-icon,
+  .nav-item:hover .nav-icon { opacity: 1; }
+
+  .company-list {
+    padding: 4px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .company-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .company-item:hover {
+    background: rgba(255,255,255,0.04);
+    color: var(--text-primary);
+  }
+
+  .company-item.active {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .company-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .company-dot.green {
+    background: #22c55e;
+    box-shadow: 0 0 8px rgba(34,197,94,0.4);
+  }
+  .company-dot.blue {
+    background: #3b82f6;
+    box-shadow: 0 0 8px rgba(59,130,246,0.4);
+  }
+  .company-dot.purple {
+    background: #a855f7;
+    box-shadow: 0 0 8px rgba(168,85,247,0.4);
+  }
+  .company-dot.orange {
+    background: #f97316;
+    box-shadow: 0 0 8px rgba(249,115,22,0.4);
+  }
+  .company-dot.pink {
+    background: #ec4899;
+    box-shadow: 0 0 8px rgba(236,72,153,0.4);
+  }
+
+  .company-count {
+    margin-left: auto;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.04);
+    padding: 1px 7px;
+    border-radius: 10px;
+  }
+
+  /* Sidebar user */
+  .sidebar-user {
+    padding: 16px 20px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #ff8c6b);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(255,92,53,0.3);
+    flex-shrink: 0;
+  }
+
+  .user-info {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .user-role {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* ========== MAIN CONTENT ========== */
+  .main {
+    flex: 1;
+    height: 100%;
+    overflow-y: auto;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+  /* Project Header */
+  .project-header {
+    padding: 28px 32px 20px;
+    background: transparent;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .project-breadcrumb {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .project-breadcrumb span { opacity: 0.5; }
+
+  .project-title-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .project-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+
+  .project-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    max-width: 600px;
+    line-height: 1.6;
+  }
+
+  .project-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .meta-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.06);
+    font-size: 12px;
+    color: var(--text-secondary);
+    transition: all 0.2s ease;
+  }
+
+  .meta-chip:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.1);
+  }
+
+  .meta-chip svg { opacity: 0.5; width: 14px; height: 14px; }
+
+  .meta-chip .chip-label { color: var(--text-muted); font-size: 11px; }
+
+  .team-avatars {
+    display: flex;
+    margin-left: 2px;
+  }
+
+  .team-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    color: #fff;
+    border: 2px solid var(--bg);
+    margin-left: -6px;
+    position: relative;
+  }
+
+  .team-avatar:first-child { margin-left: 0; }
+
+  .team-avatar.av1 { background: #3b82f6; }
+  .team-avatar.av2 { background: #a855f7; }
+  .team-avatar.av3 { background: #22c55e; }
+  .team-avatar.av4 { background: #f97316; }
+
+  .progress-section {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .progress-bar-wrap {
+    flex: 1;
+    max-width: 320px;
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    width: 42%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--accent), #ff8c6b);
+    box-shadow: 0 0 12px rgba(255,92,53,0.4);
+    position: relative;
+    transition: width 0.6s ease;
+  }
+
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 20px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+    border-radius: 3px;
+  }
+
+  .progress-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .progress-label {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* View Switcher & Actions Bar */
+  .actions-bar {
+    padding: 12px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .view-switcher {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .view-btn {
+    padding: 6px 16px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+    background: none;
+    font-family: inherit;
+  }
+
+  .view-btn:hover { color: var(--text-secondary); }
+
+  .view-btn.active {
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+
+  .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .action-btn {
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-secondary);
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .action-btn:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+  }
+
+  .action-btn.primary {
+    background: rgba(255,92,53,0.12);
+    border-color: rgba(255,92,53,0.2);
+    color: var(--accent);
+  }
+
+  .action-btn.primary:hover {
+    background: rgba(255,92,53,0.2);
+    box-shadow: 0 0 12px rgba(255,92,53,0.15);
+  }
+
+  /* Column Headers */
+  .col-headers {
+    display: grid;
+    grid-template-columns: 40px 1fr 120px 100px 100px 80px 50px;
+    padding: 10px 32px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .col-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+  }
+
+  /* Phase Groups */
+  .phase-group {
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .phase-header {
+    padding: 10px 32px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.02);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .phase-header:hover { background: rgba(255,255,255,0.035); }
+
+  .phase-chevron {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+
+  .phase-name {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  .phase-count {
+    font-size: 10px;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.05);
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+
+  .phase-bar {
+    width: 3px;
+    height: 14px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Task Row */
+  .task-row {
+    display: grid;
+    grid-template-columns: 40px 1fr 120px 100px 100px 80px 50px;
+    padding: 10px 32px;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .task-row:hover {
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+
+  .task-row:hover::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2px;
+    height: 100%;
+    background: var(--accent);
+    opacity: 0.4;
+  }
+
+  .task-checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 1.5px solid rgba(255,255,255,0.15);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .task-checkbox:hover {
+    border-color: var(--accent);
+    background: rgba(255,92,53,0.08);
+  }
+
+  .task-checkbox.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .task-checkbox.checked::after {
+    content: '';
+    width: 8px;
+    height: 5px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  .task-name-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .task-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: color 0.15s ease;
+  }
+
+  .task-row:hover .task-name { color: #fff; }
+
+  .task-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  /* Status Badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    width: fit-content;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-badge.todo {
+    background: rgba(113,113,122,0.12);
+    border: 1px solid rgba(113,113,122,0.15);
+    color: #a1a1aa;
+  }
+  .status-badge.todo .status-dot {
+    background: #71717a;
+    box-shadow: 0 0 6px rgba(113,113,122,0.4);
+  }
+
+  .status-badge.progress {
+    background: rgba(59,130,246,0.12);
+    border: 1px solid rgba(59,130,246,0.2);
+    color: #60a5fa;
+  }
+  .status-badge.progress .status-dot {
+    background: #3b82f6;
+    box-shadow: 0 0 6px rgba(59,130,246,0.5);
+  }
+
+  .status-badge.review {
+    background: rgba(168,85,247,0.12);
+    border: 1px solid rgba(168,85,247,0.2);
+    color: #c084fc;
+  }
+  .status-badge.review .status-dot {
+    background: #a855f7;
+    box-shadow: 0 0 6px rgba(168,85,247,0.5);
+  }
+
+  .status-badge.done {
+    background: rgba(34,197,94,0.12);
+    border: 1px solid rgba(34,197,94,0.2);
+    color: #4ade80;
+  }
+  .status-badge.done .status-dot {
+    background: #22c55e;
+    box-shadow: 0 0 6px rgba(34,197,94,0.5);
+  }
+
+  .status-badge.blocked {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.2);
+    color: #f87171;
+  }
+  .status-badge.blocked .status-dot {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239,68,68,0.5);
+  }
+
+  /* Priority Badge */
+  .priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 500;
+    width: fit-content;
+  }
+
+  .priority-badge.urgent {
+    background: rgba(239,68,68,0.1);
+    color: #f87171;
+    border: 1px solid rgba(239,68,68,0.15);
+  }
+
+  .priority-badge.high {
+    background: rgba(249,115,22,0.1);
+    color: #fb923c;
+    border: 1px solid rgba(249,115,22,0.15);
+  }
+
+  .priority-badge.medium {
+    background: rgba(234,179,8,0.1);
+    color: #facc15;
+    border: 1px solid rgba(234,179,8,0.12);
+  }
+
+  .priority-badge.low {
+    background: rgba(34,197,94,0.08);
+    color: #4ade80;
+    border: 1px solid rgba(34,197,94,0.12);
+  }
+
+  .task-date {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .task-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    position: relative;
+  }
+
+  .task-avatar::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,0.1);
+    transition: border-color 0.2s ease;
+  }
+
+  .task-row:hover .task-avatar::after {
+    border-color: rgba(255,255,255,0.2);
+  }
+
+  .task-menu {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: all 0.15s ease;
+  }
+
+  .task-row:hover .task-menu { opacity: 1; }
+  .task-menu:hover { background: rgba(255,255,255,0.06); }
+
+  /* Subtle animations */
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  .logo-icon {
+    animation: glowPulse 3s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<!-- Option Banner -->
+<div class="option-banner">OPCAO C -- Glassmorphism Dark</div>
+
+<!-- ========== SIDEBAR ========== -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">M</div>
+    <span class="logo-text">MarketFlow</span>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-item">
+      <span class="nav-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 9.5L12 4l9 5.5v9a1.5 1.5 0 01-1.5 1.5h-15A1.5 1.5 0 013 18.5v-9z"/><path d="M9 22V12h6v10"/></svg>
+      </span>
+      <span>Inicio</span>
+    </div>
+    <div class="nav-item">
+      <span class="nav-icon">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M16 3.13a4 4 0 010 7.75"/><path d="M21 21v-2a4 4 0 00-3-3.87"/></svg>
+      </span>
+      <span>Usuarios</span>
+    </div>
+  </nav>
+
+  <div class="nav-label" style="padding: 12px 20px 6px;">Empresas</div>
+
+  <div class="company-list">
+    <div class="company-item active">
+      <span class="company-dot green"></span>
+      <span>Verdana Group</span>
+      <span class="company-count">5</span>
+    </div>
+    <div class="company-item">
+      <span class="company-dot blue"></span>
+      <span>Azulon Digital</span>
+      <span class="company-count">3</span>
+    </div>
+    <div class="company-item">
+      <span class="company-dot purple"></span>
+      <span>Nova Luxe</span>
+      <span class="company-count">7</span>
+    </div>
+    <div class="company-item">
+      <span class="company-dot orange"></span>
+      <span>Solara Energy</span>
+      <span class="company-count">4</span>
+    </div>
+    <div class="company-item">
+      <span class="company-dot pink"></span>
+      <span>Bloom Beauty</span>
+      <span class="company-count">6</span>
+    </div>
+  </div>
+
+  <div class="sidebar-user">
+    <div class="user-avatar">PM</div>
+    <div class="user-info">
+      <span class="user-name">Paulo Maia</span>
+      <span class="user-role">Admin</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ========== MAIN CONTENT ========== -->
+<main class="main">
+
+  <!-- Project Header -->
+  <div class="project-header">
+    <div class="project-breadcrumb">
+      Verdana Group <span>/</span> Projetos <span>/</span> <strong style="color:var(--text-secondary);">SS25 Campaign</strong>
+    </div>
+
+    <div class="project-title-row">
+      <h1 class="project-title">SS25 Campaign</h1>
+    </div>
+
+    <p class="project-desc">Campanha Spring/Summer 2025 para lancamento de nova colecao. Inclui producao de conteudo, planejamento de midia e ativacoes em loja.</p>
+
+    <div class="project-meta">
+      <div class="meta-chip">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span>15 Mar - 30 Jun 2025</span>
+      </div>
+      <div class="meta-chip">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+        <span>12 tasks</span>
+      </div>
+      <div class="meta-chip">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 6v6l4 2"/></svg>
+        <span>5 em andamento</span>
+      </div>
+      <div class="meta-chip">
+        <span class="chip-label">Equipe</span>
+        <div class="team-avatars">
+          <div class="team-avatar av1">AM</div>
+          <div class="team-avatar av2">LS</div>
+          <div class="team-avatar av3">RC</div>
+          <div class="team-avatar av4">+2</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="progress-section">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill"></div>
+      </div>
+      <span class="progress-text">42%</span>
+      <span class="progress-label">concluido</span>
+    </div>
+  </div>
+
+  <!-- Actions Bar -->
+  <div class="actions-bar">
+    <div class="view-switcher">
+      <button class="view-btn">Quadro</button>
+      <button class="view-btn active">Lista</button>
+    </div>
+    <div class="action-buttons">
+      <button class="action-btn">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M3 4h18M3 8h12M3 12h18M3 16h12M3 20h18"/></svg>
+        Filtrar
+      </button>
+      <button class="action-btn">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M4 8V4h4M20 8V4h-4M4 16v4h4M20 16v4h-4"/></svg>
+        Agrupar
+      </button>
+      <button class="action-btn primary">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Nova Tarefa
+      </button>
+    </div>
+  </div>
+
+  <!-- Column Headers -->
+  <div class="col-headers">
+    <div class="col-header"></div>
+    <div class="col-header">Tarefa</div>
+    <div class="col-header">Status</div>
+    <div class="col-header">Prioridade</div>
+    <div class="col-header">Prazo</div>
+    <div class="col-header">Resp.</div>
+    <div class="col-header"></div>
+  </div>
+
+  <!-- PHASE: BRIEFING -->
+  <div class="phase-group">
+    <div class="phase-header">
+      <div class="phase-bar" style="background: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.4);"></div>
+      <svg class="phase-chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      <span class="phase-name">Briefing</span>
+      <span class="phase-count">2 tarefas</span>
+    </div>
+
+    <!-- Task 1 -->
+    <div class="task-row">
+      <div class="task-checkbox checked"></div>
+      <div class="task-name-cell">
+        <span class="task-name">Definir objetivos e KPIs da campanha</span>
+        <span class="task-subtitle">Documento com metas e metricas</span>
+      </div>
+      <div class="status-badge done">
+        <span class="status-dot"></span>
+        Concluido
+      </div>
+      <div class="priority-badge high">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        Alta
+      </div>
+      <span class="task-date">18 Mar</span>
+      <div class="task-avatar" style="background: #3b82f6;">AM</div>
+      <div class="task-menu">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+    </div>
+
+    <!-- Task 2 -->
+    <div class="task-row">
+      <div class="task-checkbox checked"></div>
+      <div class="task-name-cell">
+        <span class="task-name">Pesquisa de mercado e tendencias SS25</span>
+        <span class="task-subtitle">Analise competitiva + moodboard</span>
+      </div>
+      <div class="status-badge done">
+        <span class="status-dot"></span>
+        Concluido
+      </div>
+      <div class="priority-badge medium">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+        Media
+      </div>
+      <span class="task-date">22 Mar</span>
+      <div class="task-avatar" style="background: #a855f7;">LS</div>
+      <div class="task-menu">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE: PRODUCTION -->
+  <div class="phase-group">
+    <div class="phase-header">
+      <div class="phase-bar" style="background: var(--accent); box-shadow: 0 0 8px var(--accent-glow);"></div>
+      <svg class="phase-chevron" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+      <span class="phase-name">Production</span>
+      <span class="phase-count">3 tarefas</span>
+    </div>
+
+    <!-- Task 3 -->
+    <div class="task-row">
+      <div class="task-checkbox"></div>
+      <div class="task-name-cell">
+        <span class="task-name">Criar grade de conteudo para redes sociais</span>
+        <span class="task-subtitle">Instagram, TikTok e LinkedIn</span>
+      </div>
+      <div class="status-badge progress">
+        <span class="status-dot"></span>
+        Em andamento
+      </div>
+      <div class="priority-badge urgent">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        Urgente
+      </div>
+      <span class="task-date">10 Abr</span>
+      <div class="task-avatar" style="background: #22c55e;">RC</div>
+      <div class="task-menu">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+    </div>
+
+    <!-- Task 4 -->
+    <div class="task-row">
+      <div class="task-checkbox"></div>
+      <div class="task-name-cell">
+        <span class="task-name">Producao do editorial fotografico</span>
+        <span class="task-subtitle">Locacao, modelos, direcao de arte</span>
+      </div>
+      <div class="status-badge review">
+        <span class="status-dot"></span>
+        Em revisao
+      </div>
+      <div class="priority-badge high">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        Alta
+      </div>
+      <span class="task-date">15 Abr</span>
+      <div class="task-avatar" style="background: #3b82f6;">AM</div>
+      <div class="task-menu">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+    </div>
+
+    <!-- Task 5 -->
+    <div class="task-row">
+      <div class="task-checkbox"></div>
+      <div class="task-name-cell">
+        <span class="task-name">Design de pecas graficas para midia paga</span>
+        <span class="task-subtitle">Banners, stories e carrosséis</span>
+      </div>
+      <div class="status-badge todo">
+        <span class="status-dot"></span>
+        Pendente
+      </div>
+      <div class="priority-badge medium">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+        Media
+      </div>
+      <span class="task-date">22 Abr</span>
+      <div class="task-avatar" style="background: #f97316;">JF</div>
+      <div class="task-menu">
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+</body>
+</html>

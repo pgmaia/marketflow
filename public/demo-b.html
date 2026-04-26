@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>MarketFlow - Opcao B - Dashboard Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #F8F9FC;
+    color: #1a1c23;
+    width: 1280px;
+    height: 800px;
+    overflow: hidden;
+    display: flex;
+    position: relative;
+  }
+
+  /* === SIDEBAR === */
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    height: 800px;
+    background: linear-gradient(180deg, #1a1c23 0%, #16181d 100%);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .sidebar-header {
+    padding: 20px 20px 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #FF5C35, #FF8F6B);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    color: white;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .logo-text {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-text span {
+    color: #FF5C35;
+  }
+
+  /* Favorites */
+  .sidebar-section {
+    padding: 16px 12px 8px 12px;
+  }
+
+  .sidebar-section-title {
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.35);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    padding: 0 8px;
+    margin-bottom: 8px;
+  }
+
+  .sidebar-fav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .sidebar-fav-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .fav-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .fav-star {
+    font-size: 11px;
+    color: #FFB800;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .sidebar-fav-item span {
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Nav */
+  .sidebar-nav {
+    padding: 8px 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .sidebar-nav-item:hover {
+    background: rgba(255,255,255,0.06);
+  }
+
+  .sidebar-nav-item .nav-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255,255,255,0.45);
+    font-size: 14px;
+  }
+
+  .sidebar-nav-item span {
+    font-size: 13px;
+    color: rgba(255,255,255,0.65);
+    font-weight: 500;
+  }
+
+  /* Company tree */
+  .sidebar-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 12px;
+  }
+
+  .tree-company {
+    margin-bottom: 4px;
+  }
+
+  .tree-company-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .tree-company-header:hover {
+    background: rgba(255,255,255,0.04);
+  }
+
+  .tree-chevron {
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    width: 12px;
+    text-align: center;
+  }
+
+  .tree-company-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .tree-company-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+  }
+
+  .tree-project {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 38px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .tree-project:hover {
+    background: rgba(255,255,255,0.04);
+  }
+
+  .tree-project.active {
+    background: rgba(255, 92, 53, 0.12);
+  }
+
+  .tree-project-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tree-project-name {
+    font-size: 12.5px;
+    color: rgba(255,255,255,0.55);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-project.active .tree-project-name {
+    color: #FF5C35;
+    font-weight: 600;
+  }
+
+  .tree-project-count {
+    margin-left: auto;
+    font-size: 10px;
+    color: rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.06);
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  /* User section */
+  .sidebar-user {
+    padding: 16px 16px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FF5C35, #FF8F6B);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .user-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.85);
+  }
+
+  .user-role {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    color: #FF5C35;
+    background: rgba(255,92,53,0.12);
+    padding: 1px 8px;
+    border-radius: 10px;
+    margin-top: 2px;
+  }
+
+  /* === MAIN CONTENT === */
+  .main {
+    flex: 1;
+    height: 800px;
+    overflow-y: auto;
+    background: #F8F9FC;
+    position: relative;
+  }
+
+  /* Option badge */
+  .option-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #FF5C35, #FF8F6B);
+    color: white;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    padding: 4px 14px;
+    border-radius: 6px;
+    z-index: 20;
+    text-transform: uppercase;
+  }
+
+  /* Project header */
+  .project-header {
+    position: relative;
+    background: white;
+    border-bottom: 1px solid #E8EAF0;
+  }
+
+  .project-banner {
+    height: 6px;
+    background: linear-gradient(90deg, #EF4444, #F87171, #FCA5A5);
+  }
+
+  .project-header-content {
+    padding: 20px 32px 16px 32px;
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+  }
+
+  .project-progress-ring {
+    flex-shrink: 0;
+    width: 64px;
+    height: 64px;
+    position: relative;
+  }
+
+  .project-progress-ring svg {
+    transform: rotate(-90deg);
+  }
+
+  .progress-ring-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    font-weight: 800;
+    color: #EF4444;
+  }
+
+  .project-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .project-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  .project-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #111318;
+    letter-spacing: -0.5px;
+  }
+
+  .project-problem-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #DC2626;
+    background: #FEE2E2;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  .project-desc {
+    font-size: 13px;
+    color: #6B7280;
+    margin-bottom: 10px;
+    font-weight: 400;
+  }
+
+  .project-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .project-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #9CA3AF;
+    font-weight: 500;
+  }
+
+  .project-meta-item .meta-icon {
+    font-size: 13px;
+  }
+
+  .team-avatars {
+    display: flex;
+    align-items: center;
+  }
+
+  .team-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    margin-left: -6px;
+  }
+
+  .team-avatar:first-child {
+    margin-left: 0;
+  }
+
+  .team-avatar-more {
+    background: #E5E7EB;
+    color: #6B7280;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  /* View switcher bar */
+  .view-bar {
+    background: white;
+    border-bottom: 1px solid #E8EAF0;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .view-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .view-tab {
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #9CA3AF;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s;
+  }
+
+  .view-tab:hover {
+    color: #6B7280;
+  }
+
+  .view-tab.active {
+    color: #FF5C35;
+    border-bottom-color: #FF5C35;
+  }
+
+  .view-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .view-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #6B7280;
+    background: #F3F4F6;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .view-btn:hover {
+    background: #E5E7EB;
+    color: #374151;
+  }
+
+  .view-btn.primary {
+    background: linear-gradient(135deg, #FF5C35, #FF7A56);
+    color: white;
+  }
+
+  .view-btn.primary:hover {
+    background: linear-gradient(135deg, #E5502E, #FF5C35);
+  }
+
+  .view-btn-icon {
+    font-size: 12px;
+  }
+
+  /* Column headers */
+  .col-headers {
+    display: grid;
+    grid-template-columns: 1fr 130px 110px 110px 100px;
+    padding: 10px 32px;
+    border-bottom: 1px solid #E8EAF0;
+    background: #F8F9FC;
+  }
+
+  .col-header {
+    font-size: 10px;
+    font-weight: 700;
+    color: #9CA3AF;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  /* Task list */
+  .task-list {
+    padding: 0 20px 24px 20px;
+  }
+
+  /* Phase group */
+  .phase-group {
+    margin-top: 16px;
+  }
+
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 12px;
+    margin-bottom: 4px;
+  }
+
+  .phase-color-bar {
+    width: 4px;
+    height: 20px;
+    border-radius: 2px;
+  }
+
+  .phase-name {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+
+  .phase-count {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9CA3AF;
+    background: rgba(0,0,0,0.04);
+    padding: 1px 8px;
+    border-radius: 10px;
+  }
+
+  .phase-toggle {
+    margin-left: auto;
+    font-size: 11px;
+    color: #D1D5DB;
+    cursor: pointer;
+  }
+
+  /* Task row */
+  .task-row {
+    display: grid;
+    grid-template-columns: 1fr 130px 110px 110px 100px;
+    align-items: center;
+    padding: 10px 12px;
+    margin: 2px 0;
+    border-radius: 12px;
+    background: white;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .task-row:hover {
+    border-color: #E5E7EB;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04);
+    transform: translateY(-1px);
+  }
+
+  .task-row .task-accent {
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .task-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 10px;
+  }
+
+  .task-checkbox {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    border: 2px solid #D1D5DB;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .task-checkbox:hover {
+    border-color: #FF5C35;
+  }
+
+  .task-name {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #1F2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .task-subtask-count {
+    font-size: 10px;
+    color: #9CA3AF;
+    background: #F3F4F6;
+    padding: 1px 7px;
+    border-radius: 8px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .status-badge .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+  }
+
+  .status-todo {
+    background: #F3F4F6;
+    color: #6B7280;
+  }
+  .status-todo .status-dot { background: #9CA3AF; }
+
+  .status-progress {
+    background: #DBEAFE;
+    color: #2563EB;
+  }
+  .status-progress .status-dot { background: #3B82F6; }
+
+  .status-review {
+    background: #FEF3C7;
+    color: #D97706;
+  }
+  .status-review .status-dot { background: #F59E0B; }
+
+  .status-done {
+    background: #D1FAE5;
+    color: #059669;
+  }
+  .status-done .status-dot { background: #10B981; }
+
+  .status-blocked {
+    background: #FEE2E2;
+    color: #DC2626;
+  }
+  .status-blocked .status-dot { background: #EF4444; }
+
+  /* Priority badge */
+  .priority-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .priority-urgent {
+    background: #FEE2E2;
+    color: #DC2626;
+  }
+
+  .priority-high {
+    background: #FFEDD5;
+    color: #EA580C;
+  }
+
+  .priority-medium {
+    background: #FEF9C3;
+    color: #CA8A04;
+  }
+
+  .priority-low {
+    background: #E0F2FE;
+    color: #0284C7;
+  }
+
+  .priority-icon {
+    font-size: 10px;
+  }
+
+  /* Date cell */
+  .date-cell {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6B7280;
+  }
+
+  .date-overdue {
+    color: #DC2626;
+    font-weight: 600;
+  }
+
+  /* Assignee avatar */
+  .assignee-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: white;
+    box-shadow: 0 0 0 2px white, 0 0 0 4px;
+  }
+
+  /* Stat cards */
+  .stat-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    padding: 20px 32px 0 32px;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #9CA3AF;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-card-value {
+    font-size: 26px;
+    font-weight: 800;
+    color: #111318;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+
+  .stat-card-sub {
+    font-size: 11px;
+    font-weight: 500;
+    color: #9CA3AF;
+  }
+
+  .stat-card-sparkline {
+    flex-shrink: 0;
+    width: 60px;
+    height: 36px;
+  }
+
+  /* scrollbar styling */
+  .main::-webkit-scrollbar {
+    width: 6px;
+  }
+  .main::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .main::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 3px;
+  }
+  .sidebar-tree::-webkit-scrollbar {
+    width: 4px;
+  }
+  .sidebar-tree::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <!-- Logo -->
+  <div class="sidebar-header">
+    <div class="logo-icon">M</div>
+    <div class="logo-text">Market<span>Flow</span></div>
+  </div>
+
+  <!-- Favorites -->
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Favoritos</div>
+    <div class="sidebar-fav-item">
+      <div class="fav-dot" style="background:#EF4444;"></div>
+      <span>SS25 Campaign</span>
+      <div class="fav-star">&#9733;</div>
+    </div>
+    <div class="sidebar-fav-item">
+      <div class="fav-dot" style="background:#8B5CF6;"></div>
+      <span>Influencer Program</span>
+      <div class="fav-star">&#9733;</div>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <div class="sidebar-nav">
+    <div class="sidebar-nav-item">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 6.5L8 2L14 6.5V13.5C14 14.05 13.55 14.5 13 14.5H3C2.45 14.5 2 14.05 2 13.5V6.5Z" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 14.5V8H10V14.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <span>Inicio</span>
+    </div>
+    <div class="sidebar-nav-item">
+      <div class="nav-icon">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M12 14V12.6667C12 11.9594 11.719 11.2811 11.219 10.781C10.7189 10.281 10.0406 10 9.33333 10H4.66667C3.95942 10 3.28115 10.281 2.78105 10.781C2.28095 11.2811 2 11.9594 2 12.6667V14" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="7" cy="5.33" r="2.67" stroke="rgba(255,255,255,0.45)" stroke-width="1.5"/><path d="M14 14V12.67C14 11.5 13.2 10.5 12 10.2" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <span>Usuarios</span>
+    </div>
+  </div>
+
+  <!-- Company Tree -->
+  <div class="sidebar-tree">
+    <!-- Velour Studio -->
+    <div class="tree-company">
+      <div class="tree-company-header">
+        <div class="tree-chevron">&#9662;</div>
+        <div class="tree-company-dot" style="background:#EF4444;"></div>
+        <div class="tree-company-name">Velour Studio</div>
+      </div>
+      <div class="tree-project active">
+        <div class="tree-project-dot" style="background:#EF4444;"></div>
+        <div class="tree-project-name">SS25 Campaign</div>
+        <div class="tree-project-count">5</div>
+      </div>
+      <div class="tree-project">
+        <div class="tree-project-dot" style="background:#8B5CF6;"></div>
+        <div class="tree-project-name">Influencer Program</div>
+        <div class="tree-project-count">8</div>
+      </div>
+    </div>
+
+    <!-- Stackly -->
+    <div class="tree-company">
+      <div class="tree-company-header">
+        <div class="tree-chevron">&#9656;</div>
+        <div class="tree-company-dot" style="background:#3B82F6;"></div>
+        <div class="tree-company-name">Stackly</div>
+      </div>
+    </div>
+
+    <!-- Brasa Group -->
+    <div class="tree-company">
+      <div class="tree-company-header">
+        <div class="tree-chevron">&#9656;</div>
+        <div class="tree-company-dot" style="background:#10B981;"></div>
+        <div class="tree-company-name">Brasa Group</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User -->
+  <div class="sidebar-user">
+    <div class="user-avatar">PM</div>
+    <div class="user-info">
+      <div class="user-name">Paulo Maia</div>
+      <div class="user-role">Admin</div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+  <!-- Option Badge -->
+  <div class="option-badge">Opcao B &mdash; Dashboard Pro</div>
+
+  <!-- Project Header -->
+  <div class="project-header">
+    <div class="project-banner"></div>
+    <div class="project-header-content">
+      <!-- Circular progress ring -->
+      <div class="project-progress-ring">
+        <svg width="64" height="64" viewBox="0 0 64 64">
+          <circle cx="32" cy="32" r="27" fill="none" stroke="#F3F4F6" stroke-width="5"/>
+          <circle cx="32" cy="32" r="27" fill="none" stroke="#EF4444" stroke-width="5"
+            stroke-dasharray="169.65" stroke-dashoffset="113.65" stroke-linecap="round"/>
+        </svg>
+        <div class="progress-ring-text">33%</div>
+      </div>
+
+      <div class="project-info">
+        <div class="project-title-row">
+          <div class="project-title">SS25 Campaign</div>
+          <div class="project-problem-badge">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="#DC2626" stroke-width="1.5"/><path d="M6 3.5V6.5" stroke="#DC2626" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="8.5" r="0.5" fill="#DC2626"/></svg>
+            2 bloqueadas
+          </div>
+        </div>
+        <div class="project-desc">Campanha de lancamento colecao Spring/Summer 2025 - Velour Studio</div>
+        <div class="project-meta">
+          <div class="project-meta-item">
+            <svg class="meta-icon" width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="2.5" width="11" height="9" rx="1.5" stroke="#9CA3AF" stroke-width="1.2"/><path d="M4 1v2.5M9 1v2.5M1 5.5h11" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round"/></svg>
+            15 Mar - 30 Abr 2025
+          </div>
+          <div class="project-meta-item">
+            <svg class="meta-icon" width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1.5v5l3 1.5" stroke="#9CA3AF" stroke-width="1.2" stroke-linecap="round"/><circle cx="6.5" cy="6.5" r="5" stroke="#9CA3AF" stroke-width="1.2"/></svg>
+            23 dias restantes
+          </div>
+          <div class="team-avatars">
+            <div class="team-avatar" style="background:#EF4444;">PM</div>
+            <div class="team-avatar" style="background:#3B82F6;">AL</div>
+            <div class="team-avatar" style="background:#8B5CF6;">CR</div>
+            <div class="team-avatar" style="background:#10B981;">JM</div>
+            <div class="team-avatar team-avatar-more">+2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stat Cards -->
+  <div class="stat-cards">
+    <!-- Total Tasks -->
+    <div class="stat-card">
+      <div class="stat-card-info">
+        <div class="stat-card-label">Total Tarefas</div>
+        <div class="stat-card-value">12</div>
+        <div class="stat-card-sub">5 concluidas</div>
+      </div>
+      <svg class="stat-card-sparkline" viewBox="0 0 60 36" fill="none">
+        <polyline points="0,28 10,24 20,18 30,22 40,14 50,10 60,12" stroke="#3B82F6" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="0,28 10,24 20,18 30,22 40,14 50,10 60,12 60,36 0,36" fill="url(#grad1)" opacity="0.15"/>
+        <defs><linearGradient id="grad1" x1="30" y1="10" x2="30" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#3B82F6"/><stop offset="1" stop-color="#3B82F6" stop-opacity="0"/></linearGradient></defs>
+      </svg>
+    </div>
+    <!-- Em Progresso -->
+    <div class="stat-card">
+      <div class="stat-card-info">
+        <div class="stat-card-label">Em Progresso</div>
+        <div class="stat-card-value">4</div>
+        <div class="stat-card-sub">2 esta semana</div>
+      </div>
+      <svg class="stat-card-sparkline" viewBox="0 0 60 36" fill="none">
+        <polyline points="0,30 10,26 20,28 30,20 40,16 50,18 60,8" stroke="#F59E0B" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="0,30 10,26 20,28 30,20 40,16 50,18 60,8 60,36 0,36" fill="url(#grad2)" opacity="0.15"/>
+        <defs><linearGradient id="grad2" x1="30" y1="8" x2="30" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#F59E0B"/><stop offset="1" stop-color="#F59E0B" stop-opacity="0"/></linearGradient></defs>
+      </svg>
+    </div>
+    <!-- Bloqueadas -->
+    <div class="stat-card">
+      <div class="stat-card-info">
+        <div class="stat-card-label">Bloqueadas</div>
+        <div class="stat-card-value" style="color:#DC2626;">2</div>
+        <div class="stat-card-sub" style="color:#DC2626;">Atencao</div>
+      </div>
+      <svg class="stat-card-sparkline" viewBox="0 0 60 36" fill="none">
+        <polyline points="0,20 10,22 20,18 30,24 40,20 50,28 60,26" stroke="#EF4444" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="0,20 10,22 20,18 30,24 40,20 50,28 60,26 60,36 0,36" fill="url(#grad3)" opacity="0.15"/>
+        <defs><linearGradient id="grad3" x1="30" y1="18" x2="30" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#EF4444"/><stop offset="1" stop-color="#EF4444" stop-opacity="0"/></linearGradient></defs>
+      </svg>
+    </div>
+    <!-- Progresso -->
+    <div class="stat-card">
+      <div class="stat-card-info">
+        <div class="stat-card-label">Prazo Medio</div>
+        <div class="stat-card-value">3.2d</div>
+        <div class="stat-card-sub" style="color:#059669;">-0.5d vs sem passada</div>
+      </div>
+      <svg class="stat-card-sparkline" viewBox="0 0 60 36" fill="none">
+        <polyline points="0,14 10,18 20,16 30,12 40,14 50,10 60,8" stroke="#10B981" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <polyline points="0,14 10,18 20,16 30,12 40,14 50,10 60,8 60,36 0,36" fill="url(#grad4)" opacity="0.15"/>
+        <defs><linearGradient id="grad4" x1="30" y1="8" x2="30" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#10B981"/><stop offset="1" stop-color="#10B981" stop-opacity="0"/></linearGradient></defs>
+      </svg>
+    </div>
+  </div>
+
+  <!-- View Switcher Bar -->
+  <div class="view-bar" style="margin-top: 16px;">
+    <div class="view-tabs">
+      <div class="view-tab">Quadro</div>
+      <div class="view-tab active">Lista</div>
+    </div>
+    <div class="view-actions">
+      <button class="view-btn">
+        <svg class="view-btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 4.5L6 7.5L3 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Concluidas
+      </button>
+      <button class="view-btn">
+        <svg class="view-btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none"><rect x="1.5" y="1.5" width="9" height="9" rx="1.5" stroke="currentColor" stroke-width="1.2"/><path d="M4 1.5V4.5M8 1.5V4.5M1.5 4.5H10.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        Modelos
+      </button>
+      <button class="view-btn">
+        <svg class="view-btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M1.5 10.5C1.5 8.29 3.51 6.5 6 6.5S10.5 8.29 10.5 10.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        Equipe
+      </button>
+      <button class="view-btn">
+        <svg class="view-btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1.5 3H10.5M1.5 6H10.5M1.5 9H10.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Fases
+      </button>
+      <button class="view-btn primary">
+        <svg class="view-btn-icon" width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2.5V9.5M2.5 6H9.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Nova tarefa
+      </button>
+    </div>
+  </div>
+
+  <!-- Column Headers -->
+  <div class="col-headers">
+    <div class="col-header">Nome da Tarefa</div>
+    <div class="col-header">Status</div>
+    <div class="col-header">Prioridade</div>
+    <div class="col-header">Prazo</div>
+    <div class="col-header">Responsavel</div>
+  </div>
+
+  <!-- Task List -->
+  <div class="task-list">
+    <!-- BRIEFING Phase -->
+    <div class="phase-group">
+      <div class="phase-header" style="background: rgba(139, 92, 246, 0.06);">
+        <div class="phase-color-bar" style="background: #8B5CF6;"></div>
+        <div class="phase-name" style="color: #7C3AED;">Briefing</div>
+        <div class="phase-count">2 tarefas</div>
+        <div class="phase-toggle">&#9662;</div>
+      </div>
+
+      <!-- Task 1 -->
+      <div class="task-row">
+        <div class="task-accent" style="background: #8B5CF6;"></div>
+        <div class="task-name-cell">
+          <div class="task-checkbox"></div>
+          <div class="task-name">Definir conceito criativo da campanha</div>
+          <div class="task-subtask-count">3/3</div>
+        </div>
+        <div>
+          <div class="status-badge status-done">
+            <div class="status-dot"></div>
+            Concluida
+          </div>
+        </div>
+        <div>
+          <div class="priority-badge priority-high">
+            <svg class="priority-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1L9 9H1L5 1Z" fill="#EA580C"/></svg>
+            Alta
+          </div>
+        </div>
+        <div class="date-cell">18 Mar</div>
+        <div>
+          <div class="assignee-avatar" style="background:#8B5CF6; box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(139,92,246,0.2);">CR</div>
+        </div>
+      </div>
+
+      <!-- Task 2 -->
+      <div class="task-row">
+        <div class="task-accent" style="background: #8B5CF6;"></div>
+        <div class="task-name-cell">
+          <div class="task-checkbox"></div>
+          <div class="task-name">Montar moodboard e referencias visuais</div>
+          <div class="task-subtask-count">5/5</div>
+        </div>
+        <div>
+          <div class="status-badge status-done">
+            <div class="status-dot"></div>
+            Concluida
+          </div>
+        </div>
+        <div>
+          <div class="priority-badge priority-medium">
+            <svg class="priority-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><rect x="1" y="4" width="8" height="2" rx="1" fill="#CA8A04"/></svg>
+            Media
+          </div>
+        </div>
+        <div class="date-cell">20 Mar</div>
+        <div>
+          <div class="assignee-avatar" style="background:#3B82F6; box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(59,130,246,0.2);">AL</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRODUCTION Phase -->
+    <div class="phase-group">
+      <div class="phase-header" style="background: rgba(239, 68, 68, 0.06);">
+        <div class="phase-color-bar" style="background: #EF4444;"></div>
+        <div class="phase-name" style="color: #DC2626;">Producao</div>
+        <div class="phase-count">3 tarefas</div>
+        <div class="phase-toggle">&#9662;</div>
+      </div>
+
+      <!-- Task 3 -->
+      <div class="task-row">
+        <div class="task-accent" style="background: #EF4444;"></div>
+        <div class="task-name-cell">
+          <div class="task-checkbox"></div>
+          <div class="task-name">Shooting fotografico - Lookbook SS25</div>
+          <div class="task-subtask-count">1/4</div>
+        </div>
+        <div>
+          <div class="status-badge status-progress">
+            <div class="status-dot"></div>
+            Em progresso
+          </div>
+        </div>
+        <div>
+          <div class="priority-badge priority-urgent">
+            <svg class="priority-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1L9 9H1L5 1Z" fill="#DC2626"/><path d="M5 3.5V6" stroke="white" stroke-width="1" stroke-linecap="round"/><circle cx="5" cy="7.5" r="0.5" fill="white"/></svg>
+            Urgente
+          </div>
+        </div>
+        <div class="date-cell date-overdue">28 Mar</div>
+        <div>
+          <div class="assignee-avatar" style="background:#EF4444; box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(239,68,68,0.2);">PM</div>
+        </div>
+      </div>
+
+      <!-- Task 4 -->
+      <div class="task-row">
+        <div class="task-accent" style="background: #EF4444;"></div>
+        <div class="task-name-cell">
+          <div class="task-checkbox"></div>
+          <div class="task-name">Edicao e retoque de imagens</div>
+        </div>
+        <div>
+          <div class="status-badge status-blocked">
+            <div class="status-dot"></div>
+            Bloqueada
+          </div>
+        </div>
+        <div>
+          <div class="priority-badge priority-high">
+            <svg class="priority-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M5 1L9 9H1L5 1Z" fill="#EA580C"/></svg>
+            Alta
+          </div>
+        </div>
+        <div class="date-cell">02 Abr</div>
+        <div>
+          <div class="assignee-avatar" style="background:#10B981; box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(16,185,129,0.2);">JM</div>
+        </div>
+      </div>
+
+      <!-- Task 5 -->
+      <div class="task-row">
+        <div class="task-accent" style="background: #EF4444;"></div>
+        <div class="task-name-cell">
+          <div class="task-checkbox"></div>
+          <div class="task-name">Gravar video de bastidores para Reels</div>
+          <div class="task-subtask-count">0/2</div>
+        </div>
+        <div>
+          <div class="status-badge status-todo">
+            <div class="status-dot"></div>
+            A fazer
+          </div>
+        </div>
+        <div>
+          <div class="priority-badge priority-low">
+            <svg class="priority-icon" width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5H8" stroke="#0284C7" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Baixa
+          </div>
+        </div>
+        <div class="date-cell">10 Abr</div>
+        <div>
+          <div class="assignee-avatar" style="background:#3B82F6; box-shadow: 0 0 0 2px white, 0 0 0 4px rgba(59,130,246,0.2);">AL</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

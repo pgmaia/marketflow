@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>MarketFlow — Opção A: Linear Clean</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #FFF; color: #111; font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+  /* Layout */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* Sidebar */
+  .sidebar {
+    width: 220px;
+    min-width: 220px;
+    background: #111;
+    color: #FFF;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    position: relative;
+  }
+  .sidebar-top { padding: 20px 16px 12px; }
+  .logo { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 24px; }
+  .logo-icon {
+    width: 22px; height: 22px; background: #FF5C35; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #FFF;
+  }
+
+  .nav-section { margin-bottom: 20px; }
+  .nav-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: rgba(255,255,255,0.35); padding: 0 16px; margin-bottom: 6px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 16px; font-size: 13px; font-weight: 400; color: rgba(255,255,255,0.6);
+    cursor: pointer; border-radius: 0; transition: all 0.15s;
+  }
+  .nav-item:hover { color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.06); }
+  .nav-item.active { color: #FFF; background: rgba(255,255,255,0.08); }
+  .nav-item svg { width: 15px; height: 15px; opacity: 0.5; flex-shrink: 0; }
+  .nav-item.active svg { opacity: 0.9; }
+
+  .company-section { margin-top: 4px; }
+  .company-name {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 16px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.85);
+    cursor: pointer;
+  }
+  .company-dot { width: 7px; height: 7px; border-radius: 50%; background: #FF5C35; flex-shrink: 0; }
+  .project-item {
+    padding: 5px 16px 5px 31px; font-size: 12px; color: rgba(255,255,255,0.45);
+    cursor: pointer; transition: all 0.15s;
+  }
+  .project-item:hover { color: rgba(255,255,255,0.7); }
+  .project-item.active { color: #FF5C35; font-weight: 500; }
+
+  .company-name.collapsed-co { color: rgba(255,255,255,0.45); font-weight: 500; }
+  .company-name.collapsed-co .company-dot { background: rgba(255,255,255,0.25); }
+
+  .sidebar-bottom {
+    margin-top: auto; padding: 16px; border-top: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%; background: #FF5C35;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; color: #FFF; flex-shrink: 0;
+  }
+  .user-name { font-size: 12px; font-weight: 500; color: rgba(255,255,255,0.8); }
+  .user-role { font-size: 10px; color: rgba(255,255,255,0.35); }
+
+  /* Main Content */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #FFF; }
+
+  /* Option label */
+  .option-label {
+    position: fixed; top: 12px; left: 232px; z-index: 100;
+    background: #111; color: #FFF; font-size: 9px; font-weight: 700;
+    letter-spacing: 1.2px; padding: 3px 10px; border-radius: 3px;
+  }
+
+  /* Project Header */
+  .project-header {
+    padding: 20px 32px 0;
+    display: flex; flex-direction: column; gap: 16px;
+    border-bottom: 1px solid #E5E7EB;
+  }
+  .project-top-row {
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .project-title-group { display: flex; align-items: center; gap: 14px; }
+  .project-title { font-size: 18px; font-weight: 700; letter-spacing: -0.4px; color: #111; }
+  .project-meta { display: flex; align-items: center; gap: 16px; }
+  .meta-item { font-size: 11px; color: #888; display: flex; align-items: center; gap: 4px; }
+  .meta-item svg { width: 13px; height: 13px; color: #AAA; }
+
+  .header-stats { display: flex; align-items: center; gap: 24px; }
+  .stat-block { display: flex; align-items: baseline; gap: 5px; }
+  .stat-number { font-size: 18px; font-weight: 700; color: #111; letter-spacing: -0.5px; }
+  .stat-label { font-size: 11px; color: #999; font-weight: 400; }
+
+  .header-tabs {
+    display: flex; align-items: center; gap: 0; margin-top: 4px;
+  }
+  .header-tab {
+    padding: 8px 16px; font-size: 12px; font-weight: 500; color: #999;
+    cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+  }
+  .header-tab:hover { color: #555; }
+  .header-tab.active { color: #111; border-bottom-color: #FF5C35; }
+
+  /* Table */
+  .table-wrap { flex: 1; overflow-y: auto; padding: 0 32px 32px; }
+  .col-headers {
+    display: grid;
+    grid-template-columns: 1fr 120px 100px 100px 100px;
+    padding: 10px 12px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px;
+    color: #AAA;
+    border-bottom: 1px solid #E5E7EB;
+    position: sticky; top: 0; background: #FFF; z-index: 5;
+  }
+
+  .phase-group { margin-top: 20px; }
+  .phase-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 0 12px 8px; cursor: pointer;
+  }
+  .phase-header-text { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; color: #111; }
+  .phase-count { font-size: 10px; color: #AAA; font-weight: 500; }
+  .phase-line { flex: 1; height: 1px; background: #E5E7EB; }
+
+  .task-row {
+    display: grid;
+    grid-template-columns: 1fr 120px 100px 100px 100px;
+    align-items: center;
+    padding: 0 12px;
+    height: 40px;
+    border-bottom: 1px solid #F3F4F6;
+    transition: background 0.1s;
+    cursor: pointer;
+  }
+  .task-row:hover { background: #FAFAFA; }
+  .task-name { font-size: 13px; font-weight: 500; color: #111; display: flex; align-items: center; gap: 8px; }
+  .task-checkbox {
+    width: 15px; height: 15px; border: 1.5px solid #D1D5DB; border-radius: 3px;
+    flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  }
+  .task-checkbox.done { background: #10B981; border-color: #10B981; }
+  .task-checkbox.done svg { display: block; }
+  .task-checkbox svg { display: none; width: 9px; height: 9px; color: #FFF; }
+
+  /* Badges */
+  .badge {
+    display: inline-flex; align-items: center; padding: 2px 8px;
+    font-size: 10px; font-weight: 600; border-radius: 9999px;
+    white-space: nowrap;
+  }
+  .badge-done { background: #ECFDF5; color: #059669; }
+  .badge-progress { background: #EFF6FF; color: #2563EB; }
+  .badge-blocked { background: #FEF2F2; color: #DC2626; }
+  .badge-review { background: #FFF7ED; color: #D97706; }
+
+  .badge-alta { background: #FEF2F2; color: #DC2626; }
+  .badge-media { background: #FFF7ED; color: #D97706; }
+  .badge-urgente { background: #FEE2E2; color: #991B1B; }
+  .badge-baixa { background: #F0FDF4; color: #16A34A; }
+
+  .task-date { font-size: 12px; color: #888; }
+  .task-avatar {
+    width: 24px; height: 24px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700; color: #FFF; flex-shrink: 0;
+  }
+  .avatar-purple { background: #8B5CF6; }
+  .avatar-blue { background: #3B82F6; }
+  .avatar-green { background: #10B981; }
+  .avatar-orange { background: #F59E0B; }
+  .avatar-pink { background: #EC4899; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Option Label -->
+  <div class="option-label">OPCAO A — LINEAR CLEAN</div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-top">
+      <div class="logo">
+        <div class="logo-icon">M</div>
+        MarketFlow
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-item active">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          Inicio
+        </div>
+        <div class="nav-item">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Usuarios
+        </div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-label">Empresas</div>
+        <div class="company-section">
+          <div class="company-name">
+            <div class="company-dot"></div>
+            Velour Studio
+          </div>
+          <div class="project-item active">SS25 Campaign</div>
+          <div class="project-item">Influencer Program</div>
+        </div>
+        <div class="company-section" style="margin-top: 12px;">
+          <div class="company-name collapsed-co">
+            <div class="company-dot"></div>
+            Stackly
+          </div>
+        </div>
+        <div class="company-section" style="margin-top: 8px;">
+          <div class="company-name collapsed-co">
+            <div class="company-dot"></div>
+            Brasa Group
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="user-avatar">PM</div>
+      <div>
+        <div class="user-name">Paulo Maia</div>
+        <div class="user-role">Admin</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+
+    <!-- Project Header -->
+    <div class="project-header">
+      <div class="project-top-row">
+        <div class="project-title-group">
+          <div class="project-title">SS25 Campaign</div>
+          <div class="project-meta">
+            <div class="meta-item">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              15 Mar — 30 Abr 2026
+            </div>
+            <div class="meta-item">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+              Velour Studio
+            </div>
+          </div>
+        </div>
+        <div class="header-stats">
+          <div class="stat-block">
+            <div class="stat-number">5</div>
+            <div class="stat-label">tarefas</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-number">2</div>
+            <div class="stat-label">concluidas</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-number">40%</div>
+            <div class="stat-label">progresso</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-tabs">
+        <div class="header-tab">Quadro</div>
+        <div class="header-tab active">Lista</div>
+      </div>
+    </div>
+
+    <!-- Table Content -->
+    <div class="table-wrap">
+      <div class="col-headers">
+        <div>Nome da Tarefa</div>
+        <div>Status</div>
+        <div>Prioridade</div>
+        <div>Prazo</div>
+        <div>Responsavel</div>
+      </div>
+
+      <!-- BRIEFING Phase -->
+      <div class="phase-group">
+        <div class="phase-header">
+          <div class="phase-header-text">Briefing</div>
+          <div class="phase-count">2</div>
+          <div class="phase-line"></div>
+        </div>
+
+        <div class="task-row">
+          <div class="task-name">
+            <div class="task-checkbox done">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            Definir conceito criativo da campanha
+          </div>
+          <div><span class="badge badge-done">Concluido</span></div>
+          <div><span class="badge badge-alta">Alta</span></div>
+          <div class="task-date">18 Mar</div>
+          <div><div class="task-avatar avatar-purple">AL</div></div>
+        </div>
+
+        <div class="task-row">
+          <div class="task-name">
+            <div class="task-checkbox done">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            Montar moodboard e referencias visuais
+          </div>
+          <div><span class="badge badge-done">Concluido</span></div>
+          <div><span class="badge badge-media">Media</span></div>
+          <div class="task-date">20 Mar</div>
+          <div><div class="task-avatar avatar-pink">CF</div></div>
+        </div>
+      </div>
+
+      <!-- PRODUCTION Phase -->
+      <div class="phase-group">
+        <div class="phase-header">
+          <div class="phase-header-text">Production</div>
+          <div class="phase-count">3</div>
+          <div class="phase-line"></div>
+        </div>
+
+        <div class="task-row">
+          <div class="task-name">
+            <div class="task-checkbox"></div>
+            Produzir conteudo para redes sociais
+          </div>
+          <div><span class="badge badge-progress">Em andamento</span></div>
+          <div><span class="badge badge-alta">Alta</span></div>
+          <div class="task-date">28 Mar</div>
+          <div><div class="task-avatar avatar-blue">RS</div></div>
+        </div>
+
+        <div class="task-row">
+          <div class="task-name">
+            <div class="task-checkbox"></div>
+            Gravar video hero para landing page
+          </div>
+          <div><span class="badge badge-blocked">Bloqueado</span></div>
+          <div><span class="badge badge-urgente">Urgente</span></div>
+          <div class="task-date">02 Abr</div>
+          <div><div class="task-avatar avatar-green">MK</div></div>
+        </div>
+
+        <div class="task-row">
+          <div class="task-name">
+            <div class="task-checkbox"></div>
+            Revisar e aprovar materiais finais
+          </div>
+          <div><span class="badge badge-review">Em revisao</span></div>
+          <div><span class="badge badge-media">Media</span></div>
+          <div class="task-date">10 Abr</div>
+          <div><div class="task-avatar avatar-orange">JL</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
