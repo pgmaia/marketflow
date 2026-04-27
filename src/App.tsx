@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Menu } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
+import { loadFromSupabase, scheduleSave, subscribeToRealtime } from './lib/syncSupabase';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -16,6 +17,17 @@ import { ScheduleView } from './components/schedule/ScheduleView';
 export default function App() {
   const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode } = useAppStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Supabase sync — load on mount, save on change, listen for remote updates
+  useEffect(() => {
+    loadFromSupabase();
+    const channel = subscribeToRealtime();
+    const unsubscribe = useAppStore.subscribe((state) => scheduleSave(state));
+    return () => {
+      channel.unsubscribe();
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
