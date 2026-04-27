@@ -1,8 +1,14 @@
 import { useState } from 'react';
-import { Plus, X, Check, Trash2, ChevronDown, ChevronRight, AlertCircle, Calendar, Pencil } from 'lucide-react';
+import { Plus, X, Check, Trash2, ChevronDown, ChevronRight, AlertCircle, Calendar, Pencil, ExternalLink } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { PersonalTask, TaskPriority, TaskStatus, TaskType } from '../../types';
+import type { PersonalTask, Task, TaskPriority, TaskStatus, TaskType } from '../../types';
 import { TypeIcon } from '../shared/Badge';
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type MyTask =
+  | { kind: 'personal'; task: PersonalTask }
+  | { kind: 'project';  task: Task; projectName: string; projectColor: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -40,7 +46,17 @@ function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 }
 
-// ── Personal task modal ────────────────────────────────────────────────────────
+function getDueDate(item: MyTask) {
+  return item.task.dueDate;
+}
+function getStatus(item: MyTask): TaskStatus {
+  return item.task.status;
+}
+function getPriority(item: MyTask): TaskPriority {
+  return item.kind === 'personal' ? item.task.priority : item.task.priority;
+}
+
+// ── Personal task modal ───────────────────────────────────────────────────────
 
 interface TaskModalProps {
   initial?: PersonalTask;
@@ -77,19 +93,16 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
           style={{ maxWidth: 480, maxHeight: '90vh' }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
             <p className="text-[15px] font-bold text-gray-900">
-              {initial ? 'Editar tarefa' : 'Nova tarefa pessoal'}
+              {initial ? 'Editar tarefa pessoal' : 'Nova tarefa pessoal'}
             </p>
             <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
               <X size={14} />
             </button>
           </div>
 
-          {/* Body */}
           <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-            {/* Title */}
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Título *</label>
               <input
@@ -102,7 +115,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               />
             </div>
 
-            {/* Type */}
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Tipo</label>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -121,7 +133,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               </div>
             </div>
 
-            {/* Priority + Status row */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Prioridade</label>
@@ -130,7 +141,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                     <button
                       key={p}
                       onClick={() => setPriority(p)}
-                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all border ${
                         priority === p ? 'text-white border-transparent' : 'bg-transparent text-gray-500 hover:bg-gray-100'
                       }`}
                       style={priority === p ? { backgroundColor: PRIORITY_COLORS[p], borderColor: PRIORITY_COLORS[p] } : { borderColor: '#e5e7eb' }}
@@ -155,7 +166,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               </div>
             </div>
 
-            {/* Due date */}
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Data de entrega</label>
               <input
@@ -166,7 +176,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               />
             </div>
 
-            {/* Description */}
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Descrição <span className="normal-case font-normal">(opcional)</span></label>
               <textarea
@@ -178,7 +187,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               />
             </div>
 
-            {/* Notes */}
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Notas <span className="normal-case font-normal">(opcional)</span></label>
               <textarea
@@ -191,7 +199,6 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
             </div>
           </div>
 
-          {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-100 flex gap-2 shrink-0">
             <button
               onClick={handleSave}
@@ -214,24 +221,30 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
 // ── Task row ──────────────────────────────────────────────────────────────────
 
 interface TaskRowProps {
-  task: PersonalTask;
-  onEdit: () => void;
-  onDelete: () => void;
+  item: MyTask;
+  onEditPersonal: () => void;
+  onDeletePersonal: () => void;
   onToggleDone: () => void;
+  onOpenProject: () => void;
 }
 
-function TaskRow({ task, onEdit, onDelete, onToggleDone }: TaskRowProps) {
+function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenProject }: TaskRowProps) {
   const today = new Date().toISOString().split('T')[0];
-  const isOverdue = task.dueDate < today && task.status !== 'Done';
-  const isDone = task.status === 'Done';
+  const dueDate = getDueDate(item);
+  const status  = getStatus(item);
+  const priority = getPriority(item);
+  const isOverdue = dueDate < today && status !== 'Done';
+  const isDone    = status === 'Done';
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const accentColor = item.kind === 'project' ? item.projectColor : PRIORITY_COLORS[priority];
 
   return (
     <div className={`group flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all hover:shadow-sm ${
-      isDone ? 'border-gray-100 opacity-60' : 'border-gray-150 hover:border-gray-200'
+      isDone ? 'border-gray-100 opacity-60' : 'border-gray-100 hover:border-gray-200'
     }`}>
-      {/* Priority accent */}
-      <div className="w-0.5 h-8 rounded-full shrink-0" style={{ backgroundColor: PRIORITY_COLORS[task.priority] }} />
+      {/* Accent bar */}
+      <div className="w-0.5 h-8 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
 
       {/* Done toggle */}
       <button
@@ -246,33 +259,55 @@ function TaskRow({ task, onEdit, onDelete, onToggleDone }: TaskRowProps) {
       </button>
 
       {/* Type icon */}
-      <TypeIcon type={task.type} size="sm" />
+      <TypeIcon type={item.task.type} size="sm" />
 
-      {/* Title */}
-      <p className={`flex-1 text-[13px] font-medium min-w-0 truncate ${
-        isDone ? 'line-through text-gray-400' : 'text-gray-800'
-      }`}>
-        {task.title}
-      </p>
+      {/* Title + source badge */}
+      <div className="flex-1 min-w-0 flex items-center gap-2">
+        <p className={`text-[13px] font-medium truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+          {item.task.title}
+        </p>
+        {item.kind === 'project' ? (
+          <span
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate max-w-[110px]"
+            style={{ backgroundColor: item.projectColor }}
+            title={item.projectName}
+          >
+            {item.projectName}
+          </span>
+        ) : (
+          <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-400">
+            Pessoal
+          </span>
+        )}
+      </div>
 
       {/* Status dot */}
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[task.status]}`} />
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT[status]}`} />
 
       {/* Due date */}
       <div className={`flex items-center gap-1 text-[11px] shrink-0 ${
         isOverdue ? 'text-red-500 font-semibold' : 'text-gray-400'
       }`}>
         {isOverdue ? <AlertCircle size={10} /> : <Calendar size={10} />}
-        {formatDate(task.dueDate)}
+        {formatDate(dueDate)}
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        {confirmDelete ? (
+        {item.kind === 'project' ? (
+          /* Project task: just open in project board */
+          <button
+            onClick={onOpenProject}
+            className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+            title="Abrir no projeto"
+          >
+            <ExternalLink size={11} />
+          </button>
+        ) : confirmDelete ? (
           <div className="flex items-center gap-1">
             <span className="text-[10px] text-red-500 font-medium">Apagar?</span>
             <button
-              onClick={onDelete}
+              onClick={onDeletePersonal}
               className="w-5 h-5 flex items-center justify-center rounded bg-red-500 text-white hover:bg-red-600 transition-colors"
             >
               <Check size={9} strokeWidth={3} />
@@ -287,7 +322,7 @@ function TaskRow({ task, onEdit, onDelete, onToggleDone }: TaskRowProps) {
         ) : (
           <>
             <button
-              onClick={onEdit}
+              onClick={onEditPersonal}
               className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             >
               <Pencil size={11} />
@@ -309,41 +344,43 @@ function TaskRow({ task, onEdit, onDelete, onToggleDone }: TaskRowProps) {
 
 interface SectionProps {
   label: string;
-  tasks: PersonalTask[];
+  items: MyTask[];
   collapsible?: boolean;
   defaultCollapsed?: boolean;
-  onEdit: (task: PersonalTask) => void;
-  onDelete: (id: string) => void;
-  onToggleDone: (task: PersonalTask) => void;
+  onEditPersonal: (task: PersonalTask) => void;
+  onDeletePersonal: (id: string) => void;
+  onToggleDone: (item: MyTask) => void;
+  onOpenProject: (task: Task) => void;
 }
 
-function TaskSection({ label, tasks, collapsible, defaultCollapsed, onEdit, onDelete, onToggleDone }: SectionProps) {
+function TaskSection({ label, items, collapsible, defaultCollapsed, onEditPersonal, onDeletePersonal, onToggleDone, onOpenProject }: SectionProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed ?? false);
 
-  if (tasks.length === 0) return null;
+  if (items.length === 0) return null;
 
   return (
     <div>
       <button
         onClick={() => collapsible && setCollapsed(v => !v)}
-        className={`flex items-center gap-1.5 mb-2 ${collapsible ? 'cursor-pointer group' : 'cursor-default'}`}
+        className={`flex items-center gap-1.5 mb-2 ${collapsible ? 'cursor-pointer' : 'cursor-default'}`}
       >
         {collapsible && (
           collapsed ? <ChevronRight size={12} className="text-gray-400" /> : <ChevronDown size={12} className="text-gray-400" />
         )}
         <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{label}</span>
-        <span className="text-[11px] text-gray-300 font-medium">({tasks.length})</span>
+        <span className="text-[11px] text-gray-300 font-medium">({items.length})</span>
       </button>
 
       {!collapsed && (
         <div className="space-y-1.5">
-          {tasks.map(task => (
+          {items.map((item, i) => (
             <TaskRow
-              key={task.id}
-              task={task}
-              onEdit={() => onEdit(task)}
-              onDelete={() => onDelete(task.id)}
-              onToggleDone={() => onToggleDone(task)}
+              key={item.kind === 'personal' ? item.task.id : `proj-${item.task.id}`}
+              item={item}
+              onEditPersonal={() => item.kind === 'personal' && onEditPersonal(item.task)}
+              onDeletePersonal={() => item.kind === 'personal' && onDeletePersonal(item.task.id)}
+              onToggleDone={() => onToggleDone(item)}
+              onOpenProject={() => item.kind === 'project' && onOpenProject(item.task)}
             />
           ))}
         </div>
@@ -364,49 +401,74 @@ const FILTER_LABELS: Record<FilterTab, string> = {
 };
 
 export function MyTasksTab() {
-  const { personalTasks, currentUserId, addPersonalTask, updatePersonalTask, deletePersonalTask } = useAppStore();
-  const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<PersonalTask | null>(null);
-  const [filter, setFilter] = useState<FilterTab>('all');
+  const {
+    tasks, projects,
+    personalTasks, currentUserId,
+    addPersonalTask, updatePersonalTask, deletePersonalTask,
+    updateTask, setActiveTask, setActiveProject,
+  } = useAppStore();
 
-  const today = new Date().toISOString().split('T')[0];
+  const [showModal,    setShowModal]    = useState(false);
+  const [editingTask,  setEditingTask]  = useState<PersonalTask | null>(null);
+  const [filter,       setFilter]       = useState<FilterTab>('all');
+
+  const today   = new Date().toISOString().split('T')[0];
   const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
 
-  // My tasks only
-  const myTasks = personalTasks.filter(t => t.ownerId === currentUserId);
+  // ── Build combined list ──────────────────────────────────────────────────────
 
-  // Stats
-  const total   = myTasks.length;
-  const done    = myTasks.filter(t => t.status === 'Done').length;
-  const overdue = myTasks.filter(t => t.dueDate < today && t.status !== 'Done').length;
+  // Project tasks where I am assignee (top-level only, no subtasks)
+  const myProjectTasks: MyTask[] = tasks
+    .filter(t => t.assigneeId === currentUserId && !t.parentTaskId)
+    .map(t => {
+      const proj = projects.find(p => p.id === t.projectId);
+      return { kind: 'project', task: t, projectName: proj?.name ?? 'Projeto', projectColor: proj?.color ?? '#6366f1' };
+    });
 
-  // Filter
-  const filtered = myTasks.filter(t => {
-    if (filter === 'today')   return t.dueDate === today;
-    if (filter === 'week')    return t.dueDate >= today && t.dueDate <= weekEnd;
-    if (filter === 'overdue') return t.dueDate < today && t.status !== 'Done';
+  // Personal tasks I own
+  const myPersonalTasks: MyTask[] = personalTasks
+    .filter(t => t.ownerId === currentUserId)
+    .map(t => ({ kind: 'personal', task: t }));
+
+  const allTasks: MyTask[] = [...myProjectTasks, ...myPersonalTasks];
+
+  // ── Stats ─────────────────────────────────────────────────────────────────────
+  const total   = allTasks.length;
+  const done    = allTasks.filter(t => getStatus(t) === 'Done').length;
+  const overdue = allTasks.filter(t => getDueDate(t) < today && getStatus(t) !== 'Done').length;
+
+  // ── Filter ────────────────────────────────────────────────────────────────────
+  const filtered = allTasks.filter(item => {
+    const d = getDueDate(item);
+    const s = getStatus(item);
+    if (filter === 'today')   return d === today;
+    if (filter === 'week')    return d >= today && d <= weekEnd;
+    if (filter === 'overdue') return d < today && s !== 'Done';
     return true;
   });
 
-  // Group (only for 'all' filter; otherwise just show flat sorted list)
-  const todayTasks   = filtered.filter(t => t.dueDate === today && t.status !== 'Done');
-  const thisWeek     = filtered.filter(t => t.dueDate > today && t.dueDate <= weekEnd && t.status !== 'Done');
-  const upcoming     = filtered.filter(t => t.dueDate > weekEnd && t.status !== 'Done');
-  const overdueTasks = filtered.filter(t => t.dueDate < today && t.status !== 'Done');
-  const doneTasks    = filtered.filter(t => t.status === 'Done');
+  // ── Groups ────────────────────────────────────────────────────────────────────
+  const overdueTasks = filtered.filter(t => getDueDate(t) < today  && getStatus(t) !== 'Done');
+  const todayTasks   = filtered.filter(t => getDueDate(t) === today && getStatus(t) !== 'Done');
+  const thisWeek     = filtered.filter(t => getDueDate(t) > today   && getDueDate(t) <= weekEnd && getStatus(t) !== 'Done');
+  const upcoming     = filtered.filter(t => getDueDate(t) > weekEnd && getStatus(t) !== 'Done');
+  const doneTasks    = filtered.filter(t => getStatus(t) === 'Done');
 
+  // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleSave = (data: Omit<PersonalTask, 'id' | 'createdAt'>) => {
-    if (editingTask) {
-      updatePersonalTask(editingTask.id, data);
-    } else {
-      addPersonalTask(data);
-    }
+    if (editingTask) updatePersonalTask(editingTask.id, data);
+    else addPersonalTask(data);
   };
 
-  const handleToggleDone = (task: PersonalTask) => {
-    updatePersonalTask(task.id, {
-      status: task.status === 'Done' ? 'Not Started' : 'Done',
-    });
+  const handleToggleDone = (item: MyTask) => {
+    const newStatus: TaskStatus = getStatus(item) === 'Done' ? 'Not Started' : 'Done';
+    if (item.kind === 'personal') updatePersonalTask(item.task.id, { status: newStatus });
+    else updateTask(item.task.id, { status: newStatus });
+  };
+
+  const handleOpenProject = (task: Task) => {
+    setActiveProject(task.projectId);
+    setTimeout(() => setActiveTask(task.id), 80);
   };
 
   const handleEdit = (task: PersonalTask) => {
@@ -417,6 +479,14 @@ export function MyTasksTab() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingTask(null);
+  };
+
+  // Common section props
+  const sectionProps = {
+    onEditPersonal:   handleEdit,
+    onDeletePersonal: deletePersonalTask,
+    onToggleDone:     handleToggleDone,
+    onOpenProject:    handleOpenProject,
   };
 
   return (
@@ -446,9 +516,7 @@ export function MyTasksTab() {
               key={f}
               onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-colors ${
-                filter === f
-                  ? 'bg-gray-900 text-white'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                filter === f ? 'bg-gray-900 text-white' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
               }`}
             >
               {FILTER_LABELS[f]}
@@ -466,7 +534,7 @@ export function MyTasksTab() {
           style={{ backgroundColor: '#FF5C35' }}
         >
           <Plus size={13} />
-          Nova tarefa
+          Nova tarefa pessoal
         </button>
       </div>
 
@@ -481,8 +549,8 @@ export function MyTasksTab() {
           </p>
           <p className="text-[12px] text-gray-300 mt-1">
             {total === 0
-              ? 'Crie sua primeira tarefa pessoal para organizar seu dia.'
-              : 'Tente outro filtro ou crie uma nova tarefa.'}
+              ? 'Aqui aparecem tarefas de projetos onde você é responsável, e suas tarefas pessoais.'
+              : 'Tente outro filtro ou crie uma nova tarefa pessoal.'}
           </p>
           {total === 0 && (
             <button
@@ -491,29 +559,30 @@ export function MyTasksTab() {
               style={{ backgroundColor: '#FF5C35' }}
             >
               <Plus size={12} />
-              Criar tarefa
+              Criar tarefa pessoal
             </button>
           )}
         </div>
       ) : filter === 'all' ? (
         <div className="space-y-5">
-          <TaskSection label="Atrasadas"    tasks={overdueTasks} onEdit={handleEdit} onDelete={deletePersonalTask} onToggleDone={handleToggleDone} />
-          <TaskSection label="Hoje"         tasks={todayTasks}   onEdit={handleEdit} onDelete={deletePersonalTask} onToggleDone={handleToggleDone} />
-          <TaskSection label="Esta semana"  tasks={thisWeek}     onEdit={handleEdit} onDelete={deletePersonalTask} onToggleDone={handleToggleDone} />
-          <TaskSection label="Próximas"     tasks={upcoming}     onEdit={handleEdit} onDelete={deletePersonalTask} onToggleDone={handleToggleDone} />
-          <TaskSection label="Concluídas"   tasks={doneTasks}    collapsible defaultCollapsed onEdit={handleEdit} onDelete={deletePersonalTask} onToggleDone={handleToggleDone} />
+          <TaskSection label="Atrasadas"   items={overdueTasks} {...sectionProps} />
+          <TaskSection label="Hoje"        items={todayTasks}   {...sectionProps} />
+          <TaskSection label="Esta semana" items={thisWeek}     {...sectionProps} />
+          <TaskSection label="Próximas"    items={upcoming}     {...sectionProps} />
+          <TaskSection label="Concluídas"  items={doneTasks}    collapsible defaultCollapsed {...sectionProps} />
         </div>
       ) : (
         <div className="space-y-1.5">
           {filtered
-            .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-            .map(task => (
+            .sort((a, b) => getDueDate(a).localeCompare(getDueDate(b)))
+            .map(item => (
               <TaskRow
-                key={task.id}
-                task={task}
-                onEdit={() => handleEdit(task)}
-                onDelete={() => deletePersonalTask(task.id)}
-                onToggleDone={() => handleToggleDone(task)}
+                key={item.kind === 'personal' ? item.task.id : `proj-${item.task.id}`}
+                item={item}
+                onEditPersonal={() => item.kind === 'personal' && handleEdit(item.task)}
+                onDeletePersonal={() => item.kind === 'personal' && deletePersonalTask(item.task.id)}
+                onToggleDone={() => handleToggleDone(item)}
+                onOpenProject={() => item.kind === 'project' && handleOpenProject(item.task)}
               />
             ))}
         </div>
