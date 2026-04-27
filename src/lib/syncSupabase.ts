@@ -4,7 +4,7 @@ import { useAppStore } from '../store/useAppStore';
 const ROW_KEY = 'main';
 
 // Only these fields are synced across devices.
-// Session state (isAuthenticated, currentUserId, darkMode) stays local per device.
+// Session state (isAuthenticated, currentUserId, darkMode, navigation) stays local per device.
 const SYNC_FIELDS = [
   'tasks', 'personalTasks', 'companies', 'projects',
   'teamMembers', 'templates', 'phaseTemplates',
@@ -20,8 +20,11 @@ function extractSyncState(state: ReturnType<typeof useAppStore.getState>): SyncS
   ) as SyncState;
 }
 
-// Guard: prevent feedback loops when setState is called from a remote update
-let isSyncing = false;
+// ── Guards ────────────────────────────────────────────────────────────────────
+// isSyncing: prevents feedback loop when setState is called from a remote update
+// supabaseLoaded: prevents any save BEFORE the initial Supabase load completes
+let isSyncing      = false;
+let supabaseLoaded = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function pushToSupabase(syncState: SyncState) {
@@ -34,8 +37,14 @@ async function pushToSupabase(syncState: SyncState) {
   if (error) console.error('[sync] push error:', error.message);
 }
 
-/** Called once on app mount. Loads remote state into the store. */
+/** Called once on app mount. Loads remote state and THEN enables saves. */
 export async function loadFromSupabase() {
+  // Cancel any save that was queued before we load (e.g. from persist hydration)
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
   const { data, error } = await supabase
     .from('marketflow')
     .select('data')
@@ -44,32 +53,35 @@ export async function loadFromSupabase() {
 
   if (error) {
     console.error('[sync] load error:', error.message);
+    supabaseLoaded = true; // allow saves even on error so local changes aren't lost
     return;
   }
 
-  if (!data?.data || Object.keys(data.data).length === 0) {
-    // Table is empty — push current local state as the initial remote state
+  if (!data?.data || Object.keys(data.data as object).length === 0) {
+    // Nothing in Supabase yet — push current local state as the initial snapshot
     const state = useAppStore.getState();
     await pushToSupabase(extractSyncState(state));
-    return;
+  } else {
+    // Supabase has data — hydrate the store (suppress the save triggered by setState)
+    isSyncing = true;
+    useAppStore.setState(data.data as Partial<ReturnType<typeof useAppStore.getState>>);
+    isSyncing = false;
   }
 
-  // Hydrate store with remote state (suppress the save triggered by setState)
-  isSyncing = true;
-  useAppStore.setState(data.data as Partial<ReturnType<typeof useAppStore.getState>>);
-  isSyncing = false;
+  // Only NOW are saves allowed
+  supabaseLoaded = true;
 }
 
-/** Debounced save — called every time the store changes. */
+/** Debounced save — called on every store mutation, but gated by supabaseLoaded. */
 export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
-  if (isSyncing) return;
+  if (isSyncing || !supabaseLoaded) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     pushToSupabase(extractSyncState(state));
   }, 1000);
 }
 
-/** Subscribe to Supabase Realtime — changes from other devices update local store. */
+/** Subscribe to Supabase Realtime — changes from other devices update local store instantly. */
 export function subscribeToRealtime() {
   const channel = supabase
     .channel('marketflow-sync')
