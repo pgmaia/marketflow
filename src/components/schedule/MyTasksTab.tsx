@@ -42,6 +42,16 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
 const TASK_TYPES: TaskType[] = ['Copy', 'Design', 'Video', 'Ads', 'SEO', 'Email', 'Social', 'Analytics', 'Meeting'];
 const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
 
+/** Returns YYYY-MM-DD in the browser's local timezone (not UTC). */
+function localDateStr(d: Date = new Date()): string {
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function localToday(): string { return localDateStr(); }
+function localPlusDays(n: number): string { const d = new Date(); d.setDate(d.getDate() + n); return localDateStr(d); }
+
 function formatDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
 }
@@ -66,7 +76,7 @@ interface TaskModalProps {
 }
 
 function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
 
   const [title,       setTitle]       = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
@@ -229,7 +239,7 @@ interface TaskRowProps {
 }
 
 function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenProject }: TaskRowProps) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localToday();
   const dueDate = getDueDate(item);
   const status  = getStatus(item);
   const priority = getPriority(item);
@@ -412,8 +422,8 @@ export function MyTasksTab() {
   const [editingTask,  setEditingTask]  = useState<PersonalTask | null>(null);
   const [filter,       setFilter]       = useState<FilterTab>('all');
 
-  const today   = new Date().toISOString().split('T')[0];
-  const weekEnd = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+  const today   = localToday();
+  const weekEnd = localPlusDays(7);
 
   // ── Build combined list ──────────────────────────────────────────────────────
 
