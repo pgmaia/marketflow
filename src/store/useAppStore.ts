@@ -3,6 +3,10 @@ import { persist } from 'zustand/middleware';
 import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, TeamMember, AppFilters, TaskStatus, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask } from '../types';
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
 
+// IDs that belong to seed data — used to distinguish user-created records
+const SEED_COMPANY_IDS = new Set(seedCompanies.map(c => c.id));
+const SEED_MEMBER_IDS  = new Set(seedTeamMembers.map(m => m.id));
+
 type AppView = 'dashboard' | 'company' | 'project' | 'users' | 'flow' | 'trash' | 'schedule';
 
 interface AppState {
@@ -673,14 +677,15 @@ export const useAppStore = create<AppState>()(
         if (persistedState.currentUserId === undefined) {
           persistedState.currentUserId = null;
         }
-        // v7 → v8: add isAuthenticated + backfill email on team members
+        // v7 → v8: add isAuthenticated + sync all seed fields on team members
         if (persistedState.isAuthenticated === undefined) {
           persistedState.isAuthenticated = false;
         }
         if (persistedState?.teamMembers) {
           persistedState.teamMembers = persistedState.teamMembers.map((m: any) => {
             const seed = seedTeamMembers.find(s => s.id === m.id);
-            return seed ? { ...m, email: m.email ?? seed.email, permission: m.permission ?? seed.permission } : m;
+            if (!seed) return m;
+            return { ...seed, permission: m.permission ?? seed.permission };
           });
           // Add any new seed members not yet in the persisted list
           seedTeamMembers.forEach(s => {
@@ -725,14 +730,38 @@ export const useAppStore = create<AppState>()(
         if (!merged.memberPasswords) merged.memberPasswords = {};
         if (!merged.deletedMemberIds) merged.deletedMemberIds = [];
         if (!merged.personalTasks) merged.personalTasks = [];
-        // Always ensure all seed members are present with up-to-date email/permission
-        // (skipping any that were explicitly deleted by an admin)
-        if (merged.teamMembers) {
-          merged.teamMembers = merged.teamMembers.map((m: any) => {
-            const seed = seedTeamMembers.find(s => s.id === m.id);
-            return seed ? { ...m, email: m.email ?? seed.email, permission: m.permission ?? seed.permission } : m;
+        // Always sync seed companies — update existing ones, add any new ones
+        // (user-created companies, i.e. not in seed, are left untouched)
+        if (merged.companies) {
+          merged.companies = merged.companies.map((c: any) =>
+            SEED_COMPANY_IDS.has(c.id)
+              ? { ...seedCompanies.find(s => s.id === c.id)! }
+              : c
+          );
+          seedCompanies.forEach(s => {
+            if (!merged.companies.find((c: any) => c.id === s.id)) {
+              merged.companies.push(s);
+            }
           });
+        } else {
+          merged.companies = [...seedCompanies];
+        }
+
+        // Always sync seed team members — update ALL fields from seed (name, role, avatar,
+        // color, email) while keeping the admin-set permission.
+        // Skip members that were explicitly deleted by an admin.
+        if (merged.teamMembers) {
           const deletedIds: string[] = merged.deletedMemberIds ?? [];
+          merged.teamMembers = merged.teamMembers
+            .filter((m: any) => !SEED_MEMBER_IDS.has(m.id) || !deletedIds.includes(m.id))
+            .map((m: any) => {
+              const seed = seedTeamMembers.find(s => s.id === m.id);
+              if (!seed) return m; // user-created member — keep as-is
+              return {
+                ...seed,
+                permission: m.permission ?? seed.permission,
+              };
+            });
           seedTeamMembers.forEach(s => {
             if (!deletedIds.includes(s.id) && !merged.teamMembers.find((m: any) => m.id === s.id)) {
               merged.teamMembers.unshift(s);
