@@ -11,7 +11,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "serve dist -l ${PORT:-3000} --single"
+    "start": "serve dist -l ${PORT:-3000} --single -c serve.json"
   },
   "dependencies": {
     "lucide-react": "^1.7.0",
