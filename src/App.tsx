@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Menu } from 'lucide-react';
 import { useAppStore } from './store/useAppStore';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
@@ -14,6 +15,7 @@ import { ScheduleView } from './components/schedule/ScheduleView';
 
 export default function App() {
   const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode } = useAppStore();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
@@ -39,12 +41,24 @@ export default function App() {
     setTimeout(() => useAppStore.getState().setActiveTask(newTask.id), 50);
   } : undefined;
 
+  const isFullscreenView = view === 'project' || view === 'flow';
+
   return (
     <div className="flex w-full min-h-screen bg-white">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
+
+      {/* Floating hamburger — only on mobile, only for views without a TopBar */}
+      {isFullscreenView && !mobileMenuOpen && (
+        <button
+          onClick={() => setMobileMenuOpen(true)}
+          className="fixed top-3.5 left-3.5 z-40 md:hidden w-8 h-8 bg-white shadow-md rounded-lg flex items-center justify-center border border-gray-100"
+        >
+          <Menu size={16} className="text-gray-600" />
+        </button>
+      )}
 
       <div className="flex flex-col flex-1 min-h-screen min-w-0">
-        {view !== 'project' && view !== 'flow' && <TopBar onNewTask={handleNewTask} />}
+        {!isFullscreenView && <TopBar onNewTask={handleNewTask} onMenuToggle={() => setMobileMenuOpen(v => !v)} />}
 
         <main className="flex flex-1 min-h-0 overflow-hidden">
           {view === 'dashboard' && <DashboardView />}

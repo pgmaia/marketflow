@@ -13,7 +13,7 @@ import { AvatarGroup } from '../shared/Avatar';
 
 function StatCard({ label, value, sub, color }: { label: string; value: number; sub?: string; color: string }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-100 px-8 py-7 flex items-center gap-5 min-w-0">
+    <div className="bg-white rounded-xl border border-gray-100 px-4 py-5 md:px-8 md:py-7 flex items-center gap-4 md:gap-5 min-w-0">
       <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: color + '18' }}>
         <TrendingUp size={16} style={{ color }} />
       </div>
@@ -418,7 +418,7 @@ function ChartsSection({
   return (
     <div className="space-y-4">
       {/* Row 1: status donut + priority bar */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ChartCard title="Tarefas por Status" subtitle="Visão geral">
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
@@ -571,7 +571,7 @@ export function DashboardView() {
 
   return (
     <div className="flex-1 overflow-auto bg-[#F5F6F8]">
-      <div className="px-14 py-12 space-y-10">
+      <div className="px-4 py-6 md:px-10 lg:px-14 md:py-10 lg:py-12 space-y-6 md:space-y-10">
 
         {/* Welcome */}
         <div>
@@ -597,7 +597,7 @@ export function DashboardView() {
         />
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
           <StatCard label="Total de tarefas" value={filteredTasks.length} color="#6366f1" />
           <StatCard
             label="Concluídas"

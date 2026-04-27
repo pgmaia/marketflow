@@ -71,9 +71,18 @@ function DayPanel({ dateStr, tasks, onClose }: DayPanelProps) {
   const isPast  = dateStr < today;
 
   return (
-    <div className="w-80 shrink-0 bg-white border-l border-gray-100 flex flex-col min-h-0">
+    // Desktop: right side panel | Mobile: fixed bottom sheet
+    <div className="
+      fixed bottom-0 inset-x-0 z-50 bg-white border-t border-gray-200 flex flex-col max-h-[60vh]
+      md:relative md:inset-auto md:bottom-auto md:z-auto md:w-80 md:shrink-0 md:border-t-0 md:border-l md:border-gray-100 md:max-h-none md:min-h-0
+    ">
+      {/* Mobile drag handle */}
+      <div className="md:hidden flex justify-center pt-2 pb-1 shrink-0">
+        <div className="w-10 h-1 rounded-full bg-gray-200" />
+      </div>
+
       {/* Header */}
-      <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+      <div className="flex items-start justify-between px-5 py-3 md:py-4 border-b border-gray-100 shrink-0">
         <div>
           <p className={`text-[13px] font-bold capitalize ${isToday ? 'text-[#FF5C35]' : 'text-gray-800'}`}>
             {isToday ? 'Hoje — ' : ''}{formatFull(dateStr)}
@@ -169,7 +178,7 @@ function CalendarCell({ date, isCurrentMonth, tasks, isToday, isSelected, onClic
   return (
     <div
       onClick={onClick}
-      className={`relative flex flex-col min-h-[80px] p-2 cursor-pointer transition-colors border-b border-r border-gray-100 ${
+      className={`relative flex flex-col min-h-[60px] md:min-h-[80px] p-1.5 md:p-2 cursor-pointer transition-colors border-b border-r border-gray-100 ${
         isSelected
           ? 'bg-[#FF5C35]/5'
           : isCurrentMonth
@@ -203,11 +212,11 @@ function CalendarCell({ date, isCurrentMonth, tasks, isToday, isSelected, onClic
           return (
             <div
               key={i}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] truncate leading-snug"
+              className="flex items-center gap-1 px-1 md:px-1.5 py-0.5 rounded text-[10px] truncate leading-snug"
               style={{ backgroundColor: color + '18', color: isDone ? '#9ca3af' : color }}
             >
-              <span className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: isDone ? '#9ca3af' : color }} />
-              <span className={`truncate ${isDone ? 'line-through' : ''}`}>{title}</span>
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: isDone ? '#9ca3af' : color }} />
+              <span className={`truncate hidden sm:inline ${isDone ? 'line-through' : ''}`}>{title}</span>
             </div>
           );
         })}
@@ -278,7 +287,7 @@ export function AgendaTab() {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 
         {/* Month navigation */}
-        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100 shrink-0">
+        <div className="flex items-center justify-between px-3 md:px-6 py-3 md:py-4 bg-white border-b border-gray-100 shrink-0 flex-wrap gap-2">
           <div className="flex items-center gap-4">
             <button
               onClick={prevMonth}
@@ -360,6 +369,14 @@ export function AgendaTab() {
           </div>
         </div>
       </div>
+
+      {/* Mobile backdrop for bottom sheet */}
+      {selectedDate && (
+        <div
+          className="fixed inset-0 bg-black/30 z-40 md:hidden"
+          onClick={() => setSelectedDate(null)}
+        />
+      )}
 
       {/* ── Day detail panel ── */}
       {selectedDate && (

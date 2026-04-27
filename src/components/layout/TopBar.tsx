@@ -1,4 +1,4 @@
-import { Bell, Plus, SlidersHorizontal, Sun, Moon } from 'lucide-react';
+import { Bell, Plus, SlidersHorizontal, Sun, Moon, Menu } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { TaskStatus } from '../../types';
 
@@ -13,24 +13,37 @@ const statusOptions: { value: TaskStatus | 'All'; label: string }[] = [
 
 interface TopBarProps {
   onNewTask?: () => void;
+  onMenuToggle?: () => void;
 }
 
-export function TopBar({ onNewTask }: TopBarProps) {
+export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
   const { view, filters, setFilters, darkMode, toggleDarkMode } = useAppStore();
 
   return (
-    <div className="h-16 shrink-0 bg-white border-b border-gray-100 sticky top-0 z-10">
-      <div className="px-14 h-full flex items-center justify-between">
-        {/* Page title */}
-        <div className="text-[13px] font-semibold text-gray-700">
-          {view === 'dashboard' && 'Início'}
-          {view === 'company' && 'Empresa'}
-          {view === 'project' && 'Projeto'}
+    <div className="h-14 shrink-0 bg-white border-b border-gray-100 sticky top-0 z-10">
+      <div className="px-4 md:px-14 h-full flex items-center justify-between gap-2">
+
+        {/* Left: hamburger (mobile) + page title */}
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={onMenuToggle}
+            className="md:hidden w-8 h-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 transition-colors shrink-0"
+          >
+            <Menu size={18} />
+          </button>
+          <span className="text-[13px] font-semibold text-gray-700 truncate">
+            {view === 'dashboard' && 'Início'}
+            {view === 'company'   && 'Empresa'}
+            {view === 'users'     && 'Usuários'}
+            {view === 'trash'     && 'Lixeira'}
+            {view === 'schedule'  && 'Meu Cronograma'}
+          </span>
         </div>
 
-        {/* Right: filters + actions */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+        {/* Right: filters (hidden on small screens) + actions */}
+        <div className="flex items-center gap-2">
+          {/* Filters — hidden on mobile */}
+          <div className="hidden sm:flex items-center gap-2">
             <SlidersHorizontal size={12} className="text-gray-400" />
             <select
               value={filters.status ?? 'All'}
@@ -51,16 +64,16 @@ export function TopBar({ onNewTask }: TopBarProps) {
             </select>
           </div>
 
-          <div className="w-px h-4 bg-gray-200 mx-1" />
+          <div className="hidden sm:block w-px h-4 bg-gray-200 mx-1" />
 
           {onNewTask && (
             <button
               onClick={onNewTask}
-              className="h-7 flex items-center gap-1.5 px-3 rounded-md text-[12px] font-semibold text-white"
+              className="h-7 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md text-[12px] font-semibold text-white"
               style={{ backgroundColor: '#FF5C35' }}
             >
               <Plus size={13} />
-              Nova tarefa
+              <span className="hidden sm:inline">Nova tarefa</span>
             </button>
           )}
 

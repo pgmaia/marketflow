@@ -95,7 +95,7 @@ export function KanbanBoard() {
       <div className="border-b border-[#E5E7EB] shrink-0">
 
         {/* Top row: title + stats */}
-        <div className="px-12 pt-8 pb-6 flex items-center justify-between gap-10">
+        <div className="px-4 pt-5 pb-4 md:px-12 md:pt-8 md:pb-6 flex items-center justify-between gap-4 md:gap-10 flex-wrap">
 
           {/* Left: title + meta */}
           <div className="flex-1 min-w-0">
@@ -193,8 +193,8 @@ export function KanbanBoard() {
             </div>
           </div>
 
-          {/* Right: big number stats */}
-          <div className="flex items-center gap-9 shrink-0">
+          {/* Right: big number stats — hidden on smallest screens */}
+          <div className="hidden sm:flex items-center gap-6 md:gap-9 shrink-0">
             <div className="text-center">
               <p className="text-[28px] font-bold text-[#111] leading-none">{projectTasks.length}</p>
               <p className="text-[11px] text-[#999] mt-1.5">tarefas</p>
@@ -213,7 +213,7 @@ export function KanbanBoard() {
         </div>
 
         {/* Bottom row: view tabs + actions */}
-        <div className="px-12 flex items-center justify-between">
+        <div className="px-4 md:px-12 flex items-center justify-between gap-2 flex-wrap">
           {/* View tabs */}
           <div className="flex items-center">
             {(['board', 'list'] as ViewMode[]).map(v => (
@@ -229,31 +229,31 @@ export function KanbanBoard() {
           </div>
 
           {/* Right actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setShowDone(v => !v)}
               className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${!showDone ? 'border-[#FF5C35]/30 bg-[#FF5C35]/5 text-[#FF5C35]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
             >
               {showDone ? <Eye size={12} /> : <EyeOff size={12} />}
-              Concluídas
+              <span className="hidden sm:inline">Concluídas</span>
             </button>
             <button
               onClick={() => setShowTemplates(true)}
-              className="h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              className="hidden sm:flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
             >
               <Layers size={12} />
               Modelos
             </button>
             <button
               onClick={() => setShowTeam(s => !s)}
-              className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${showTeam ? 'border-[#FF5C35]/30 bg-[#FF5C35]/5 text-[#FF5C35]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+              className={`hidden sm:flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${showTeam ? 'border-[#FF5C35]/30 bg-[#FF5C35]/5 text-[#FF5C35]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
             >
               <Users size={12} />
               Equipe
             </button>
             <button
               onClick={() => setShowPhaseEditor(true)}
-              className="h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              className="hidden sm:flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
             >
               <Settings2 size={12} />
               Fases
@@ -278,7 +278,7 @@ export function KanbanBoard() {
 
         {/* Member filter bar */}
         {(projectMembers.length > 0 || currentUserId) && (
-          <div className="px-12 py-2.5 flex items-center gap-2.5 border-t border-[#E5E7EB] flex-wrap">
+          <div className="px-4 md:px-12 py-2.5 flex items-center gap-2.5 border-t border-[#E5E7EB] flex-wrap">
             <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider shrink-0">Responsável</span>
 
             {/* "Todos" — only for admins/managers */}

@@ -3,6 +3,11 @@ import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOp
 import { useAppStore } from '../../store/useAppStore';
 import type { UserPermission } from '../../types';
 
+export interface SidebarProps {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}
+
 const PERMISSION_META: Record<UserPermission, { label: string; color: string }> = {
   Admin:        { label: 'Admin',        color: '#ef4444' },
   Gerente:      { label: 'Gerente',      color: '#f97316' },
@@ -158,8 +163,11 @@ function NewCompanyModal({ onClose }: { onClose: () => void }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const { companies, projects, tasks, trash, teamMembers, currentUserId, setCurrentUser, logout, activeCompanyId, activeProjectId, view, setActiveCompany, setActiveProject, setView } = useAppStore();
+
+  // Wrap navigation actions to auto-close mobile drawer
+  const nav = (action: () => void) => () => { action(); onMobileClose(); };
   const [expandedCompanies, setExpandedCompanies] = useState<Record<string, boolean>>({ c1: true });
   const [search] = useState('');
   const [collapsed, setCollapsed] = useState(false);
@@ -194,11 +202,11 @@ export function Sidebar() {
 
   const isDashboard = view === 'dashboard';
 
-  if (collapsed) {
+  if (collapsed && !mobileOpen) {
     return (
       <>
         <aside
-          className="shrink-0 flex flex-col h-screen sticky top-0 select-none items-center pt-4 gap-3"
+          className="shrink-0 flex flex-col h-screen sticky top-0 select-none items-center pt-4 gap-3 hidden md:flex"
           style={{ width: '52px', backgroundColor: '#111', borderRight: '1px solid rgba(255,255,255,0.05)', transition: 'width 200ms ease' }}
         >
           <div
@@ -221,9 +229,21 @@ export function Sidebar() {
 
   return (
     <>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
       <aside
-        className="shrink-0 flex flex-col h-screen sticky top-0 overflow-y-auto select-none"
-        style={{ width: '220px', backgroundColor: '#111', borderRight: '1px solid rgba(255,255,255,0.05)', transition: 'width 200ms ease' }}
+        className={`shrink-0 flex flex-col h-screen overflow-y-auto select-none
+          fixed inset-y-0 left-0 z-50 transition-transform duration-200
+          md:sticky md:top-0 md:z-auto
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+        style={{ width: '220px', backgroundColor: '#111', borderRight: '1px solid rgba(255,255,255,0.05)' }}
       >
         {/* ── Workspace header ── */}
         <div className="px-4 pt-5 pb-4">
@@ -251,7 +271,7 @@ export function Sidebar() {
         {/* ── Main nav ── */}
         <nav className="px-3 mb-5 space-y-0.5">
           <button
-            onClick={() => { setView('dashboard'); setActiveCompany(null); }}
+            onClick={nav(() => { setView('dashboard'); setActiveCompany(null); })}
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors"
             style={{
               fontSize: '13px',
@@ -265,7 +285,7 @@ export function Sidebar() {
             Início
           </button>
           <button
-            onClick={() => setView('schedule')}
+            onClick={nav(() => setView('schedule'))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
             style={{
               fontSize: '13px',
@@ -279,7 +299,7 @@ export function Sidebar() {
             Meu Cronograma
           </button>
           <button
-            onClick={() => setView('users')}
+            onClick={nav(() => setView('users'))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
             style={{
               fontSize: '13px',
@@ -293,7 +313,7 @@ export function Sidebar() {
             Usuários
           </button>
           <button
-            onClick={() => { useAppStore.setState({ activeFlowId: null }); setView('flow'); }}
+            onClick={nav(() => { useAppStore.setState({ activeFlowId: null }); setView('flow'); })}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
             style={{
               fontSize: '13px',
@@ -307,7 +327,7 @@ export function Sidebar() {
             Fluxos
           </button>
           <button
-            onClick={() => setView('trash')}
+            onClick={nav(() => setView('trash'))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
             style={{
               fontSize: '13px',
@@ -385,7 +405,7 @@ export function Sidebar() {
                   </button>
 
                   <button
-                    onClick={() => { setActiveCompany(company.id); if (!isExpanded) toggle(company.id); }}
+                    onClick={() => { setActiveCompany(company.id); if (!isExpanded) toggle(company.id); onMobileClose(); }}
                     className="flex items-center gap-2 flex-1 min-w-0 text-left"
                   >
                     <div
@@ -415,7 +435,7 @@ export function Sidebar() {
                         return (
                           <button
                             key={project.id}
-                            onClick={() => setActiveProject(project.id)}
+                            onClick={() => { setActiveProject(project.id); onMobileClose(); }}
                             className="w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-left transition-colors"
                             style={{
                               fontSize: '12px',

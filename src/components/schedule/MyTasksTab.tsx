@@ -500,7 +500,7 @@ export function MyTasksTab() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-6">
+    <div className="max-w-2xl mx-auto px-4 md:px-6 py-4 md:py-6">
 
       {/* ── Stats ── */}
       {total > 0 && (
@@ -519,7 +519,7 @@ export function MyTasksTab() {
       )}
 
       {/* ── Filter tabs + add button ── */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
         <div className="flex gap-1 bg-white border border-gray-100 rounded-xl p-1">
           {(Object.keys(FILTER_LABELS) as FilterTab[]).map(f => (
             <button
