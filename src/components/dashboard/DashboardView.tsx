@@ -566,8 +566,9 @@ export function DashboardView() {
   const blocked = filteredTasks.filter(t => t.status === 'Blocked').length;
   const overdue = filteredTasks.filter(t => t.dueDate < today && t.status !== 'Done').length;
 
-  const dayOfWeek = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
-  const dateStr   = new Date().toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric' });
+  const tz        = { timeZone: 'America/Sao_Paulo' } as const;
+  const dayOfWeek = new Date().toLocaleDateString('pt-BR', { weekday: 'long', ...tz });
+  const dateStr   = new Date().toLocaleDateString('pt-BR', { month: 'long', day: 'numeric', year: 'numeric', ...tz });
 
   return (
     <div className="flex-1 overflow-auto bg-[#F5F6F8]">

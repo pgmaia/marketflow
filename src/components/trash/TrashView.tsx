@@ -15,7 +15,7 @@ function daysInfo(deletedAt: string) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'America/Sao_Paulo' });
 }
 
 // ─── Item metadata ────────────────────────────────────────────────────────────
