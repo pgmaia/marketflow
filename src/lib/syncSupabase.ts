@@ -35,6 +35,95 @@ async function pushToSupabase(syncState: SyncState) {
       { onConflict: 'key' }
     );
   if (error) console.error('[sync] push error:', error.message);
+  else maybeCreateDailyBackup(syncState);
+}
+
+// ── Backup ────────────────────────────────────────────────────────────────────
+const BACKUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+const MAX_BACKUPS = 7;
+
+async function maybeCreateDailyBackup(syncState: SyncState) {
+  // Check when the last backup was created
+  const { data } = await supabase
+    .from('marketflow_backups')
+    .select('created_at')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const lastBackup = data?.created_at ? new Date(data.created_at).getTime() : 0;
+  if (Date.now() - lastBackup < BACKUP_INTERVAL_MS) return; // already backed up today
+
+  // Create new backup
+  await supabase.from('marketflow_backups').insert({ data: syncState });
+
+  // Prune old backups — keep only the most recent MAX_BACKUPS
+  const { data: all } = await supabase
+    .from('marketflow_backups')
+    .select('id')
+    .order('created_at', { ascending: false });
+
+  if (all && all.length > MAX_BACKUPS) {
+    const idsToDelete = all.slice(MAX_BACKUPS).map((r: { id: number }) => r.id);
+    await supabase.from('marketflow_backups').delete().in('id', idsToDelete);
+  }
+}
+
+/** Fetch list of available backups. */
+export async function listBackups() {
+  const { data, error } = await supabase
+    .from('marketflow_backups')
+    .select('id, created_at')
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return data as { id: number; created_at: string }[];
+}
+
+/** Restore state from a specific backup row. */
+export async function restoreBackup(id: number) {
+  const { data, error } = await supabase
+    .from('marketflow_backups')
+    .select('data')
+    .eq('id', id)
+    .single();
+  if (error || !data?.data) throw new Error('Backup não encontrado');
+
+  // Push backup data as the new current state
+  await pushToSupabase(data.data as SyncState);
+  isSyncing = true;
+  useAppStore.setState(data.data as Partial<ReturnType<typeof useAppStore.getState>>);
+  isSyncing = false;
+}
+
+/** Create an immediate manual backup right now. */
+export async function createManualBackup() {
+  const state = useAppStore.getState();
+  const { error } = await supabase
+    .from('marketflow_backups')
+    .insert({ data: extractSyncState(state) });
+  if (error) throw new Error(error.message);
+}
+
+/** Export current state as a downloadable JSON file. */
+export function exportStateAsJSON() {
+  const state = useAppStore.getState();
+  const blob = new Blob([JSON.stringify(extractSyncState(state), null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `marketflow-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Import state from a JSON file the user uploads. */
+export async function importStateFromJSON(file: File) {
+  const text = await file.text();
+  const parsed = JSON.parse(text) as SyncState;
+  await pushToSupabase(parsed);
+  isSyncing = true;
+  useAppStore.setState(parsed as Partial<ReturnType<typeof useAppStore.getState>>);
+  isSyncing = false;
 }
 
 /** Called once on app mount. Loads remote state and THEN enables saves. */

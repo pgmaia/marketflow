@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays, Shield } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { UserPermission } from '../../types';
 
@@ -325,6 +325,20 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           >
             <GitBranch size={15} />
             Fluxos
+          </button>
+          <button
+            onClick={nav(() => setView('backup' as AppView))}
+            className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
+            style={{
+              fontSize: '13px',
+              color: view === 'backup' ? '#fff' : 'rgba(255,255,255,0.6)',
+              backgroundColor: view === 'backup' ? 'rgba(255,255,255,0.08)' : 'transparent',
+            }}
+            onMouseEnter={e => { if (view !== 'backup') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.9)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)'; } }}
+            onMouseLeave={e => { if (view !== 'backup') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.6)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; } }}
+          >
+            <Shield size={15} />
+            Backup
           </button>
           <button
             onClick={nav(() => setView('trash'))}

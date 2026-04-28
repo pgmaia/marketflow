@@ -37,6 +37,7 @@ export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
             {view === 'users'     && 'Usuários'}
             {view === 'trash'     && 'Lixeira'}
             {view === 'schedule'  && 'Meu Cronograma'}
+            {view === 'backup'    && 'Backup & Recuperação'}
           </span>
         </div>
 
