@@ -922,7 +922,19 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
 export function TaskListView({ tasks, phases, projectId, customColumns }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[] }) {
-  const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers } = useAppStore();
+  const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, projects, memberAccess, memberCompanyAccess } = useAppStore();
+  const project = projects.find(p => p.id === projectId);
+  const projectMembers = project
+    ? teamMembers.filter(m => {
+        if (m.permission === 'Admin') return true;
+        if (project.teamMemberIds.includes(m.id)) return true;
+        const theirProjects  = memberAccess[m.id];
+        const theirCompanies = memberCompanyAccess[m.id];
+        if (theirProjects !== undefined) return theirProjects.includes(project.id);
+        if (theirCompanies !== undefined) return theirCompanies.includes(project.companyId);
+        return true;
+      })
+    : teamMembers;
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');
@@ -1280,7 +1292,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns }: { task
                     <span className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-[10px] text-gray-400 shrink-0">—</span>
                     Sem responsável
                   </button>
-                  {teamMembers.map(m => (
+                  {projectMembers.map(m => (
                     <button key={m.id} onClick={() => { selectedTasks.forEach(t => updateTask(t.id, { assigneeIds: [m.id], assigneeId: m.id })); setBulkPopover(null); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors">
                       <Avatar member={m} size="sm" />
