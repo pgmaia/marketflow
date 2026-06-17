@@ -266,13 +266,15 @@ export function TaskModal() {
                 });
               }}
               title="Copiar link da tarefa"
-              className={`flex items-center gap-1.5 px-2.5 h-8 rounded-lg text-[11px] font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-3 h-8 rounded-lg text-[12px] font-semibold border transition-all ${
                 linkCopied
-                  ? 'bg-green-50 text-green-600'
-                  : 'hover:bg-gray-100 text-gray-400 hover:text-gray-600'
+                  ? 'bg-green-50 border-green-200 text-green-600'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-[#1f6feb]/40 hover:text-[#1f6feb]'
               }`}
             >
-              {linkCopied ? <><Check size={13} /> Copiado!</> : <Link size={14} />}
+              {linkCopied
+                ? <><Check size={12} /> Copiado!</>
+                : <><Link size={12} /> Copiar link</>}
             </button>
             <button
               onClick={() => { deleteTask(task.id); setActiveTask(null); }}
