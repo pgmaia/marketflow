@@ -921,7 +921,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
-export function TaskListView({ tasks, phases, projectId, customColumns }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[] }) {
+export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null }) {
   const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
   const projectMembers = project
@@ -1009,9 +1009,11 @@ export function TaskListView({ tasks, phases, projectId, customColumns }: { task
   const selectedTasks = tasks.filter(t => selectedIds.has(t.id));
   const topLevelTasks = tasks.filter(t => !t.parentTaskId);
 
+  const sortPhase = (arr: Task[]) => sortFn ? [...arr].sort(sortFn) : arr;
+
   // In "separate" mode, subtasks appear as flat rows grouped by phase
   const getPhaseRows = (phaseName: string): Task[] => {
-    const parents = topLevelTasks.filter(t => t.phase === phaseName);
+    const parents = sortPhase(topLevelTasks.filter(t => t.phase === phaseName));
     if (subtaskMode !== 'separate') return parents;
     const subs = tasks.filter(t => t.parentTaskId && t.phase === phaseName);
     return [...parents, ...subs];
@@ -1146,7 +1148,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns }: { task
                             customCols={customColumns}
                           />
                         ))
-                      : topLevelTasks.filter(t => t.phase === ph.name).map(task => {
+                      : sortPhase(topLevelTasks.filter(t => t.phase === ph.name)).map(task => {
                           const subtasks = tasks.filter(t => t.parentTaskId === task.id);
                           const isExpanded = subtaskMode === 'expanded' || !!expandedTasks[task.id];
                           return (

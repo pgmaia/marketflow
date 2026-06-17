@@ -30,22 +30,32 @@ const STATUS_ORDER: Record<string, number> = {
   'Em andamento': 0, 'Sprint': 1, 'Em revisão': 2, 'Bloqueado': 3, 'Backlog': 4, 'Concluído': 5,
 };
 
-function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, string>): Task[] {
-  if (sortBy === 'manual') return tasks;
-  return [...tasks].sort((a, b) => {
+export function makeTaskCompareFn(sortBy: SortBy, memberMap: Record<string, string>): ((a: Task, b: Task) => number) | null {
+  if (sortBy === 'manual') return null;
+  return (a, b) => {
     switch (sortBy) {
-      case 'dueDate':  return a.dueDate.localeCompare(b.dueDate);
+      case 'dueDate':  return a.dueDate < b.dueDate ? -1 : a.dueDate > b.dueDate ? 1 : 0;
       case 'priority': return (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
       case 'assignee': {
-        const aName = memberMap[a.assigneeIds?.[0] ?? a.assigneeId ?? ''] ?? '';
-        const bName = memberMap[b.assigneeIds?.[0] ?? b.assigneeId ?? ''] ?? '';
-        return aName.localeCompare(bName, 'pt-BR');
+        const aName = (memberMap[a.assigneeIds?.[0] ?? a.assigneeId ?? ''] ?? '').toLowerCase();
+        const bName = (memberMap[b.assigneeIds?.[0] ?? b.assigneeId ?? ''] ?? '').toLowerCase();
+        return aName < bName ? -1 : aName > bName ? 1 : 0;
       }
-      case 'title':  return a.title.localeCompare(b.title, 'pt-BR', { numeric: true, sensitivity: 'base' });
+      case 'title': {
+        const at = a.title.toLowerCase();
+        const bt = b.title.toLowerCase();
+        return at < bt ? -1 : at > bt ? 1 : 0;
+      }
       case 'status': return (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
       default:       return 0;
     }
-  });
+  };
+}
+
+function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, string>): Task[] {
+  const fn = makeTaskCompareFn(sortBy, memberMap);
+  if (!fn) return tasks;
+  return [...tasks].sort(fn);
 }
 
 export function KanbanBoard() {
@@ -461,7 +471,7 @@ export function KanbanBoard() {
             </div>
           </div>
         ) : viewMode === 'list' ? (
-          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} />
+          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} sortFn={makeTaskCompareFn(sortBy, memberMap)} />
         ) : null}
 
         {viewMode === 'calendar' && (
