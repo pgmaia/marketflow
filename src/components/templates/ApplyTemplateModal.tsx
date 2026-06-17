@@ -28,8 +28,8 @@ export function ApplyTemplateModal({ projectId, onClose }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#FF5C35]/10 flex items-center justify-center">
-                <Layers size={15} className="text-[#FF5C35]" />
+              <div className="w-8 h-8 rounded-lg bg-[#1f6feb]/10 flex items-center justify-center">
+                <Layers size={15} className="text-[#1f6feb]" />
               </div>
               <div>
                 <p className="text-[14px] font-bold text-gray-900">Templates salvos</p>
@@ -84,7 +84,7 @@ export function ApplyTemplateModal({ projectId, onClose }: Props) {
                           ? 'bg-green-100 text-green-600'
                           : 'text-white hover:opacity-90 disabled:opacity-50'
                       }`}
-                      style={isApplied ? {} : { backgroundColor: '#FF5C35' }}
+                      style={isApplied ? {} : { backgroundColor: '#1f6feb' }}
                     >
                       {isApplied ? '✓ Aplicado!' : <><Zap size={11} /> Aplicar</>}
                     </button>

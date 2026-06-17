@@ -161,8 +161,8 @@ export function TrashView() {
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-7">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: '#FF5C35' + '18' }}>
-            <Trash2 size={16} style={{ color: '#FF5C35' }} />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: '#1f6feb' + '18' }}>
+            <Trash2 size={16} style={{ color: '#1f6feb' }} />
           </div>
           <div>
             <h1 className="font-display text-[20px] font-bold text-gray-900 leading-none">Lixeira</h1>

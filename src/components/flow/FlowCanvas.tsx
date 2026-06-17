@@ -72,7 +72,7 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
       <path
         d={`M ${sx} ${sy} C ${cx1} ${cy1} ${cx2} ${cy2} ${tx} ${ty}`}
         fill="none"
-        stroke={hovered ? '#FF5C35' : '#9ca3af'}
+        stroke={hovered ? '#1f6feb' : '#9ca3af'}
         strokeWidth={hovered ? 2.5 : 2}
         markerEnd={hovered ? 'url(#arrowhead-hover)' : 'url(#arrowhead)'}
         style={{ pointerEvents: 'none', transition: 'stroke 0.15s, stroke-width 0.15s' }}
@@ -156,7 +156,7 @@ function FlowNodeCard({
       {/* Main card */}
       <div
         className={`rounded-xl overflow-hidden border-2 transition-all bg-white ${
-          selected ? 'border-[#FF5C35] shadow-lg shadow-[#FF5C35]/10' :
+          selected ? 'border-[#1f6feb] shadow-lg shadow-[#1f6feb]/10' :
           connecting ? 'border-transparent hover:border-blue-400 cursor-crosshair' :
           'border-transparent hover:border-gray-200'
         }`}
@@ -216,7 +216,7 @@ function FlowNodeCard({
                       key={c}
                       onClick={() => { updateFlowNode(flowId, node.id, { color: c }); setShowColorPicker(false); }}
                       className="w-6 h-6 rounded-full border-2 transition-transform hover:scale-110"
-                      style={{ backgroundColor: c, borderColor: node.color === c ? '#FF5C35' : 'transparent' }}
+                      style={{ backgroundColor: c, borderColor: node.color === c ? '#1f6feb' : 'transparent' }}
                     />
                   ))}
                 </div>
@@ -280,7 +280,7 @@ function FlowNodeCard({
         <>
           {/* Right handle */}
           <div
-            className="absolute w-4 h-4 rounded-full bg-white border-2 border-gray-300 hover:border-[#FF5C35] hover:bg-[#FF5C35] cursor-crosshair transition-colors flex items-center justify-center"
+            className="absolute w-4 h-4 rounded-full bg-white border-2 border-gray-300 hover:border-[#1f6feb] hover:bg-[#1f6feb] cursor-crosshair transition-colors flex items-center justify-center"
             style={{ right: -8, top: nodeHeight / 2 - 8 }}
             onMouseDown={e => { e.stopPropagation(); onConnectFrom(e); }}
           />
@@ -301,7 +301,7 @@ function FlowNodeCard({
           <button
             onMouseDown={e => e.stopPropagation()}
             onClick={e => { e.stopPropagation(); onSaveAsTemplate(); }}
-            className="absolute -bottom-8 left-0 right-0 mx-auto w-fit flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-[#FF5C35] hover:text-[#FF5C35] transition-colors shadow-sm whitespace-nowrap"
+            className="absolute -bottom-8 left-0 right-0 mx-auto w-fit flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-[#1f6feb] hover:text-[#1f6feb] transition-colors shadow-sm whitespace-nowrap"
             style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
           >
             <Layers size={10} />
@@ -331,7 +331,7 @@ function PreviewEdge({ fromId, toPos, nodes }: { fromId: string; toPos: { x: num
   return (
     <path
       d={`M ${sx} ${sy} C ${cx1} ${cy1} ${cx2} ${cy2} ${tx} ${ty}`}
-      fill="none" stroke="#FF5C35" strokeWidth={2} strokeDasharray="6,4"
+      fill="none" stroke="#1f6feb" strokeWidth={2} strokeDasharray="6,4"
       markerEnd="url(#arrowhead-preview)"
       style={{ pointerEvents: 'none' }}
     />
@@ -341,7 +341,7 @@ function PreviewEdge({ fromId, toPos, nodes }: { fromId: string; toPos: { x: num
 // ─── Save as Project modal ────────────────────────────────────────────────────
 
 function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () => void }) {
-  const { companies, addProject, addTask, setActiveProject } = useAppStore();
+  const { companies, teams, addProject, addTask, setActiveProject } = useAppStore();
   const [projectName, setProjectName] = useState(board.name);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
@@ -357,6 +357,12 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
       ? board.nodes.map((n, i) => ({ id: `ph-${ts}-${i}`, name: n.title }))
       : [{ id: `ph-${ts}`, name: 'Tarefas' }];
 
+    const teamMemberIds = [...new Set(
+      teams
+        .filter(t => t.companyId === selectedCompanyId)
+        .flatMap(t => t.memberIds)
+    )];
+
     const project: Project = {
       id: projectId,
       companyId: selectedCompanyId,
@@ -364,8 +370,8 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
       description: board.description ?? '',
       startDate: now,
       endDate: new Date(ts + 90 * 86400000).toISOString().split('T')[0],
-      teamMemberIds: [],
-      color: board.nodes[0]?.color ?? '#FF5C35',
+      teamMemberIds,
+      color: board.nodes[0]?.color ?? '#1f6feb',
       phases,
     };
 
@@ -377,7 +383,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
         phase: n.title,
         title: ft.title,
         type: ft.type ?? 'Copy',
-        status: 'Not Started' as const,
+        status: 'Backlog' as const,
         priority: 'Medium' as const,
         dueDate: taskDue,
         createdAt: now,
@@ -400,8 +406,8 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
         {/* Header */}
         <div className="px-6 pt-6 pb-5 border-b border-gray-100">
           <div className="flex items-center gap-3 mb-1">
-            <div className="w-8 h-8 rounded-lg bg-[#FF5C35]/10 flex items-center justify-center">
-              <FolderKanban size={15} className="text-[#FF5C35]" />
+            <div className="w-8 h-8 rounded-lg bg-[#1f6feb]/10 flex items-center justify-center">
+              <FolderKanban size={15} className="text-[#1f6feb]" />
             </div>
             <h2 className="text-[15px] font-bold text-[#111]">Salvar como projeto</h2>
           </div>
@@ -420,7 +426,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
               value={projectName}
               onChange={e => setProjectName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); if (e.key === 'Escape') onClose(); }}
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -463,7 +469,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
                       key={c.id}
                       onClick={() => setSelectedCompanyId(c.id)}
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border-2 text-left transition-all ${
-                        isSelected ? 'border-[#FF5C35] bg-[#FF5C35]/5' : 'border-gray-100 hover:border-gray-200'
+                        isSelected ? 'border-[#1f6feb] bg-[#1f6feb]/5' : 'border-gray-100 hover:border-gray-200'
                       }`}
                     >
                       <div
@@ -473,10 +479,10 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
                         {c.logo}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#FF5C35]' : 'text-[#111]'}`}>{c.name}</p>
+                        <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#1f6feb]' : 'text-[#111]'}`}>{c.name}</p>
                         <p className="text-[11px] text-gray-400 truncate">{c.industry}</p>
                       </div>
-                      {isSelected && <CheckCircle2 size={14} className="text-[#FF5C35] shrink-0" />}
+                      {isSelected && <CheckCircle2 size={14} className="text-[#1f6feb] shrink-0" />}
                     </button>
                   );
                 })}
@@ -491,7 +497,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
             onClick={handleSave}
             disabled={!canSave}
             className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             Criar projeto
           </button>
@@ -736,7 +742,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
         <button
           onClick={() => setShowSaveAsProject(true)}
           className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold text-white hover:opacity-90 transition-opacity"
-          style={{ backgroundColor: '#FF5C35' }}
+          style={{ backgroundColor: '#1f6feb' }}
         >
           <FolderKanban size={13} />
           Salvar como projeto
@@ -886,10 +892,10 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
                   <polygon points="0 0, 10 3.5, 0 7" fill="#9ca3af" />
                 </marker>
                 <marker id="arrowhead-hover" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#FF5C35" />
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
                 </marker>
                 <marker id="arrowhead-preview" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#FF5C35" />
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
                 </marker>
               </defs>
               <g style={{ pointerEvents: 'all' }}>

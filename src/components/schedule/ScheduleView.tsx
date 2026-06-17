@@ -12,7 +12,7 @@ export function ScheduleView() {
   const currentUser = teamMembers.find(m => m.id === currentUserId);
 
   const myPersonalTotal = personalTasks.filter(t => t.ownerId === currentUserId).length;
-  const myPersonalDone  = personalTasks.filter(t => t.ownerId === currentUserId && t.status === 'Done').length;
+  const myPersonalDone  = personalTasks.filter(t => t.ownerId === currentUserId && t.status === 'Concluído').length;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#f8f8f7]">
@@ -40,7 +40,7 @@ export function ScheduleView() {
             onClick={() => setActiveTab('tasks')}
             className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${
               activeTab === 'tasks'
-                ? 'border-[#FF5C35] text-[#FF5C35]'
+                ? 'border-[#1f6feb] text-[#1f6feb]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
@@ -48,7 +48,7 @@ export function ScheduleView() {
             Minhas Tarefas
             {myPersonalTotal > 0 && (
               <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === 'tasks' ? 'bg-[#FF5C35]/10 text-[#FF5C35]' : 'bg-gray-100 text-gray-400'
+                activeTab === 'tasks' ? 'bg-[#1f6feb]/10 text-[#1f6feb]' : 'bg-gray-100 text-gray-400'
               }`}>
                 {myPersonalTotal - myPersonalDone > 0 ? myPersonalTotal - myPersonalDone : myPersonalTotal}
               </span>
@@ -58,7 +58,7 @@ export function ScheduleView() {
             onClick={() => setActiveTab('agenda')}
             className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-semibold border-b-2 transition-colors ${
               activeTab === 'agenda'
-                ? 'border-[#FF5C35] text-[#FF5C35]'
+                ? 'border-[#1f6feb] text-[#1f6feb]'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >

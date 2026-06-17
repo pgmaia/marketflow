@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays, Shield } from 'lucide-react';
+import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays, Shield, Search } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { UserPermission } from '../../types';
 
@@ -13,6 +13,7 @@ const PERMISSION_META: Record<UserPermission, { label: string; color: string }> 
   Gerente:      { label: 'Gerente',      color: '#f97316' },
   Membro:       { label: 'Membro',       color: '#3b82f6' },
   Visualizador: { label: 'Visualizador', color: '#9ca3af' },
+  Externo:      { label: 'Externo',      color: '#d1d5db' },
 };
 
 // ─── Color palette ────────────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ const PERMISSION_META: Record<UserPermission, { label: string; color: string }> 
 const COMPANY_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
   '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6',
-  '#FF5C35', '#64748b',
+  '#1f6feb', '#64748b',
 ];
 
 // ─── New company modal ────────────────────────────────────────────────────────
@@ -91,7 +92,7 @@ function NewCompanyModal({ onClose }: { onClose: () => void }) {
               onChange={e => setName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleCreate(); if (e.key === 'Escape') onClose(); }}
               placeholder="Ex: Velour Studio"
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -102,7 +103,7 @@ function NewCompanyModal({ onClose }: { onClose: () => void }) {
               value={industry}
               onChange={e => setIndustry(e.target.value)}
               placeholder="Ex: Fashion & Lifestyle, SaaS / Tech…"
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -148,7 +149,7 @@ function NewCompanyModal({ onClose }: { onClose: () => void }) {
             onClick={handleCreate}
             disabled={!canSubmit}
             className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             Criar empresa
           </button>
@@ -164,7 +165,38 @@ function NewCompanyModal({ onClose }: { onClose: () => void }) {
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
 export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
-  const { companies, projects, tasks, trash, teamMembers, currentUserId, setCurrentUser, logout, activeCompanyId, activeProjectId, view, setActiveCompany, setActiveProject, setView } = useAppStore();
+  const { companies, projects, tasks, trash, teamMembers, currentUserId, setCurrentUser, logout, activeCompanyId, activeProjectId, view, setActiveCompany, setActiveProject, setView, setActiveTask, memberAccess, memberCompanyAccess } = useAppStore();
+
+  // Access helpers — Admins see everything
+  const currentMember = teamMembers.find(m => m.id === currentUserId);
+  const isAdmin = currentMember?.permission === 'Admin';
+  const uid = currentUserId ?? '';
+
+  // A project is visible if it's in the explicit memberAccess list OR if the user
+  // is in project.teamMemberIds (covers projects created after they joined a team).
+  const visibleProjectIds = isAdmin
+    ? projects.map(p => p.id)
+    : projects
+        .filter(p => {
+          const explicit = memberAccess[uid];
+          if (!explicit) return true; // no explicit list → see all
+          return explicit.includes(p.id) || (p.teamMemberIds ?? []).includes(uid);
+        })
+        .map(p => p.id);
+
+  // A company is visible if it's in memberCompanyAccess OR if the user can see any
+  // of its projects (covers newly-created companies/projects).
+  const visibleCompanyIds = isAdmin
+    ? companies.map(c => c.id)
+    : [...new Set([
+        ...(memberCompanyAccess[uid] ?? companies.map(c => c.id)),
+        ...projects
+          .filter(p => visibleProjectIds.includes(p.id))
+          .map(p => p.companyId)
+          .filter((id): id is string => !!id),
+      ])];
+
+  const visibleCompanies = companies.filter(c => visibleCompanyIds.includes(c.id));
 
   // Wrap navigation actions to auto-close mobile drawer
   const nav = (action: () => void) => () => { action(); onMobileClose(); };
@@ -174,6 +206,39 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const [showNewCompany, setShowNewCompany] = useState(false);
   const [showUserPicker, setShowUserPicker] = useState(false);
   const userPickerRef = useRef<HTMLDivElement>(null);
+
+  // ── Task search ──────────────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searchQuery) return;
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node))
+        setSearchQuery('');
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [searchQuery]);
+
+  const searchResults = searchQuery.trim().length >= 1
+    ? tasks
+        .filter(t =>
+          !t.parentTaskId &&
+          t.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
+          visibleProjectIds.includes(t.projectId)
+        )
+        .slice(0, 8)
+    : [];
+
+  const STATUS_DOT_SEARCH: Record<string, string> = {
+    Backlog:        'bg-gray-400',
+    Sprint:         'bg-violet-400',
+    'Em andamento': 'bg-blue-400',
+    'Em revisão':   'bg-amber-400',
+    Bloqueado:      'bg-red-400',
+    Concluído:      'bg-green-400',
+  };
 
   useEffect(() => {
     if (!showUserPicker) return;
@@ -185,7 +250,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     return () => document.removeEventListener('mousedown', handler);
   }, [showUserPicker]);
 
-  const currentUser = teamMembers.find(m => m.id === currentUserId);
+  const currentUser = currentMember;
 
   const toggle = (id: string) => setExpandedCompanies(p => ({ ...p, [id]: !p[id] }));
 
@@ -194,11 +259,11 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     const ids = projs.map(p => p.id);
     const all = tasks.filter(t => ids.includes(t.projectId));
     if (!all.length) return 0;
-    return Math.round((all.filter(t => t.status === 'Done').length / all.length) * 100);
+    return Math.round((all.filter(t => t.status === 'Concluído').length / all.length) * 100);
   };
 
   const getTaskCount = (projectId: string) =>
-    tasks.filter(t => t.projectId === projectId && t.status !== 'Done').length;
+    tasks.filter(t => t.projectId === projectId && t.status !== 'Concluído').length;
 
   const isDashboard = view === 'dashboard';
 
@@ -211,7 +276,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         >
           <div
             className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             <span className="text-white font-bold" style={{ fontSize: '14px' }}>M</span>
           </div>
@@ -248,16 +313,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         {/* ── Workspace header ── */}
         <div className="px-4 pt-5 pb-4">
           <div className="flex items-center gap-1">
-            <button className="flex-1 flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-w-0">
-              <div
-                className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-                style={{ backgroundColor: '#FF5C35' }}
-              >
-                <span className="text-white font-bold" style={{ fontSize: '13px' }}>M</span>
-              </div>
-              <div className="flex-1 text-left min-w-0">
-                <p className="text-[13px] font-semibold text-white truncate leading-tight tracking-tight">MarketFlow</p>
-              </div>
+            <button className="flex-1 flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors min-w-0">
+              <img src="/icarus-mark-light.svg" alt="Icarus" className="w-5 h-5 shrink-0" />
+              <img src="/icarus-wordmark-light.svg" alt="Icarus" className="h-[18px] shrink-0" style={{ filter: 'brightness(0) invert(1)' }} />
             </button>
             <button
               onClick={() => setCollapsed(true)}
@@ -266,6 +324,79 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               <PanelLeftClose size={14} />
             </button>
           </div>
+        </div>
+
+        {/* ── Task search ── */}
+        <div ref={searchRef} className="px-3 mb-4 relative">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.07)' }}>
+            <Search size={13} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') setSearchQuery(''); }}
+              placeholder="Buscar tarefas..."
+              className="flex-1 bg-transparent outline-none min-w-0"
+              style={{ fontSize: '12px', color: 'rgba(255,255,255,0.7)', caretColor: '#1f6feb' }}
+            />
+            {searchQuery && (
+              <button onClick={() => setSearchQuery('')} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }}>
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Results dropdown */}
+          {searchQuery.trim().length >= 1 && (
+            <div
+              className="absolute left-3 right-3 top-full mt-1 rounded-xl overflow-hidden z-50"
+              style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 8px 32px rgba(0,0,0,0.5)' }}
+            >
+              {searchResults.length === 0 ? (
+                <p className="px-4 py-3 text-[12px]" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Nenhuma tarefa encontrada
+                </p>
+              ) : (
+                <div className="py-1 max-h-64 overflow-y-auto">
+                  {searchResults.map(task => {
+                    const project = projects.find(p => p.id === task.projectId);
+                    return (
+                      <button
+                        key={task.id}
+                        onClick={() => {
+                          setActiveProject(task.projectId);
+                          setTimeout(() => setActiveTask(task.id), 60);
+                          setSearchQuery('');
+                          onMobileClose();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors"
+                        style={{ backgroundColor: 'transparent' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)'; }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; }}
+                      >
+                        {/* Status dot */}
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${STATUS_DOT_SEARCH[task.status] ?? 'bg-gray-400'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[12px] font-medium truncate ${task.status === 'Concluído' ? 'line-through' : ''}`}
+                            style={{ color: task.status === 'Concluído' ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.8)' }}>
+                            {task.title}
+                          </p>
+                          {project && (
+                            <p className="text-[10px] truncate mt-0.5 flex items-center gap-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                              <span className="w-1.5 h-1.5 rounded-sm shrink-0" style={{ backgroundColor: project.color }} />
+                              {project.name}
+                            </p>
+                          )}
+                        </div>
+                        {task.isMilestone && (
+                          <span className="w-2 h-2 rounded-sm rotate-45 shrink-0 bg-[#1f6feb]" style={{ minWidth: 8, minHeight: 8 }} />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── Main nav ── */}
@@ -298,20 +429,22 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             <CalendarDays size={15} />
             Meu Cronograma
           </button>
-          <button
-            onClick={nav(() => setView('users'))}
-            className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
-            style={{
-              fontSize: '13px',
-              color: view === 'users' ? '#fff' : 'rgba(255,255,255,0.6)',
-              backgroundColor: view === 'users' ? 'rgba(255,255,255,0.08)' : 'transparent',
-            }}
-            onMouseEnter={e => { if (view !== 'users') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.9)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)'; } }}
-            onMouseLeave={e => { if (view !== 'users') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.6)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; } }}
-          >
-            <Users size={15} />
-            Usuários
-          </button>
+          {isAdmin && (
+            <button
+              onClick={nav(() => setView('users'))}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
+              style={{
+                fontSize: '13px',
+                color: view === 'users' ? '#fff' : 'rgba(255,255,255,0.6)',
+                backgroundColor: view === 'users' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              }}
+              onMouseEnter={e => { if (view !== 'users') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.9)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)'; } }}
+              onMouseLeave={e => { if (view !== 'users') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.6)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; } }}
+            >
+              <Users size={15} />
+              Usuários
+            </button>
+          )}
           <button
             onClick={nav(() => { useAppStore.setState({ activeFlowId: null }); setView('flow'); })}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
@@ -384,10 +517,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
         {/* ── Companies ── */}
         <div className="px-3 flex-1 space-y-0.5">
-          {companies.map(company => {
+          {visibleCompanies.map(company => {
             const isExpanded = !!expandedCompanies[company.id];
             const isActiveCompany = activeCompanyId === company.id;
-            const companyProjects = projects.filter(p => p.companyId === company.id);
+            const companyProjects = projects.filter(p => p.companyId === company.id && visibleProjectIds.includes(p.id));
             const health = getHealth(company.id);
             const healthColor = health >= 70 ? '#22c55e' : health >= 40 ? '#f59e0b' : '#ef4444';
 
@@ -453,7 +586,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
                             className="w-full flex items-center gap-2 py-1.5 px-2 rounded-md text-left transition-colors"
                             style={{
                               fontSize: '12px',
-                              color: isActive ? '#FF5C35' : 'rgba(255,255,255,0.45)',
+                              color: isActive ? '#1f6feb' : 'rgba(255,255,255,0.45)',
                               fontWeight: isActive ? 500 : 400,
                             }}
                             onMouseEnter={e => { if (!isActive) { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.7)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.05)'; } }}
@@ -514,8 +647,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
         {/* ── User footer ── */}
         <div className="p-3 mt-4 relative" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }} ref={userPickerRef}>
-          {/* User picker popover */}
-          {showUserPicker && (
+
+          {/* User picker popover — Admins only */}
+          {isAdmin && showUserPicker && (
             <div
               className="absolute bottom-full left-3 right-3 mb-2 bg-[#1a1a1a] rounded-xl overflow-hidden z-50"
               style={{ border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 -8px 24px rgba(0,0,0,0.4)' }}
@@ -524,7 +658,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
                 Entrar como
               </p>
               <div className="py-1 max-h-52 overflow-y-auto">
-                {teamMembers.map(m => {
+                {teamMembers.filter(m => m.permission !== 'Externo').map(m => {
                   const perm = (m.permission ?? 'Membro') as UserPermission;
                   const meta = PERMISSION_META[perm];
                   const isActive = m.id === currentUserId;
@@ -555,34 +689,56 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
           )}
 
           <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowUserPicker(v => !v)}
-              className="flex-1 flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-white/5 transition-colors min-w-0"
-            >
-              {currentUser ? (
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: currentUser.color, fontSize: '10px', fontWeight: 700, color: '#fff' }}
-                >
-                  {currentUser.avatar}
+            {/* For Admins: clickable to switch users. For others: non-interactive display */}
+            {isAdmin ? (
+              <button
+                onClick={() => setShowUserPicker(v => !v)}
+                className="flex-1 flex items-center gap-2.5 px-2 py-2 rounded-md hover:bg-white/5 transition-colors min-w-0"
+              >
+                {currentUser ? (
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: currentUser.color, fontSize: '10px', fontWeight: 700, color: '#fff' }}
+                  >
+                    {currentUser.avatar}
+                  </div>
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+                    <Users size={13} className="text-white/40" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="truncate" style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+                    {currentUser?.name ?? 'Selecionar usuário'}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                    {currentUser ? PERMISSION_META[(currentUser.permission ?? 'Membro') as UserPermission].label : '—'}
+                  </p>
                 </div>
-              ) : (
-                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-                  <Users size={13} className="text-white/40" />
+                {showUserPicker
+                  ? <ChevronUp size={12} className="text-white/25 shrink-0" />
+                  : <ChevronDown size={12} className="text-white/25 shrink-0" />}
+              </button>
+            ) : (
+              <div className="flex-1 flex items-center gap-2.5 px-2 py-2 min-w-0">
+                {currentUser && (
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: currentUser.color, fontSize: '10px', fontWeight: 700, color: '#fff' }}
+                  >
+                    {currentUser.avatar}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="truncate" style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
+                    {currentUser?.name ?? '—'}
+                  </p>
+                  <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
+                    {currentUser ? PERMISSION_META[(currentUser.permission ?? 'Membro') as UserPermission].label : '—'}
+                  </p>
                 </div>
-              )}
-              <div className="flex-1 min-w-0 text-left">
-                <p className="truncate" style={{ fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)' }}>
-                  {currentUser?.name ?? 'Selecionar usuário'}
-                </p>
-                <p style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)' }}>
-                  {currentUser ? PERMISSION_META[(currentUser.permission ?? 'Membro') as UserPermission].label : '—'}
-                </p>
               </div>
-              {showUserPicker
-                ? <ChevronUp size={12} className="text-white/25 shrink-0" />
-                : <ChevronDown size={12} className="text-white/25 shrink-0" />}
-            </button>
+            )}
 
             {/* Logout */}
             <button

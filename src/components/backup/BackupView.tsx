@@ -83,8 +83,8 @@ export function BackupView() {
 
         {/* Header */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#FF5C351A' }}>
-            <Shield size={18} style={{ color: '#FF5C35' }} />
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: '#1f6feb1A' }}>
+            <Shield size={18} style={{ color: '#1f6feb' }} />
           </div>
           <div>
             <h1 className="text-[15px] font-bold text-gray-800">Backup & Recuperação</h1>

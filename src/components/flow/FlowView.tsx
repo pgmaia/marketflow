@@ -29,7 +29,7 @@ function NewBoardModal({ onClose, onCreate }: {
   onClose: () => void;
   onCreate: (result: CreateResult) => void;
 }) {
-  const { templates, companies } = useAppStore();
+  const { templates, companies, teams } = useAppStore();
   const [mode, setMode] = useState<ModalMode>('blank');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -122,6 +122,12 @@ function NewBoardModal({ onClose, onCreate }: {
 
     const endDate = new Date(ts + 90 * 86400000).toISOString().split('T')[0];
 
+    const teamMemberIds = [...new Set(
+      teams
+        .filter(t => t.companyId === selectedCompanyId)
+        .flatMap(t => t.memberIds)
+    )];
+
     const project: Project = {
       id: projectId,
       companyId: selectedCompanyId,
@@ -129,8 +135,8 @@ function NewBoardModal({ onClose, onCreate }: {
       description: boardDesc,
       startDate: now,
       endDate,
-      teamMemberIds: [],
-      color: nodes[0]?.color ?? '#FF5C35',
+      teamMemberIds,
+      color: nodes[0]?.color ?? '#1f6feb',
       phases,
     };
 
@@ -143,7 +149,7 @@ function NewBoardModal({ onClose, onCreate }: {
         phase: n.title,
         title: ft.title,
         type: ft.type ?? 'Copy',
-        status: 'Not Started' as const,
+        status: 'Backlog' as const,
         priority: 'Medium' as const,
         dueDate: taskDue,
         createdAt: now,
@@ -215,13 +221,13 @@ function NewBoardModal({ onClose, onCreate }: {
                         }}
                         className={`w-full text-left p-3.5 rounded-xl border-2 transition-all ${
                           isSelected
-                            ? 'border-[#FF5C35] bg-[#FF5C35]/5'
+                            ? 'border-[#1f6feb] bg-[#1f6feb]/5'
                             : 'border-gray-100 hover:border-gray-200 bg-white'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
-                            <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#FF5C35]' : 'text-[#111]'}`}>
+                            <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#1f6feb]' : 'text-[#111]'}`}>
                               {tpl.name}
                             </p>
                             {tpl.description && (
@@ -267,7 +273,7 @@ function NewBoardModal({ onClose, onCreate }: {
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleCreate(); if (e.key === 'Escape') onClose(); }}
                 placeholder={mode === 'template' ? selectedTemplate?.name ?? 'Usar nome do template' : 'Ex: Funil de Produto Digital'}
-                className="mt-1 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+                className="mt-1 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
               />
             </div>
             <div>
@@ -276,7 +282,7 @@ function NewBoardModal({ onClose, onCreate }: {
                 value={description}
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Descreva o objetivo..."
-                className="mt-1 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+                className="mt-1 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
               />
             </div>
           </div>
@@ -290,20 +296,20 @@ function NewBoardModal({ onClose, onCreate }: {
                 onClick={() => setSaveType('flow')}
                 className={`relative flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all ${
                   saveType === 'flow'
-                    ? 'border-[#FF5C35] bg-[#FF5C35]/5'
+                    ? 'border-[#1f6feb] bg-[#1f6feb]/5'
                     : 'border-gray-100 hover:border-gray-200'
                 }`}
               >
                 {saveType === 'flow' && (
-                  <CheckCircle2 size={14} className="absolute top-3 right-3 text-[#FF5C35]" />
+                  <CheckCircle2 size={14} className="absolute top-3 right-3 text-[#1f6feb]" />
                 )}
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  saveType === 'flow' ? 'bg-[#FF5C35]/15' : 'bg-gray-100'
+                  saveType === 'flow' ? 'bg-[#1f6feb]/15' : 'bg-gray-100'
                 }`}>
-                  <GitBranch size={15} className={saveType === 'flow' ? 'text-[#FF5C35]' : 'text-gray-400'} />
+                  <GitBranch size={15} className={saveType === 'flow' ? 'text-[#1f6feb]' : 'text-gray-400'} />
                 </div>
                 <div>
-                  <p className={`text-[13px] font-bold leading-tight ${saveType === 'flow' ? 'text-[#FF5C35]' : 'text-gray-700'}`}>
+                  <p className={`text-[13px] font-bold leading-tight ${saveType === 'flow' ? 'text-[#1f6feb]' : 'text-gray-700'}`}>
                     Fluxo
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
@@ -317,20 +323,20 @@ function NewBoardModal({ onClose, onCreate }: {
                 onClick={() => setSaveType('project')}
                 className={`relative flex flex-col items-start gap-2 p-4 rounded-xl border-2 text-left transition-all ${
                   saveType === 'project'
-                    ? 'border-[#FF5C35] bg-[#FF5C35]/5'
+                    ? 'border-[#1f6feb] bg-[#1f6feb]/5'
                     : 'border-gray-100 hover:border-gray-200'
                 }`}
               >
                 {saveType === 'project' && (
-                  <CheckCircle2 size={14} className="absolute top-3 right-3 text-[#FF5C35]" />
+                  <CheckCircle2 size={14} className="absolute top-3 right-3 text-[#1f6feb]" />
                 )}
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  saveType === 'project' ? 'bg-[#FF5C35]/15' : 'bg-gray-100'
+                  saveType === 'project' ? 'bg-[#1f6feb]/15' : 'bg-gray-100'
                 }`}>
-                  <FolderKanban size={15} className={saveType === 'project' ? 'text-[#FF5C35]' : 'text-gray-400'} />
+                  <FolderKanban size={15} className={saveType === 'project' ? 'text-[#1f6feb]' : 'text-gray-400'} />
                 </div>
                 <div>
-                  <p className={`text-[13px] font-bold leading-tight ${saveType === 'project' ? 'text-[#FF5C35]' : 'text-gray-700'}`}>
+                  <p className={`text-[13px] font-bold leading-tight ${saveType === 'project' ? 'text-[#1f6feb]' : 'text-gray-700'}`}>
                     Projeto
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5 leading-snug">
@@ -361,7 +367,7 @@ function NewBoardModal({ onClose, onCreate }: {
                           onClick={() => setSelectedCompanyId(c.id)}
                           className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border-2 text-left transition-all ${
                             isSelected
-                              ? 'border-[#FF5C35] bg-[#FF5C35]/5'
+                              ? 'border-[#1f6feb] bg-[#1f6feb]/5'
                               : 'border-gray-100 hover:border-gray-200'
                           }`}
                         >
@@ -372,12 +378,12 @@ function NewBoardModal({ onClose, onCreate }: {
                             {c.logo}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#FF5C35]' : 'text-[#111]'}`}>
+                            <p className={`text-[13px] font-semibold truncate ${isSelected ? 'text-[#1f6feb]' : 'text-[#111]'}`}>
                               {c.name}
                             </p>
                             <p className="text-[11px] text-gray-400 truncate">{c.industry}</p>
                           </div>
-                          {isSelected && <CheckCircle2 size={14} className="text-[#FF5C35] shrink-0" />}
+                          {isSelected && <CheckCircle2 size={14} className="text-[#1f6feb] shrink-0" />}
                         </button>
                       );
                     })}
@@ -394,7 +400,7 @@ function NewBoardModal({ onClose, onCreate }: {
             onClick={handleCreate}
             disabled={!canSubmit}
             className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-colors"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             {saveType === 'project'
               ? 'Criar projeto'
@@ -513,7 +519,7 @@ export function FlowView() {
         <button
           onClick={() => setShowNew(true)}
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-[13px] font-semibold text-white transition-colors hover:opacity-90"
-          style={{ backgroundColor: '#FF5C35' }}
+          style={{ backgroundColor: '#1f6feb' }}
         >
           <Plus size={15} />
           Novo fluxo

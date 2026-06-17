@@ -1,10 +1,40 @@
 import { useState } from 'react';
-import { Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil } from 'lucide-react';
+import { AlertCircle, Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil, CheckSquare } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { ProgressBar } from '../shared/ProgressBar';
-import { AvatarGroup } from '../shared/Avatar';
+import { Avatar, AvatarGroup } from '../shared/Avatar';
 import { DEFAULT_PHASES } from '../../data/seed';
 import { EditProjectModal } from '../project/EditProjectModal';
+import type { TaskStatus } from '../../types';
+import { getAssigneeIds, hasAdminPower } from '../../types';
+
+// ─── Status/priority meta (mirrors TaskListView) ──────────────────────────────
+
+const STATUS_META: Record<TaskStatus, { dot: string; bg: string; text: string; label: string }> = {
+  'Backlog':      { dot: 'bg-gray-400',   bg: 'bg-gray-100',   text: 'text-gray-600',   label: 'Backlog'      },
+  'Sprint':       { dot: 'bg-violet-500', bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Sprint'       },
+  'Em andamento': { dot: 'bg-blue-500',   bg: 'bg-blue-50',    text: 'text-blue-700',   label: 'Em andamento' },
+  'Em revisão':   { dot: 'bg-amber-500',  bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Em revisão'   },
+  'Bloqueado':    { dot: 'bg-red-500',    bg: 'bg-red-50',     text: 'text-red-700',    label: 'Bloqueado'    },
+  'Concluído':    { dot: 'bg-green-500',  bg: 'bg-green-50',   text: 'text-green-700',  label: 'Concluído'    },
+};
+
+const PRIORITY_META: Record<string, { bg: string; text: string; label: string }> = {
+  'Low':    { bg: 'bg-gray-100',  text: 'text-gray-500',   label: 'Baixa'   },
+  'Medium': { bg: 'bg-blue-50',   text: 'text-blue-600',   label: 'Média'   },
+  'High':   { bg: 'bg-orange-50', text: 'text-orange-600', label: 'Alta'    },
+  'Urgent': { bg: 'bg-red-50',    text: 'text-red-600',    label: 'Urgente' },
+};
+
+const STATUS_FILTERS: { value: TaskStatus | 'all'; label: string }[] = [
+  { value: 'all',          label: 'Todas'        },
+  { value: 'Backlog',      label: 'Backlog'      },
+  { value: 'Sprint',       label: 'Sprint'       },
+  { value: 'Em andamento', label: 'Em andamento' },
+  { value: 'Em revisão',   label: 'Em revisão'   },
+  { value: 'Bloqueado',    label: 'Bloqueadas'   },
+  { value: 'Concluído',    label: 'Concluídas'   },
+];
 
 // ─── Confirm delete modal ─────────────────────────────────────────────────────
 
@@ -56,13 +86,13 @@ function ConfirmDeleteModal({
 const PROJECT_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
   '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6',
-  '#FF5C35', '#64748b',
+  '#1f6feb', '#64748b',
 ];
 
 // ─── New project modal ────────────────────────────────────────────────────────
 
 function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: () => void }) {
-  const { addProject, setActiveProject } = useAppStore();
+  const { addProject, setActiveProject, teams } = useAppStore();
 
   const today = new Date().toISOString().split('T')[0];
   const defaultEnd = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
@@ -80,6 +110,12 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
     const ts = Date.now();
     const projectId = `proj-${ts}`;
 
+    const teamMemberIds = [...new Set(
+      teams
+        .filter(t => t.companyId === companyId)
+        .flatMap(t => t.memberIds)
+    )];
+
     addProject({
       id: projectId,
       companyId,
@@ -87,7 +123,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
       description: description.trim(),
       startDate,
       endDate,
-      teamMemberIds: [],
+      teamMemberIds,
       color,
       phases: DEFAULT_PHASES.map((ph, i) => ({ id: `${projectId}-ph-${i}`, name: ph.name })),
     });
@@ -127,7 +163,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
               onChange={e => setName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleCreate(); if (e.key === 'Escape') onClose(); }}
               placeholder="Ex: Campanha de Verão 2026"
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -138,7 +174,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Descreva o objetivo do projeto..."
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -171,7 +207,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
                   type="date"
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
-                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#FF5C35] transition-colors"
+                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#1f6feb] transition-colors"
                 />
                 <span className="text-gray-300 text-[11px] shrink-0">→</span>
                 <input
@@ -179,7 +215,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
                   value={endDate}
                   min={startDate}
                   onChange={e => setEndDate(e.target.value)}
-                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#FF5C35] transition-colors"
+                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#1f6feb] transition-colors"
                 />
               </div>
             </div>
@@ -208,7 +244,7 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
             onClick={handleCreate}
             disabled={!canSubmit}
             className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             Criar projeto
           </button>
@@ -224,22 +260,23 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
 // ─── Company view ─────────────────────────────────────────────────────────────
 
 export function CompanyView() {
-  const { companies, activeCompanyId, projects, tasks, teamMembers, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany } = useAppStore();
+  const { companies, activeCompanyId, projects, tasks, teamMembers, teams, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany, setActiveTask } = useAppStore();
   const [showNewProject, setShowNewProject] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { type: 'company' } | { type: 'project'; id: string; name: string }>(null);
-
-  const currentUser = teamMembers.find(m => m.id === currentUserId);
-  const isAdminOrManager = currentUser?.permission === 'Admin' || currentUser?.permission === 'Gerente';
+  const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all');
 
   const company = companies.find(c => c.id === activeCompanyId);
   if (!company) return null;
+
+  // Gerentes de uma equipe ligada a esta empresa têm poder de Admin aqui
+  const isAdminOrManager = hasAdminPower(currentUserId, company.id, teamMembers, teams);
 
   const companyProjects = projects.filter(p => p.companyId === company.id);
   const today = new Date().toISOString().split('T')[0];
 
   const allTasks = tasks.filter(t => companyProjects.some(p => p.id === t.projectId));
-  const done = allTasks.filter(t => t.status === 'Done').length;
+  const done = allTasks.filter(t => t.status === 'Concluído').length;
   const health = allTasks.length ? Math.round((done / allTasks.length) * 100) : 0;
   const formatDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
 
@@ -276,7 +313,7 @@ export function CompanyView() {
             <button
               onClick={() => setShowNewProject(true)}
               className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold text-white hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               <Plus size={13} />
               Novo projeto
@@ -296,7 +333,7 @@ export function CompanyView() {
               <button
                 onClick={() => setShowNewProject(true)}
                 className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-[13px] font-semibold text-white hover:opacity-90 transition-opacity"
-                style={{ backgroundColor: '#FF5C35' }}
+                style={{ backgroundColor: '#1f6feb' }}
               >
                 <Plus size={14} />
                 Criar projeto
@@ -319,14 +356,14 @@ export function CompanyView() {
 
                 {companyProjects.map((project, i) => {
                   const projTasks = tasks.filter(t => t.projectId === project.id);
-                  const projDone = projTasks.filter(t => t.status === 'Done').length;
-                  const inProg = projTasks.filter(t => t.status === 'In Progress').length;
-                  const blocked = projTasks.filter(t => t.status === 'Blocked').length;
-                  const overdue = projTasks.filter(t => t.dueDate < today && t.status !== 'Done').length;
+                  const projDone = projTasks.filter(t => t.status === 'Concluído').length;
+                  const inProg = projTasks.filter(t => t.status === 'Em andamento').length;
+                  const blocked = projTasks.filter(t => t.status === 'Bloqueado').length;
+                  const overdue = projTasks.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
                   const projHealth = projTasks.length ? Math.round((projDone / projTasks.length) * 100) : 0;
                   const healthColor = projHealth >= 70 ? '#22c55e' : projHealth >= 40 ? '#f59e0b' : '#ef4444';
                   const members = project.teamMemberIds.map(id => teamMembers.find(m => m.id === id)!).filter(Boolean);
-                  const nextTask = projTasks.filter(t => t.dueDate >= today && t.status !== 'Done').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+                  const nextTask = projTasks.filter(t => t.dueDate >= today && t.status !== 'Concluído').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
 
                   return (
                     <div
@@ -338,7 +375,7 @@ export function CompanyView() {
                       <div className="flex items-center gap-3 min-w-0 pr-4">
                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: project.color }} />
                         <div className="min-w-0">
-                          <p className="text-[13px] font-semibold text-gray-800 truncate group-hover:text-[#FF5C35] transition-colors">{project.name}</p>
+                          <p className="text-[13px] font-semibold text-gray-800 truncate group-hover:text-[#1f6feb] transition-colors">{project.name}</p>
                           <p className="text-[11px] text-gray-400 truncate mt-0.5">{project.description || '—'}</p>
                         </div>
                       </div>
@@ -384,7 +421,7 @@ export function CompanyView() {
                         >
                           <Trash2 size={12} />
                         </button>
-                        <ArrowRight size={13} className="text-gray-300 group-hover:text-[#FF5C35] transition-colors" />
+                        <ArrowRight size={13} className="text-gray-300 group-hover:text-[#1f6feb] transition-colors" />
                       </div>
                     </div>
                   );
@@ -393,17 +430,145 @@ export function CompanyView() {
                 {/* Inline add project row */}
                 <div
                   onClick={() => setShowNewProject(true)}
-                  className="flex items-center gap-2 px-8 py-3.5 border-t border-gray-100 cursor-pointer hover:bg-[#FF5C35]/5 transition-colors group"
+                  className="flex items-center gap-2 px-8 py-3.5 border-t border-gray-100 cursor-pointer hover:bg-[#1f6feb]/5 transition-colors group"
                   style={{ minWidth: '960px' }}
                 >
-                  <Plus size={12} className="text-gray-300 group-hover:text-[#FF5C35] transition-colors shrink-0" />
-                  <span className="text-[12px] text-gray-400 group-hover:text-[#FF5C35] transition-colors">Novo projeto</span>
+                  <Plus size={12} className="text-gray-300 group-hover:text-[#1f6feb] transition-colors shrink-0" />
+                  <span className="text-[12px] text-gray-400 group-hover:text-[#1f6feb] transition-colors">Novo projeto</span>
                 </div>
 
               </div>
             </div>
           )}
         </div>
+
+        {/* ── Tasks by due date ── */}
+        {allTasks.length > 0 && (() => {
+          const filtered = allTasks
+            .filter(t => !t.parentTaskId) // top-level only
+            .filter(t => taskStatusFilter === 'all' || t.status === taskStatusFilter)
+            .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+          return (
+            <div>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                <div className="flex items-center gap-2.5">
+                  <CheckSquare size={15} className="text-gray-400" />
+                  <h2 className="font-semibold text-[14px] text-gray-700">Tarefas da empresa</h2>
+                  <span className="text-[12px] text-gray-400 font-normal">
+                    {filtered.length} {filtered.length === 1 ? 'tarefa' : 'tarefas'}
+                  </span>
+                </div>
+                {/* Status filter chips */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {STATUS_FILTERS.map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setTaskStatusFilter(f.value)}
+                      className={`h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors ${
+                        taskStatusFilter === f.value
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+                {filtered.length === 0 ? (
+                  <div className="py-12 flex flex-col items-center gap-2 text-center">
+                    <CheckSquare size={24} className="text-gray-200" />
+                    <p className="text-[13px] text-gray-400">Nenhuma tarefa neste filtro</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    {/* Header */}
+                    <div
+                      className="grid text-[11px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 px-6 py-3 bg-gray-50/70 whitespace-nowrap"
+                      style={{ gridTemplateColumns: '1fr 180px 150px 110px 130px 60px', minWidth: '820px' }}
+                    >
+                      <span>Tarefa</span>
+                      <span>Projeto</span>
+                      <span>Status</span>
+                      <span>Prioridade</span>
+                      <span>Prazo</span>
+                      <span>Resp.</span>
+                    </div>
+
+                    {/* Rows */}
+                    {filtered.map((task, i) => {
+                      const project = projects.find(p => p.id === task.projectId);
+                      const taskAssignees = teamMembers.filter(m => getAssigneeIds(task).includes(m.id));
+                      const sm = STATUS_META[task.status] ?? STATUS_META['Backlog'];
+                      const pm = PRIORITY_META[task.priority] ?? PRIORITY_META['Medium'];
+                      const isOverdue = task.dueDate < today && task.status !== 'Concluído';
+                      const fmtDate = (d: string) =>
+                        new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', {
+                          day: 'numeric', month: 'short',
+                          timeZone: 'America/Sao_Paulo',
+                        });
+
+                      return (
+                        <div
+                          key={task.id}
+                          onClick={() => setActiveTask(task.id)}
+                          className={`grid items-center px-6 py-3.5 cursor-pointer hover:bg-gray-50/70 transition-colors group ${i > 0 ? 'border-t border-gray-50' : ''}`}
+                          style={{ gridTemplateColumns: '1fr 180px 150px 110px 130px 60px', minWidth: '820px' }}
+                        >
+                          {/* Name */}
+                          <div className="flex items-center gap-2 min-w-0 pr-4">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${sm.dot}`} />
+                            <p className={`text-[13px] font-medium truncate group-hover:text-[#1f6feb] transition-colors ${task.status === 'Concluído' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                              {task.title}
+                            </p>
+                          </div>
+
+                          {/* Project */}
+                          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                            <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: project?.color ?? '#ccc' }} />
+                            <span className="text-[12px] text-gray-500 truncate">{project?.name ?? '—'}</span>
+                          </div>
+
+                          {/* Status */}
+                          <div>
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-semibold ${sm.bg} ${sm.text}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${sm.dot}`} />
+                              {sm.label}
+                            </span>
+                          </div>
+
+                          {/* Priority */}
+                          <div>
+                            <span className={`inline-block px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wide ${pm.bg} ${pm.text}`}>
+                              {pm.label}
+                            </span>
+                          </div>
+
+                          {/* Due date */}
+                          <div className={`flex items-center gap-1 text-[12px] font-medium ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                            {isOverdue ? <AlertCircle size={11} /> : <Calendar size={11} className="text-gray-400" />}
+                            <span>{fmtDate(task.dueDate)}</span>
+                          </div>
+
+                          {/* Assignee(s) */}
+                          <div className="flex justify-end">
+                            {taskAssignees.length > 0
+                              ? <AvatarGroup members={taskAssignees} max={3} size="sm" />
+                              : <span className="text-gray-300 text-[12px]">—</span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
       </div>
 
       {showNewProject && (

@@ -6,7 +6,7 @@ import type { Project } from '../../types';
 const PROJECT_COLORS = [
   '#6366f1', '#8b5cf6', '#ec4899', '#ef4444',
   '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6',
-  '#FF5C35', '#64748b',
+  '#1f6feb', '#64748b',
 ];
 
 interface EditProjectModalProps {
@@ -82,7 +82,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                 if (e.key === 'Escape') onClose();
               }}
               placeholder="Nome do projeto"
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -96,7 +96,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
               value={description}
               onChange={e => setDescription(e.target.value)}
               placeholder="Descreva o objetivo do projeto..."
-              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+              className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
             />
           </div>
 
@@ -136,7 +136,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                   type="date"
                   value={startDate}
                   onChange={e => setStartDate(e.target.value)}
-                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#FF5C35] transition-colors"
+                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#1f6feb] transition-colors"
                 />
                 <span className="text-gray-300 text-[11px] shrink-0">→</span>
                 <input
@@ -144,7 +144,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
                   value={endDate}
                   min={startDate}
                   onChange={e => setEndDate(e.target.value)}
-                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#FF5C35] transition-colors"
+                  className="flex-1 text-[12px] bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-2 outline-none focus:border-[#1f6feb] transition-colors"
                 />
               </div>
             </div>
@@ -157,7 +157,7 @@ export function EditProjectModal({ project, onClose }: EditProjectModalProps) {
             onClick={handleSave}
             disabled={!canSubmit}
             className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-opacity"
-            style={{ backgroundColor: '#FF5C35' }}
+            style={{ backgroundColor: '#1f6feb' }}
           >
             Salvar alterações
           </button>

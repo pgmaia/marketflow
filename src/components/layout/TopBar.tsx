@@ -3,12 +3,13 @@ import { useAppStore } from '../../store/useAppStore';
 import type { TaskStatus } from '../../types';
 
 const statusOptions: { value: TaskStatus | 'All'; label: string }[] = [
-  { value: 'All',         label: 'Todos'         },
-  { value: 'Not Started', label: 'Não iniciado'  },
-  { value: 'In Progress', label: 'Em andamento'  },
-  { value: 'Review',      label: 'Em revisão'    },
-  { value: 'Done',        label: 'Concluído'     },
-  { value: 'Blocked',     label: 'Bloqueado'     },
+  { value: 'All',          label: 'Todos'         },
+  { value: 'Backlog',      label: 'Backlog'        },
+  { value: 'Sprint',       label: 'Sprint'         },
+  { value: 'Em andamento', label: 'Em andamento'   },
+  { value: 'Em revisão',   label: 'Em revisão'     },
+  { value: 'Bloqueado',    label: 'Bloqueado'      },
+  { value: 'Concluído',    label: 'Concluído'      },
 ];
 
 interface TopBarProps {
@@ -71,7 +72,7 @@ export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
             <button
               onClick={onNewTask}
               className="h-7 flex items-center gap-1.5 px-2.5 sm:px-3 rounded-md text-[12px] font-semibold text-white"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               <Plus size={13} />
               <span className="hidden sm:inline">Nova tarefa</span>

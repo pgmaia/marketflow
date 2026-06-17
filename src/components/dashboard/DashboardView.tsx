@@ -1,11 +1,13 @@
-import { Calendar, ChevronDown, ChevronRight, TrendingUp, X } from 'lucide-react';
-import { useState } from 'react';
+import { Calendar, CalendarDays, Check, ChevronDown, ChevronRight, LayoutList, TrendingUp, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   PieChart, Pie, Cell, Legend, ResponsiveContainer,
 } from 'recharts';
 import { useAppStore } from '../../store/useAppStore';
-import type { Company, Task, TeamMember } from '../../types';
+import type { Company, Task, Team, TeamMember } from '../../types';
+import { DashboardCalendar } from './DashboardCalendar';
+import { getAssigneeIds } from '../../types';
 import { ProgressBar } from '../shared/ProgressBar';
 import { AvatarGroup } from '../shared/Avatar';
 
@@ -28,13 +30,76 @@ function StatCard({ label, value, sub, color }: { label: string; value: number; 
 
 // ─── Filter bar ───────────────────────────────────────────────────────────────
 
+function useDropdown() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open]);
+  return { open, setOpen, ref };
+}
+
+interface FilterDropdownProps {
+  label: string;
+  selectedCount: number;
+  selectedLabel?: string; // shown when exactly 1 item selected
+  onClear: () => void;
+  children: React.ReactNode;
+}
+
+function FilterDropdown({ label, selectedCount, selectedLabel, onClear, children }: FilterDropdownProps) {
+  const { open, setOpen, ref } = useDropdown();
+  const isActive = selectedCount > 0;
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={`flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-all ${
+          isActive
+            ? 'bg-[#1f6feb] text-white border-[#1f6feb]'
+            : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:text-gray-800'
+        }`}
+      >
+        <span>{label}</span>
+        {isActive && (
+          <span className="bg-white/25 text-white text-[10px] font-bold rounded-full px-1.5 py-px leading-none">
+            {selectedCount === 1 && selectedLabel ? selectedLabel : selectedCount}
+          </span>
+        )}
+        <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''} ${isActive ? 'text-white/70' : 'text-gray-400'}`} />
+      </button>
+
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1.5 bg-white rounded-xl border border-gray-100 shadow-xl z-50 overflow-hidden"
+          style={{ minWidth: 200, maxHeight: 320, overflowY: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface FilterBarProps {
   companies: Company[];
+  teams: Team[];
   teamMembers: TeamMember[];
   selectedCompanyIds: string[];
+  selectedTeamIds: string[];
   selectedUserIds: string[];
   onToggleCompany: (id: string) => void;
+  onToggleTeam: (id: string) => void;
   onToggleUser: (id: string) => void;
+  onClearCompanies: () => void;
+  onClearTeams: () => void;
+  onClearMembers: () => void;
   onClearAll: () => void;
   filteredCount: number;
   totalCount: number;
@@ -43,28 +108,57 @@ interface FilterBarProps {
 }
 
 function FilterBar({
-  companies, teamMembers,
-  selectedCompanyIds, selectedUserIds,
-  onToggleCompany, onToggleUser, onClearAll,
+  companies, teams, teamMembers,
+  selectedCompanyIds, selectedTeamIds, selectedUserIds,
+  onToggleCompany, onToggleTeam, onToggleUser,
+  onClearCompanies, onClearTeams, onClearMembers, onClearAll,
   filteredCount, totalCount,
   currentUserId, isAdminOrManager,
 }: FilterBarProps) {
-  const hasFilter = selectedCompanyIds.length > 0 || selectedUserIds.length > 0;
+  const hasFilter = selectedCompanyIds.length > 0 || selectedTeamIds.length > 0 || selectedUserIds.length > 0;
   const currentMember = teamMembers.find(m => m.id === currentUserId);
 
+  const selectedCompanyName = selectedCompanyIds.length === 1
+    ? companies.find(c => c.id === selectedCompanyIds[0])?.name : undefined;
+  const selectedTeamName = selectedTeamIds.length === 1
+    ? teams.find(t => t.id === selectedTeamIds[0])?.name : undefined;
+  const selectedMemberName = selectedUserIds.length === 1
+    ? (selectedUserIds[0] === currentUserId ? 'EU' : teamMembers.find(m => m.id === selectedUserIds[0])?.name.split(' ')[0])
+    : undefined;
+
+  // Shared "Todas/Todos" row style
+  const allRowClass = (active: boolean) =>
+    `w-full flex items-center gap-2.5 px-3 py-2.5 transition-colors border-b border-gray-50 ${active ? 'bg-orange-50/60' : 'hover:bg-gray-50'}`;
+
   return (
-    <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 space-y-3">
-      {/* Empresas row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider w-16 shrink-0">Empresas</span>
-        <button
-          onClick={() => selectedCompanyIds.length > 0 && onClearAll()}
-          className="h-6 px-2.5 rounded-full text-[11px] font-semibold transition-all"
-          style={selectedCompanyIds.length === 0
-            ? { backgroundColor: '#FF5C35', color: '#fff' }
-            : { backgroundColor: '#f3f4f6', color: '#9ca3af' }}
-        >
-          Todas
+    <div className="bg-white rounded-xl border border-gray-100 px-5 py-3.5 flex items-center gap-2 flex-wrap">
+
+      {/* ── Tudo ── */}
+      <button
+        onClick={onClearAll}
+        className={`h-8 px-3 rounded-lg text-[12px] font-semibold border transition-all ${
+          !hasFilter
+            ? 'bg-[#1f6feb] text-white border-[#1f6feb]'
+            : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:text-gray-700'
+        }`}
+      >
+        Tudo
+      </button>
+
+      <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+      {/* ── Empresa ── */}
+      <FilterDropdown
+        label="Empresa"
+        selectedCount={selectedCompanyIds.length}
+        selectedLabel={selectedCompanyName}
+        onClear={onClearCompanies}
+      >
+        {/* Todas */}
+        <button onClick={onClearCompanies} className={allRowClass(selectedCompanyIds.length === 0)}>
+          <span className="w-5 h-5 rounded-md bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-500 shrink-0">✦</span>
+          <span className={`flex-1 text-left text-[13px] ${selectedCompanyIds.length === 0 ? 'font-semibold text-[#1f6feb]' : 'text-gray-700'}`}>Todas</span>
+          {selectedCompanyIds.length === 0 && <Check size={13} className="text-[#1f6feb] shrink-0" />}
         </button>
         {companies.map(c => {
           const active = selectedCompanyIds.includes(c.id);
@@ -72,66 +166,89 @@ function FilterBar({
             <button
               key={c.id}
               onClick={() => onToggleCompany(c.id)}
-              className="h-6 flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-semibold transition-all"
-              style={active
-                ? { backgroundColor: c.color, color: '#fff' }
-                : { backgroundColor: '#f3f4f6', color: '#6b7280' }}
+              className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors"
             >
               <span
-                className="w-3.5 h-3.5 rounded-sm flex items-center justify-center text-[7px] font-bold shrink-0"
-                style={{ backgroundColor: active ? 'rgba(255,255,255,0.25)' : c.color, color: '#fff' }}
+                className="w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+                style={{ backgroundColor: c.color }}
               >
                 {c.logo}
               </span>
-              {c.name}
+              <span className={`flex-1 text-left text-[13px] ${active ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                {c.name}
+              </span>
+              {active && <Check size={13} className="text-[#1f6feb] shrink-0" />}
             </button>
           );
         })}
-      </div>
+      </FilterDropdown>
 
-      {/* Membros row */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider w-16 shrink-0">Membros</span>
-
-        {/* "Todos" — admins/managers only */}
-        {isAdminOrManager && (
-          <button
-            onClick={() => selectedUserIds.length > 0 && onClearAll()}
-            className="h-6 px-2.5 rounded-full text-[11px] font-semibold transition-all"
-            style={selectedUserIds.length === 0
-              ? { backgroundColor: '#FF5C35', color: '#fff' }
-              : { backgroundColor: '#f3f4f6', color: '#9ca3af' }}
-          >
-            Todos
+      {/* ── Equipe ── */}
+      {teams.length > 0 && (
+        <FilterDropdown
+          label="Equipe"
+          selectedCount={selectedTeamIds.length}
+          selectedLabel={selectedTeamName}
+          onClear={onClearTeams}
+        >
+          {/* Todas */}
+          <button onClick={onClearTeams} className={allRowClass(selectedTeamIds.length === 0)}>
+            <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
+            <span className={`flex-1 text-left text-[13px] ${selectedTeamIds.length === 0 ? 'font-semibold text-[#1f6feb]' : 'text-gray-700'}`}>Todas</span>
+            {selectedTeamIds.length === 0 && <Check size={13} className="text-[#1f6feb] shrink-0" />}
           </button>
-        )}
+          {teams.map(t => {
+            const active = selectedTeamIds.includes(t.id);
+            return (
+              <button
+                key={t.id}
+                onClick={() => onToggleTeam(t.id)}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color }} />
+                <span className={`flex-1 text-left text-[13px] ${active ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                  {t.name}
+                </span>
+                <span className="text-[11px] text-gray-400 shrink-0">{t.memberIds.length}</span>
+                {active && <Check size={13} className="text-[#1f6feb] shrink-0" />}
+              </button>
+            );
+          })}
+        </FilterDropdown>
+      )}
 
-        {/* "EU" chip — everyone */}
+      {/* ── Membro ── */}
+      <FilterDropdown
+        label="Membro"
+        selectedCount={selectedUserIds.length}
+        selectedLabel={selectedMemberName}
+        onClear={onClearMembers}
+      >
+        {/* Todos */}
+        <button onClick={onClearMembers} className={allRowClass(selectedUserIds.length === 0)}>
+          <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[9px] font-bold text-gray-500 shrink-0">✦</span>
+          <span className={`flex-1 text-left text-[13px] ${selectedUserIds.length === 0 ? 'font-semibold text-[#1f6feb]' : 'text-gray-700'}`}>Todos</span>
+          {selectedUserIds.length === 0 && <Check size={13} className="text-[#1f6feb] shrink-0" />}
+        </button>
+        {/* EU */}
         {currentUserId && currentMember && (
           <button
             onClick={() => onToggleUser(currentUserId)}
-            className="h-6 flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-semibold transition-all"
-            style={selectedUserIds.includes(currentUserId)
-              ? { backgroundColor: currentMember.color, color: '#fff' }
-              : !isAdminOrManager && selectedUserIds.length === 0
-                ? { backgroundColor: '#FF5C35', color: '#fff' }
-                : { backgroundColor: '#f3f4f6', color: '#6b7280' }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors border-b border-gray-50"
           >
             <span
-              className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0"
-              style={{
-                backgroundColor: selectedUserIds.includes(currentUserId) || (!isAdminOrManager && selectedUserIds.length === 0)
-                  ? 'rgba(255,255,255,0.3)' : currentMember.color,
-                color: '#fff',
-              }}
+              className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+              style={{ backgroundColor: currentMember.color }}
             >
               {currentMember.avatar}
             </span>
-            EU
+            <span className={`flex-1 text-left text-[13px] ${selectedUserIds.includes(currentUserId) ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+              EU ({currentMember.name.split(' ')[0]})
+            </span>
+            {selectedUserIds.includes(currentUserId) && <Check size={13} className="text-[#1f6feb] shrink-0" />}
           </button>
         )}
-
-        {/* All other member chips — admins/managers only */}
+        {/* Other members — admins/managers only */}
         {isAdminOrManager && teamMembers
           .filter(m => m.id !== currentUserId)
           .map(m => {
@@ -140,37 +257,28 @@ function FilterBar({
               <button
                 key={m.id}
                 onClick={() => onToggleUser(m.id)}
-                className="h-6 flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-semibold transition-all"
-                style={active
-                  ? { backgroundColor: m.color, color: '#fff' }
-                  : { backgroundColor: '#f3f4f6', color: '#6b7280' }}
+                className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors"
               >
                 <span
-                  className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0"
-                  style={{ backgroundColor: active ? 'rgba(255,255,255,0.3)' : m.color, color: '#fff' }}
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-[8px] font-bold text-white shrink-0"
+                  style={{ backgroundColor: m.color }}
                 >
                   {m.avatar}
                 </span>
-                {m.name.split(' ')[0]}
+                <span className={`flex-1 text-left text-[13px] ${active ? 'font-semibold text-gray-900' : 'text-gray-700'}`}>
+                  {m.name}
+                </span>
+                {active && <Check size={13} className="text-[#1f6feb] shrink-0" />}
               </button>
             );
           })}
-      </div>
+      </FilterDropdown>
 
-      {/* Active filter summary + clear */}
+      {/* ── Task count ── */}
       {hasFilter && (
-        <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-          <span className="text-[11px] text-gray-400">
-            Mostrando <strong>{filteredCount}</strong> de <strong>{totalCount}</strong> tarefas
-          </span>
-          <button
-            onClick={onClearAll}
-            className="ml-auto flex items-center gap-1 text-[11px] text-gray-400 hover:text-red-400 transition-colors"
-          >
-            <X size={11} />
-            Limpar filtros
-          </button>
-        </div>
+        <span className="text-[11px] text-gray-400 ml-1">
+          <strong className="text-gray-700">{filteredCount}</strong>/{totalCount} tarefas
+        </span>
       )}
     </div>
   );
@@ -226,14 +334,14 @@ function ProjectGroupTable({
 
             {companyProjects.map((project, i) => {
               const pt = activeTasks.filter(t => t.projectId === project.id);
-              const done = pt.filter(t => t.status === 'Done').length;
-              const inProg = pt.filter(t => t.status === 'In Progress').length;
-              const blocked = pt.filter(t => t.status === 'Blocked').length;
-              const overdue = pt.filter(t => t.dueDate < today && t.status !== 'Done').length;
+              const done = pt.filter(t => t.status === 'Concluído').length;
+              const inProg = pt.filter(t => t.status === 'Em andamento').length;
+              const blocked = pt.filter(t => t.status === 'Bloqueado').length;
+              const overdue = pt.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
               const health = pt.length ? Math.round((done / pt.length) * 100) : 0;
               const healthColor = health >= 70 ? '#22c55e' : health >= 40 ? '#f59e0b' : '#ef4444';
               const members = project.teamMemberIds.map(id => teamMembers.find(m => m.id === id)!).filter(Boolean);
-              const nextTask = pt.filter(t => t.dueDate >= today && t.status !== 'Done').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+              const nextTask = pt.filter(t => t.dueDate >= today && t.status !== 'Concluído').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
               const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
 
               return (
@@ -246,7 +354,7 @@ function ProjectGroupTable({
                   <div className="flex items-center gap-3 min-w-0 pr-5">
                     <span className="w-2.5 h-2.5 rounded-sm shrink-0 mt-0.5" style={{ backgroundColor: project.color }} />
                     <div className="min-w-0">
-                      <p className="text-[14px] font-semibold text-gray-800 truncate group-hover:text-[#FF5C35] transition-colors leading-snug">{project.name}</p>
+                      <p className="text-[14px] font-semibold text-gray-800 truncate group-hover:text-[#1f6feb] transition-colors leading-snug">{project.name}</p>
                       <p className="text-[12px] text-gray-400 truncate mt-0.5">{project.description}</p>
                     </div>
                   </div>
@@ -289,11 +397,12 @@ function ProjectGroupTable({
 // ─── Charts ───────────────────────────────────────────────────────────────────
 
 const STATUS_COLORS: Record<string, string> = {
-  'Não iniciado':  '#9ca3af',
-  'Em andamento':  '#3b82f6',
-  'Em revisão':    '#f59e0b',
-  'Concluído':     '#22c55e',
-  'Bloqueado':     '#ef4444',
+  'Backlog':      '#9ca3af',
+  'Sprint':       '#8b5cf6',
+  'Em andamento': '#3b82f6',
+  'Em revisão':   '#f59e0b',
+  'Bloqueado':    '#ef4444',
+  'Concluído':    '#22c55e',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -343,11 +452,12 @@ function ChartsSection({
   const [projectView, setProjectView] = useState<'status' | 'progress'>('status');
 
   const statusData = [
-    { name: 'Não iniciado', value: filteredTasks.filter(t => t.status === 'Not Started').length },
-    { name: 'Em andamento', value: filteredTasks.filter(t => t.status === 'In Progress').length },
-    { name: 'Em revisão',   value: filteredTasks.filter(t => t.status === 'Review').length },
-    { name: 'Concluído',    value: filteredTasks.filter(t => t.status === 'Done').length },
-    { name: 'Bloqueado',    value: filteredTasks.filter(t => t.status === 'Blocked').length },
+    { name: 'Backlog',      value: filteredTasks.filter(t => t.status === 'Backlog').length },
+    { name: 'Sprint',       value: filteredTasks.filter(t => t.status === 'Sprint').length },
+    { name: 'Em andamento', value: filteredTasks.filter(t => t.status === 'Em andamento').length },
+    { name: 'Em revisão',   value: filteredTasks.filter(t => t.status === 'Em revisão').length },
+    { name: 'Bloqueado',    value: filteredTasks.filter(t => t.status === 'Bloqueado').length },
+    { name: 'Concluído',    value: filteredTasks.filter(t => t.status === 'Concluído').length },
   ].filter(d => d.value > 0);
 
   const priorityData = [
@@ -362,17 +472,18 @@ function ChartsSection({
     const label = p.name.length > 14 ? p.name.slice(0, 14) + '…' : p.name;
     return {
       name: label,
-      'Não iniciado': pt.filter(t => t.status === 'Not Started').length,
-      'Em andamento': pt.filter(t => t.status === 'In Progress').length,
-      'Em revisão':   pt.filter(t => t.status === 'Review').length,
-      'Concluído':    pt.filter(t => t.status === 'Done').length,
-      'Bloqueado':    pt.filter(t => t.status === 'Blocked').length,
+      'Backlog':      pt.filter(t => t.status === 'Backlog').length,
+      'Sprint':       pt.filter(t => t.status === 'Sprint').length,
+      'Em andamento': pt.filter(t => t.status === 'Em andamento').length,
+      'Em revisão':   pt.filter(t => t.status === 'Em revisão').length,
+      'Bloqueado':    pt.filter(t => t.status === 'Bloqueado').length,
+      'Concluído':    pt.filter(t => t.status === 'Concluído').length,
     };
   });
 
   const projectProgressData = filteredProjects.map(p => {
     const pt = filteredTasks.filter(t => t.projectId === p.id && !t.parentTaskId);
-    const done = pt.filter(t => t.status === 'Done').length;
+    const done = pt.filter(t => t.status === 'Concluído').length;
     const pct = pt.length ? Math.round((done / pt.length) * 100) : 0;
     return {
       name: p.name.length > 14 ? p.name.slice(0, 14) + '…' : p.name,
@@ -385,29 +496,31 @@ function ChartsSection({
   const topLevel = filteredTasks.filter(t => !t.parentTaskId);
   const userRows = teamMembers
     .map(m => {
-      const mt = topLevel.filter(t => t.assigneeId === m.id);
+      const mt = topLevel.filter(t => getAssigneeIds(t).includes(m.id));
       return {
         name: m.name.length > 18 ? m.name.slice(0, 18) + '…' : m.name,
-        'Não iniciado': mt.filter(t => t.status === 'Not Started').length,
-        'Em andamento': mt.filter(t => t.status === 'In Progress').length,
-        'Em revisão':   mt.filter(t => t.status === 'Review').length,
-        'Concluído':    mt.filter(t => t.status === 'Done').length,
-        'Bloqueado':    mt.filter(t => t.status === 'Blocked').length,
+        'Backlog':      mt.filter(t => t.status === 'Backlog').length,
+        'Sprint':       mt.filter(t => t.status === 'Sprint').length,
+        'Em andamento': mt.filter(t => t.status === 'Em andamento').length,
+        'Em revisão':   mt.filter(t => t.status === 'Em revisão').length,
+        'Bloqueado':    mt.filter(t => t.status === 'Bloqueado').length,
+        'Concluído':    mt.filter(t => t.status === 'Concluído').length,
         _total: mt.length,
       };
     })
     .filter(r => r._total > 0)
     .sort((a, b) => b._total - a._total);
 
-  const unassigned = topLevel.filter(t => !t.assigneeId);
+  const unassigned = topLevel.filter(t => getAssigneeIds(t).length === 0);
   if (unassigned.length > 0) {
     userRows.push({
       name: 'Sem responsável',
-      'Não iniciado': unassigned.filter(t => t.status === 'Not Started').length,
-      'Em andamento': unassigned.filter(t => t.status === 'In Progress').length,
-      'Em revisão':   unassigned.filter(t => t.status === 'Review').length,
-      'Concluído':    unassigned.filter(t => t.status === 'Done').length,
-      'Bloqueado':    unassigned.filter(t => t.status === 'Blocked').length,
+      'Backlog':      unassigned.filter(t => t.status === 'Backlog').length,
+      'Sprint':       unassigned.filter(t => t.status === 'Sprint').length,
+      'Em andamento': unassigned.filter(t => t.status === 'Em andamento').length,
+      'Em revisão':   unassigned.filter(t => t.status === 'Em revisão').length,
+      'Bloqueado':    unassigned.filter(t => t.status === 'Bloqueado').length,
+      'Concluído':    unassigned.filter(t => t.status === 'Concluído').length,
       _total: unassigned.length,
     });
   }
@@ -459,7 +572,7 @@ function ChartsSection({
           {(['status', 'progress'] as const).map(v => (
             <button key={v} onClick={() => setProjectView(v)}
               className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors ${projectView === v ? 'text-white' : 'text-gray-400 hover:text-gray-600 bg-gray-50'}`}
-              style={projectView === v ? { backgroundColor: '#FF5C35' } : {}}>
+              style={projectView === v ? { backgroundColor: '#1f6feb' } : {}}>
               {v === 'status' ? 'Por status' : 'Progresso'}
             </button>
           ))}
@@ -522,49 +635,84 @@ function ChartsSection({
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function DashboardView() {
-  const { tasks, projects, companies, teamMembers, currentUserId } = useAppStore();
+  const { tasks, projects, companies, teams, teamMembers, currentUserId, memberCompanyAccess, memberAccess } = useAppStore();
   const currentUser = teamMembers.find(m => m.id === currentUserId);
+  const isAdmin = currentUser?.permission === 'Admin';
   const isAdminOrManager = currentUser?.permission === 'Admin' || currentUser?.permission === 'Gerente';
+
+  // ── Access control ────────────────────────────────────────────────────────
+  const accessCompanyIds = isAdmin
+    ? companies.map(c => c.id)
+    : (memberCompanyAccess[currentUserId ?? ''] ?? companies.map(c => c.id));
+  const accessProjectIds = isAdmin
+    ? projects.map(p => p.id)
+    : (memberAccess[currentUserId ?? ''] ?? projects.map(p => p.id));
+
+  const accessibleCompanies = companies.filter(c => accessCompanyIds.includes(c.id));
+  const accessibleProjects  = projects.filter(p =>
+    accessProjectIds.includes(p.id) && accessCompanyIds.includes(p.companyId)
+  );
+
+  // ── View mode ─────────────────────────────────────────────────────────────
+  const [dashView, setDashView] = useState<'overview' | 'calendar'>('overview');
 
   // ── Filter state ──────────────────────────────────────────────────────────
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [selectedTeamIds, setSelectedTeamIds]       = useState<string[]>([]);
   const [selectedUserIds, setSelectedUserIds]       = useState<string[]>([]);
 
   const toggleCompany = (id: string) =>
     setSelectedCompanyIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  const toggleTeam = (id: string) =>
+    setSelectedTeamIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
   const toggleUser = (id: string) =>
     setSelectedUserIds(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
-  const clearAll = () => { setSelectedCompanyIds([]); setSelectedUserIds([]); };
+  const clearCompanies = () => setSelectedCompanyIds([]);
+  const clearTeams     = () => setSelectedTeamIds([]);
+  const clearMembers   = () => setSelectedUserIds([]);
+  const clearAll = () => { setSelectedCompanyIds([]); setSelectedTeamIds([]); setSelectedUserIds([]); };
 
   // ── Derived filtered data ─────────────────────────────────────────────────
   const activeCompanyIds = selectedCompanyIds.length > 0
-    ? selectedCompanyIds : companies.map(c => c.id);
+    ? selectedCompanyIds : accessCompanyIds;
 
-  const filteredProjects = projects.filter(p => activeCompanyIds.includes(p.companyId));
+  const filteredProjects = accessibleProjects.filter(p => activeCompanyIds.includes(p.companyId));
   const filteredProjectIds = new Set(filteredProjects.map(p => p.id));
 
   const tasksInScope = tasks.filter(t => filteredProjectIds.has(t.projectId));
-  const filteredTasks = selectedUserIds.length > 0
-    ? tasksInScope.filter(t => selectedUserIds.includes(t.assigneeId ?? ''))
+
+  // Combine team + member filters: team expands to its member IDs, then intersect with explicit user selection
+  const teamMemberIdsFromFilter = selectedTeamIds.length > 0
+    ? [...new Set(teams.filter(t => selectedTeamIds.includes(t.id)).flatMap(t => t.memberIds))]
+    : [];
+  const effectiveUserIds =
+    selectedTeamIds.length > 0 && selectedUserIds.length > 0
+      ? selectedUserIds.filter(id => teamMemberIdsFromFilter.includes(id))
+      : selectedTeamIds.length > 0
+        ? teamMemberIdsFromFilter
+        : selectedUserIds;
+
+  const filteredTasks = effectiveUserIds.length > 0
+    ? tasksInScope.filter(t => getAssigneeIds(t).some(id => effectiveUserIds.includes(id)))
     : tasksInScope;
 
   // Projects that have at least one task in the filtered set (for project table)
   const visibleProjectIds = new Set(filteredTasks.map(t => t.projectId));
   // Fallback: if user filter gives 0 visible projects, still show all in-scope projects
   const tableProjectIds = visibleProjectIds.size > 0 ? visibleProjectIds : filteredProjectIds;
-  const visibleCompanies = companies.filter(c =>
+  const visibleCompanies = accessibleCompanies.filter(c =>
     [...tableProjectIds].some(pid => {
-      const p = projects.find(pp => pp.id === pid);
+      const p = accessibleProjects.find(pp => pp.id === pid);
       return p?.companyId === c.id;
     })
   );
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const today = new Date().toISOString().split('T')[0];
-  const done    = filteredTasks.filter(t => t.status === 'Done').length;
-  const inProg  = filteredTasks.filter(t => t.status === 'In Progress').length;
-  const blocked = filteredTasks.filter(t => t.status === 'Blocked').length;
-  const overdue = filteredTasks.filter(t => t.dueDate < today && t.status !== 'Done').length;
+  const done    = filteredTasks.filter(t => t.status === 'Concluído').length;
+  const inProg  = filteredTasks.filter(t => t.status === 'Em andamento').length;
+  const blocked = filteredTasks.filter(t => t.status === 'Bloqueado').length;
+  const overdue = filteredTasks.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
 
   const tz        = { timeZone: 'America/Sao_Paulo' } as const;
   const dayOfWeek = new Date().toLocaleDateString('pt-BR', { weekday: 'long', ...tz });
@@ -574,74 +722,116 @@ export function DashboardView() {
     <div className="flex-1 overflow-auto bg-[#F5F6F8]">
       <div className="px-4 py-6 md:px-10 lg:px-14 md:py-10 lg:py-12 space-y-6 md:space-y-10">
 
-        {/* Welcome */}
-        <div>
-          <h1 className="font-display text-3xl font-bold text-gray-900">
-            {new Date().getHours() < 12 ? 'Bom dia' : 'Boa tarde'} 👋
-          </h1>
-          <p className="text-sm text-gray-400 mt-2">{dayOfWeek}, {dateStr}</p>
+        {/* Welcome + view toggle */}
+        <div className="flex items-end justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="font-display text-3xl font-bold text-gray-900">
+              {new Date().getHours() < 12 ? 'Bom dia' : 'Boa tarde'} 👋
+            </h1>
+            <p className="text-sm text-gray-400 mt-2">{dayOfWeek}, {dateStr}</p>
+          </div>
+
+          {/* View toggle pills */}
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 shrink-0">
+            <button
+              onClick={() => setDashView('overview')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
+                dashView === 'overview'
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-400 hover:text-gray-700'
+              }`}
+            >
+              <LayoutList size={13} />
+              Visão Geral
+            </button>
+            <button
+              onClick={() => setDashView('calendar')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold transition-all ${
+                dashView === 'calendar'
+                  ? 'bg-gray-900 text-white'
+                  : 'text-gray-400 hover:text-gray-700'
+              }`}
+            >
+              <CalendarDays size={13} />
+              Calendário
+            </button>
+          </div>
         </div>
 
-        {/* Filter bar */}
+        {/* Filter bar — always visible */}
         <FilterBar
-          companies={companies}
+          companies={accessibleCompanies}
+          teams={teams}
           teamMembers={teamMembers}
           selectedCompanyIds={selectedCompanyIds}
+          selectedTeamIds={selectedTeamIds}
           selectedUserIds={selectedUserIds}
           onToggleCompany={toggleCompany}
+          onToggleTeam={toggleTeam}
           onToggleUser={toggleUser}
+          onClearCompanies={clearCompanies}
+          onClearTeams={clearTeams}
+          onClearMembers={clearMembers}
           onClearAll={clearAll}
           filteredCount={filteredTasks.length}
-          totalCount={tasks.length}
+          totalCount={tasks.filter(t => accessProjectIds.includes(t.projectId)).length}
           currentUserId={currentUserId}
           isAdminOrManager={isAdminOrManager}
         />
 
-        {/* Stats row */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
-          <StatCard label="Total de tarefas" value={filteredTasks.length} color="#6366f1" />
-          <StatCard
-            label="Concluídas"
-            value={done}
-            sub={filteredTasks.length ? `${Math.round((done / filteredTasks.length) * 100)}% do total` : undefined}
-            color="#22c55e"
-          />
-          <StatCard label="Em andamento" value={inProg} color="#3b82f6" />
-          <StatCard
-            label="Precisam de atenção"
-            value={blocked + overdue}
-            sub={`${blocked} bloqueadas · ${overdue} atrasadas`}
-            color="#ef4444"
-          />
-        </div>
+        {dashView === 'calendar' ? (
+          /* ── Calendar view ── */
+          <DashboardCalendar tasks={filteredTasks} />
+        ) : (
+          /* ── Overview view ── */
+          <>
+            {/* Stats row */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-6">
+              <StatCard label="Total de tarefas" value={filteredTasks.length} color="#6366f1" />
+              <StatCard
+                label="Concluídas"
+                value={done}
+                sub={filteredTasks.length ? `${Math.round((done / filteredTasks.length) * 100)}% do total` : undefined}
+                color="#22c55e"
+              />
+              <StatCard label="Em andamento" value={inProg} color="#3b82f6" />
+              <StatCard
+                label="Precisam de atenção"
+                value={blocked + overdue}
+                sub={`${blocked} bloqueadas · ${overdue} atrasadas`}
+                color="#ef4444"
+              />
+            </div>
 
-        {/* Charts */}
-        <div>
-          <h2 className="font-semibold text-[14px] text-gray-700 mb-4">Gráficos</h2>
-          <ChartsSection
-            filteredTasks={filteredTasks}
-            filteredProjects={filteredProjects}
-            teamMembers={teamMembers}
-          />
-        </div>
+            {/* Charts */}
+            <div>
+              <h2 className="font-semibold text-[14px] text-gray-700 mb-4">Gráficos</h2>
+              <ChartsSection
+                filteredTasks={filteredTasks}
+                filteredProjects={filteredProjects}
+                teamMembers={teamMembers}
+              />
+            </div>
 
-        {/* Projects table */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-[14px] text-gray-700">Todos os Projetos</h2>
-            <span className="text-[11px] text-gray-400">
-              {[...tableProjectIds].length} projetos em {visibleCompanies.length} empresas
-            </span>
-          </div>
-          {visibleCompanies.map(c => (
-            <ProjectGroupTable
-              key={c.id}
-              company={c}
-              activeTasks={filteredTasks}
-              visibleProjectIds={tableProjectIds}
-            />
-          ))}
-        </div>
+            {/* Projects table */}
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-semibold text-[14px] text-gray-700">Todos os Projetos</h2>
+                <span className="text-[11px] text-gray-400">
+                  {[...tableProjectIds].length} projetos em {visibleCompanies.length} empresas
+                </span>
+              </div>
+              {visibleCompanies.map(c => (
+                <ProjectGroupTable
+                  key={c.id}
+                  company={c}
+                  activeTasks={filteredTasks}
+                  visibleProjectIds={tableProjectIds}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
       </div>
     </div>

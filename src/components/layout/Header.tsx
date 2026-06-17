@@ -2,7 +2,7 @@ import { Search, SlidersHorizontal } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { TaskStatus } from '../../types';
 
-const statusOptions: (TaskStatus | 'All')[] = ['All', 'Not Started', 'In Progress', 'Review', 'Done', 'Blocked'];
+const statusOptions: (TaskStatus | 'All')[] = ['All', 'Backlog', 'Sprint', 'Em andamento', 'Em revisão', 'Bloqueado', 'Concluído'];
 
 export function Header() {
   const { view, activeCompanyId, activeProjectId, companies, projects, filters, setFilters } = useAppStore();

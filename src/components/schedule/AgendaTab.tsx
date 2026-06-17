@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, X, AlertCircle, Folder } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { PersonalTask, Task, TaskPriority } from '../../types';
+import { getAssigneeIds } from '../../types';
 import { TypeIcon } from '../shared/Badge';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -17,11 +18,12 @@ const PRIORITY_COLORS: Record<TaskPriority, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  'Not Started': 'Não iniciada',
-  'In Progress': 'Em andamento',
-  'Review':      'Em revisão',
-  'Done':        'Concluída',
-  'Blocked':     'Bloqueada',
+  'Backlog':      'Backlog',
+  'Sprint':       'Sprint',
+  'Em andamento': 'Em andamento',
+  'Em revisão':   'Em revisão',
+  'Concluído':    'Concluída',
+  'Bloqueado':    'Bloqueada',
 };
 
 /** Returns YYYY-MM-DD in the browser's local timezone (not UTC). */
@@ -84,7 +86,7 @@ function DayPanel({ dateStr, tasks, onClose }: DayPanelProps) {
       {/* Header */}
       <div className="flex items-start justify-between px-5 py-3 md:py-4 border-b border-gray-100 shrink-0">
         <div>
-          <p className={`text-[13px] font-bold capitalize ${isToday ? 'text-[#FF5C35]' : 'text-gray-800'}`}>
+          <p className={`text-[13px] font-bold capitalize ${isToday ? 'text-[#1f6feb]' : 'text-gray-800'}`}>
             {isToday ? 'Hoje — ' : ''}{formatFull(dateStr)}
           </p>
           <p className="text-[11px] text-gray-400 mt-0.5">{tasks.length} {tasks.length === 1 ? 'tarefa' : 'tarefas'}</p>
@@ -104,12 +106,12 @@ function DayPanel({ dateStr, tasks, onClose }: DayPanelProps) {
           tasks.map((item, i) => {
             if (item.kind === 'project') {
               const { task, projectName, projectColor } = item;
-              const isOverdue = task.dueDate < today && task.status !== 'Done';
+              const isOverdue = task.dueDate < today && task.status !== 'Concluído';
               return (
                 <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-gray-50 border border-gray-100">
                   <div className="w-1 h-full rounded-full shrink-0 self-stretch" style={{ backgroundColor: projectColor, minHeight: 32 }} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[12px] font-semibold truncate ${task.status === 'Done' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                    <p className={`text-[12px] font-semibold truncate ${task.status === 'Concluído' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                       {task.title}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -130,12 +132,12 @@ function DayPanel({ dateStr, tasks, onClose }: DayPanelProps) {
               );
             } else {
               const { task } = item;
-              const isOverdue = isPast && task.status !== 'Done';
+              const isOverdue = isPast && task.status !== 'Concluído';
               return (
                 <div key={i} className="flex items-start gap-2.5 p-3 rounded-xl bg-gray-50 border border-gray-100">
                   <div className="w-1 h-full rounded-full shrink-0 self-stretch" style={{ backgroundColor: PRIORITY_COLORS[task.priority], minHeight: 32 }} />
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[12px] font-semibold truncate ${task.status === 'Done' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                    <p className={`text-[12px] font-semibold truncate ${task.status === 'Concluído' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
                       {task.title}
                     </p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap">
@@ -180,7 +182,7 @@ function CalendarCell({ date, isCurrentMonth, tasks, isToday, isSelected, onClic
       onClick={onClick}
       className={`relative flex flex-col min-h-[60px] md:min-h-[80px] p-1.5 md:p-2 cursor-pointer transition-colors border-b border-r border-gray-100 ${
         isSelected
-          ? 'bg-[#FF5C35]/5'
+          ? 'bg-[#1f6feb]/5'
           : isCurrentMonth
             ? 'bg-white hover:bg-gray-50'
             : 'bg-gray-50/50 hover:bg-gray-50'
@@ -191,9 +193,9 @@ function CalendarCell({ date, isCurrentMonth, tasks, isToday, isSelected, onClic
         <span
           className={`w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-semibold ${
             isToday
-              ? 'bg-[#FF5C35] text-white'
+              ? 'bg-[#1f6feb] text-white'
               : isSelected
-                ? 'bg-[#FF5C35]/15 text-[#FF5C35]'
+                ? 'bg-[#1f6feb]/15 text-[#1f6feb]'
                 : isCurrentMonth
                   ? 'text-gray-700'
                   : 'text-gray-300'
@@ -208,7 +210,7 @@ function CalendarCell({ date, isCurrentMonth, tasks, isToday, isSelected, onClic
         {shown.map((item, i) => {
           const color = item.kind === 'project' ? item.projectColor : PRIORITY_COLORS[item.task.priority];
           const title = item.task.title;
-          const isDone = item.task.status === 'Done';
+          const isDone = item.task.status === 'Concluído';
           return (
             <div
               key={i}
@@ -250,7 +252,7 @@ export function AgendaTab() {
   const grid = buildCalendarGrid(year, month);
 
   // Project tasks assigned to me
-  const myProjectTasks = tasks.filter(t => t.assigneeId === currentUserId);
+  const myProjectTasks = tasks.filter(t => getAssigneeIds(t).includes(currentUserId ?? ''));
   // Personal tasks I own
   const myPersonalTasks = personalTasks.filter(t => t.ownerId === currentUserId);
 
@@ -364,7 +366,7 @@ export function AgendaTab() {
             <span className="text-[11px] text-gray-500">Tarefas pessoais</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#FF5C35]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#1f6feb]" />
             <span className="text-[11px] text-gray-500">Hoje</span>
           </div>
         </div>

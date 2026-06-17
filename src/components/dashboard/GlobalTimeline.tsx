@@ -54,10 +54,10 @@ export function GlobalTimeline() {
             return (
               <div
                 key={d}
-                className={`flex flex-col items-center w-11 shrink-0 rounded-xl py-2 ${isToday ? 'bg-[#FF5C35]/8 ring-1 ring-[#FF5C35]/20' : ''}`}
+                className={`flex flex-col items-center w-11 shrink-0 rounded-xl py-2 ${isToday ? 'bg-[#1f6feb]/8 ring-1 ring-[#1f6feb]/20' : ''}`}
               >
-                <span className={`text-[10px] font-medium uppercase ${isToday ? 'text-[#FF5C35]' : 'text-gray-400'}`}>{day}</span>
-                <span className={`text-sm font-bold mb-2 ${isToday ? 'text-[#FF5C35]' : 'text-gray-700'}`}>{num}</span>
+                <span className={`text-[10px] font-medium uppercase ${isToday ? 'text-[#1f6feb]' : 'text-gray-400'}`}>{day}</span>
+                <span className={`text-sm font-bold mb-2 ${isToday ? 'text-[#1f6feb]' : 'text-gray-700'}`}>{num}</span>
 
                 <div className="flex flex-col gap-1 w-full px-1">
                   {dayTasks.slice(0, 3).map(task => (

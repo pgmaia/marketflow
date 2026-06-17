@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { Plus, X, Check, Trash2, ChevronDown, ChevronRight, AlertCircle, Calendar, Pencil, ExternalLink } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { PersonalTask, Task, TaskPriority, TaskStatus, TaskType } from '../../types';
+import type { PersonalTask, Task, TaskPriority, TaskStatus } from '../../types';
+import { getAssigneeIds } from '../../types';
 import { TypeIcon } from '../shared/Badge';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type MyTask =
   | { kind: 'personal'; task: PersonalTask }
-  | { kind: 'project';  task: Task; projectName: string; projectColor: string };
+  | { kind: 'project';  task: Task; projectName: string; projectColor: string; companyName: string; parentTaskTitle?: string };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -24,22 +25,23 @@ const PRIORITY_LABELS: Record<TaskPriority, string> = {
 };
 
 const STATUS_DOT: Record<TaskStatus, string> = {
-  'Not Started': 'bg-gray-300',
-  'In Progress': 'bg-blue-400',
-  'Review':      'bg-amber-400',
-  'Done':        'bg-green-400',
-  'Blocked':     'bg-red-400',
+  'Backlog':      'bg-gray-300',
+  'Sprint':       'bg-violet-400',
+  'Em andamento': 'bg-blue-400',
+  'Em revisão':   'bg-amber-400',
+  'Concluído':    'bg-green-400',
+  'Bloqueado':    'bg-red-400',
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  'Not Started': 'Não iniciada',
-  'In Progress': 'Em andamento',
-  'Review':      'Em revisão',
-  'Done':        'Concluída',
-  'Blocked':     'Bloqueada',
+  'Backlog':      'Backlog',
+  'Sprint':       'Sprint',
+  'Em andamento': 'Em andamento',
+  'Em revisão':   'Em revisão',
+  'Concluído':    'Concluída',
+  'Bloqueado':    'Bloqueada',
 };
 
-const TASK_TYPES: TaskType[] = ['Copy', 'Design', 'Video', 'Ads', 'SEO', 'Email', 'Social', 'Analytics', 'Meeting'];
 const PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
 
 /** Returns YYYY-MM-DD in the browser's local timezone (not UTC). */
@@ -76,13 +78,14 @@ interface TaskModalProps {
 }
 
 function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps) {
+  const taskTypes = useAppStore(s => s.taskTypes);
   const today = localToday();
 
   const [title,       setTitle]       = useState(initial?.title ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
-  const [type,        setType]        = useState<TaskType>(initial?.type ?? 'Copy');
+  const [type,        setType]        = useState<string>(initial?.type ?? (taskTypes[0]?.value ?? 'Copy'));
   const [priority,    setPriority]    = useState<TaskPriority>(initial?.priority ?? 'Medium');
-  const [status,      setStatus]      = useState<TaskStatus>(initial?.status ?? 'Not Started');
+  const [status,      setStatus]      = useState<TaskStatus>(initial?.status ?? 'Backlog');
   const [dueDate,     setDueDate]     = useState(initial?.dueDate ?? today);
   const [notes,       setNotes]       = useState(initial?.notes ?? '');
 
@@ -121,23 +124,23 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                 onChange={e => setTitle(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter' && canSave) handleSave(); if (e.key === 'Escape') onClose(); }}
                 placeholder="O que precisa ser feito?"
-                className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+                className="mt-1.5 w-full text-[14px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
               />
             </div>
 
             <div>
               <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Tipo</label>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                {TASK_TYPES.map(t => (
+                {taskTypes.map(t => (
                   <button
-                    key={t}
-                    onClick={() => setType(t)}
+                    key={t.value}
+                    onClick={() => setType(t.value)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${
-                      type === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      type === t.value ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
                   >
-                    <TypeIcon type={t} size="sm" />
-                    {t}
+                    <TypeIcon type={t.value} size="sm" />
+                    {t.label}
                   </button>
                 ))}
               </div>
@@ -167,7 +170,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                 <select
                   value={status}
                   onChange={e => setStatus(e.target.value as TaskStatus)}
-                  className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+                  className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
                 >
                   {(Object.keys(STATUS_LABELS) as TaskStatus[]).map(s => (
                     <option key={s} value={s}>{STATUS_LABELS[s]}</option>
@@ -182,7 +185,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                 type="date"
                 value={dueDate}
                 onChange={e => setDueDate(e.target.value)}
-                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors"
+                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors"
               />
             </div>
 
@@ -193,7 +196,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Detalhes da tarefa..."
                 rows={2}
-                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors resize-none"
+                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors resize-none"
               />
             </div>
 
@@ -204,7 +207,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Notas adicionais..."
                 rows={2}
-                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#FF5C35] transition-colors resize-none"
+                className="mt-1.5 w-full text-[13px] bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 outline-none focus:border-[#1f6feb] transition-colors resize-none"
               />
             </div>
           </div>
@@ -214,7 +217,7 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
               onClick={handleSave}
               disabled={!canSave}
               className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white disabled:opacity-40 transition-opacity"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               {initial ? 'Salvar alterações' : 'Criar tarefa'}
             </button>
@@ -243,22 +246,29 @@ function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenP
   const dueDate = getDueDate(item);
   const status  = getStatus(item);
   const priority = getPriority(item);
-  const isOverdue = dueDate < today && status !== 'Done';
-  const isDone    = status === 'Done';
+  const isOverdue = dueDate < today && status !== 'Concluído';
+  const isDone    = status === 'Concluído';
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const accentColor = item.kind === 'project' ? item.projectColor : PRIORITY_COLORS[priority];
 
+  const handleRowClick = () => {
+    if (item.kind === 'project') onOpenProject();
+  };
+
   return (
-    <div className={`group flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all hover:shadow-sm ${
-      isDone ? 'border-gray-100 opacity-60' : 'border-gray-100 hover:border-gray-200'
-    }`}>
+    <div
+      onClick={handleRowClick}
+      className={`group flex items-center gap-3 px-4 py-3 bg-white rounded-xl border transition-all hover:shadow-sm ${
+        isDone ? 'border-gray-100 opacity-60' : 'border-gray-100 hover:border-gray-200'
+      } ${item.kind === 'project' ? 'cursor-pointer' : ''}`}
+    >
       {/* Accent bar */}
       <div className="w-0.5 h-8 rounded-full shrink-0" style={{ backgroundColor: accentColor }} />
 
       {/* Done toggle */}
       <button
-        onClick={onToggleDone}
+        onClick={e => { e.stopPropagation(); onToggleDone(); }}
         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
           isDone
             ? 'bg-green-400 border-green-400 text-white'
@@ -272,22 +282,34 @@ function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenP
       <TypeIcon type={item.task.type} size="sm" />
 
       {/* Title + source badge */}
-      <div className="flex-1 min-w-0 flex items-center gap-2">
-        <p className={`text-[13px] font-medium truncate ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-          {item.task.title}
-        </p>
-        {item.kind === 'project' ? (
-          <span
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white truncate max-w-[110px]"
-            style={{ backgroundColor: item.projectColor }}
-            title={item.projectName}
-          >
-            {item.projectName}
-          </span>
-        ) : (
-          <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-400">
-            Pessoal
-          </span>
+      <div className="flex-1 min-w-0">
+        {/* Company name */}
+        {item.kind === 'project' && item.companyName && (
+          <p className="text-[10px] text-gray-400 mb-0.5">{item.companyName}</p>
+        )}
+        <div className="flex items-start gap-2">
+          <p className={`text-[13px] font-medium leading-snug ${isDone ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+            {item.task.title}
+          </p>
+          {item.kind === 'project' ? (
+            <span
+              className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold text-white mt-0.5"
+              style={{ backgroundColor: item.projectColor }}
+              title={item.projectName}
+            >
+              {item.projectName}
+            </span>
+          ) : (
+            <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-400 mt-0.5">
+              Pessoal
+            </span>
+          )}
+        </div>
+        {/* Subtask indicator */}
+        {item.kind === 'project' && item.parentTaskTitle && (
+          <p className="text-[10px] text-gray-400 mt-0.5">
+            ↳ {item.parentTaskTitle}
+          </p>
         )}
       </div>
 
@@ -305,16 +327,16 @@ function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenP
       {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         {item.kind === 'project' ? (
-          /* Project task: just open in project board */
+          /* Project task: open in project board */
           <button
-            onClick={onOpenProject}
+            onClick={e => { e.stopPropagation(); onOpenProject(); }}
             className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             title="Abrir no projeto"
           >
             <ExternalLink size={11} />
           </button>
         ) : confirmDelete ? (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
             <span className="text-[10px] text-red-500 font-medium">Apagar?</span>
             <button
               onClick={onDeletePersonal}
@@ -332,13 +354,13 @@ function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenP
         ) : (
           <>
             <button
-              onClick={onEditPersonal}
+              onClick={e => { e.stopPropagation(); onEditPersonal(); }}
               className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
             >
               <Pencil size={11} />
             </button>
             <button
-              onClick={() => setConfirmDelete(true)}
+              onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}
               className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
             >
               <Trash2 size={11} />
@@ -412,7 +434,7 @@ const FILTER_LABELS: Record<FilterTab, string> = {
 
 export function MyTasksTab() {
   const {
-    tasks, projects,
+    tasks, projects, companies,
     personalTasks, currentUserId,
     addPersonalTask, updatePersonalTask, deletePersonalTask,
     updateTask, setActiveTask, setActiveProject,
@@ -427,12 +449,21 @@ export function MyTasksTab() {
 
   // ── Build combined list ──────────────────────────────────────────────────────
 
-  // Project tasks where I am assignee (top-level only, no subtasks)
+  // Project tasks where I am assignee — top-level AND subtasks
   const myProjectTasks: MyTask[] = tasks
-    .filter(t => t.assigneeId === currentUserId && !t.parentTaskId)
+    .filter(t => getAssigneeIds(t).includes(currentUserId ?? ''))
     .map(t => {
       const proj = projects.find(p => p.id === t.projectId);
-      return { kind: 'project', task: t, projectName: proj?.name ?? 'Projeto', projectColor: proj?.color ?? '#6366f1' };
+      const company = companies.find(c => c.id === proj?.companyId);
+      const parentTask = t.parentTaskId ? tasks.find(p => p.id === t.parentTaskId) : undefined;
+      return {
+        kind: 'project',
+        task: t,
+        projectName: proj?.name ?? 'Projeto',
+        projectColor: proj?.color ?? '#6366f1',
+        companyName: company?.name ?? '',
+        parentTaskTitle: parentTask?.title,
+      };
     });
 
   // Personal tasks I own
@@ -444,8 +475,8 @@ export function MyTasksTab() {
 
   // ── Stats ─────────────────────────────────────────────────────────────────────
   const total   = allTasks.length;
-  const done    = allTasks.filter(t => getStatus(t) === 'Done').length;
-  const overdue = allTasks.filter(t => getDueDate(t) < today && getStatus(t) !== 'Done').length;
+  const done    = allTasks.filter(t => getStatus(t) === 'Concluído').length;
+  const overdue = allTasks.filter(t => getDueDate(t) < today && getStatus(t) !== 'Concluído').length;
 
   // ── Filter ────────────────────────────────────────────────────────────────────
   const filtered = allTasks.filter(item => {
@@ -453,16 +484,16 @@ export function MyTasksTab() {
     const s = getStatus(item);
     if (filter === 'today')   return d === today;
     if (filter === 'week')    return d >= today && d <= weekEnd;
-    if (filter === 'overdue') return d < today && s !== 'Done';
+    if (filter === 'overdue') return d < today && s !== 'Concluído';
     return true;
   });
 
   // ── Groups ────────────────────────────────────────────────────────────────────
-  const overdueTasks = filtered.filter(t => getDueDate(t) < today  && getStatus(t) !== 'Done');
-  const todayTasks   = filtered.filter(t => getDueDate(t) === today && getStatus(t) !== 'Done');
-  const thisWeek     = filtered.filter(t => getDueDate(t) > today   && getDueDate(t) <= weekEnd && getStatus(t) !== 'Done');
-  const upcoming     = filtered.filter(t => getDueDate(t) > weekEnd && getStatus(t) !== 'Done');
-  const doneTasks    = filtered.filter(t => getStatus(t) === 'Done');
+  const overdueTasks = filtered.filter(t => getDueDate(t) < today  && getStatus(t) !== 'Concluído');
+  const todayTasks   = filtered.filter(t => getDueDate(t) === today && getStatus(t) !== 'Concluído');
+  const thisWeek     = filtered.filter(t => getDueDate(t) > today   && getDueDate(t) <= weekEnd && getStatus(t) !== 'Concluído');
+  const upcoming     = filtered.filter(t => getDueDate(t) > weekEnd && getStatus(t) !== 'Concluído');
+  const doneTasks    = filtered.filter(t => getStatus(t) === 'Concluído');
 
   // ── Handlers ──────────────────────────────────────────────────────────────────
   const handleSave = (data: Omit<PersonalTask, 'id' | 'createdAt'>) => {
@@ -471,7 +502,7 @@ export function MyTasksTab() {
   };
 
   const handleToggleDone = (item: MyTask) => {
-    const newStatus: TaskStatus = getStatus(item) === 'Done' ? 'Not Started' : 'Done';
+    const newStatus: TaskStatus = getStatus(item) === 'Concluído' ? 'Backlog' : 'Concluído';
     if (item.kind === 'personal') updatePersonalTask(item.task.id, { status: newStatus });
     else updateTask(item.task.id, { status: newStatus });
   };
@@ -541,7 +572,7 @@ export function MyTasksTab() {
         <button
           onClick={() => { setEditingTask(null); setShowModal(true); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[12px] font-semibold text-white transition-opacity hover:opacity-90 shrink-0"
-          style={{ backgroundColor: '#FF5C35' }}
+          style={{ backgroundColor: '#1f6feb' }}
         >
           <Plus size={13} />
           Nova tarefa pessoal
@@ -566,7 +597,7 @@ export function MyTasksTab() {
             <button
               onClick={() => { setEditingTask(null); setShowModal(true); }}
               className="mt-4 flex items-center gap-1.5 px-4 py-2 rounded-xl text-[12px] font-semibold text-white mx-auto transition-opacity hover:opacity-90"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               <Plus size={12} />
               Criar tarefa pessoal

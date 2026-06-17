@@ -1,6 +1,13 @@
-export type TaskStatus = 'Not Started' | 'In Progress' | 'Review' | 'Done' | 'Blocked';
+export type TaskStatus = 'Backlog' | 'Sprint' | 'Em andamento' | 'Em revisão' | 'Bloqueado' | 'Concluído';
 export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
-export type TaskType = 'Copy' | 'Design' | 'Video' | 'Ads' | 'SEO' | 'Email' | 'Social' | 'Analytics' | 'Meeting';
+export type TaskType = string;
+
+export interface TaskTypeConfig {
+  value: string;   // unique key, e.g. 'Copy', 'Trafego'
+  label: string;   // display name, e.g. 'Tráfego'
+  emoji: string;   // emoji icon
+  color: string;   // tailwind classes like 'bg-purple-50 text-purple-700'
+}
 
 // Phase is now a plain string — each project defines its own phases
 export type Phase = string;
@@ -10,7 +17,7 @@ export interface ProjectPhase {
   name: string;
 }
 
-export type UserPermission = 'Admin' | 'Gerente' | 'Membro' | 'Visualizador';
+export type UserPermission = 'Admin' | 'Gerente' | 'Membro' | 'Visualizador' | 'Externo';
 
 export interface TeamMember {
   id: string;
@@ -22,13 +29,26 @@ export interface TeamMember {
   permission?: UserPermission; // undefined = 'Membro' (backwards compat)
 }
 
-export type CustomColumnType = 'text' | 'number' | 'select' | 'date';
+export type CustomColumnType = 'text' | 'number' | 'select' | 'date' | 'link';
 
 export interface CustomColumn {
   id: string;
   name: string;
   type: CustomColumnType;
   options?: string[]; // for 'select' type
+}
+
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly' | 'yearly' | 'days_after';
+
+export interface TaskRecurrence {
+  type: RecurrenceType;
+  daysAfter: number;          // for 'days_after': X days after completion
+  targetPhase?: string;       // phase for the new task (undefined = same phase as original)
+  createNewTask: boolean;     // spawn a fresh copy with next due date
+  repeatForever: boolean;     // new task inherits recurrence (loops indefinitely)
+  resetStatus: boolean;       // reset current task's status
+  resetStatusTo: TaskStatus;  // which status to reset to
+  syncWithEndDate: boolean;   // sync next due date with project end date
 }
 
 export interface Task {
@@ -40,12 +60,19 @@ export interface Task {
   type: TaskType;
   status: TaskStatus;
   priority: TaskPriority;
-  assigneeId?: string;
+  assigneeId?: string;  // legacy — use assigneeIds
+  assigneeIds?: string[]; // multiple assignees
   dueDate: string; // ISO date string
   notes?: string;
   createdAt: string;
   parentTaskId?: string; // if set, this is a subtask
+  isMilestone?: boolean; // if true, this task is a milestone (Marco)
+  isMeta?: boolean;       // if true, this task is a goal (Meta)
+  metaTarget?: number;    // target value (e.g. 1000)
+  metaCurrent?: number;   // current value (e.g. 450)
+  metaUnit?: string;      // unit label (e.g. "leads", "R$", "%")
   customFields?: Record<string, string>; // colId -> value
+  recurrence?: TaskRecurrence;
 }
 
 export interface Project {
@@ -59,6 +86,7 @@ export interface Project {
   color: string;
   phases: ProjectPhase[];
   customColumns?: CustomColumn[];
+  document?: string; // rich-text HTML content — project history / notes
 }
 
 export interface Company {
@@ -85,6 +113,32 @@ export interface TaskTemplate {
   description?: string;
   tasks: TemplateTask[];
   createdAt: string;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  color: string;
+  memberIds: string[];
+  companyId?: string; // se definido, Gerentes desta equipe têm poder de Admin nesta empresa
+  createdAt: string;
+}
+
+// ── Helper: verifica se o usuário tem poder de Admin numa empresa ─────────────
+export function hasAdminPower(
+  userId: string | null | undefined,
+  companyId: string,
+  teamMembers: Array<{ id: string; permission?: string }>,
+  teams: Array<{ companyId?: string; memberIds: string[] }>
+): boolean {
+  if (!userId) return false;
+  const member = teamMembers.find(m => m.id === userId);
+  if (!member) return false;
+  if (member.permission === 'Admin') return true;
+  if (member.permission === 'Gerente') {
+    return teams.some(t => t.companyId === companyId && t.memberIds.includes(userId));
+  }
+  return false;
 }
 
 export interface PhaseTemplate {
@@ -163,4 +217,11 @@ export interface FlowBoard {
   nodes: FlowNode[];
   edges: FlowEdge[];
   createdAt: string;
+}
+
+// ── Helper: get all assignee IDs from a task (handles legacy assigneeId) ──────
+export function getAssigneeIds(task: Pick<Task, 'assigneeId' | 'assigneeIds'>): string[] {
+  if (task.assigneeIds !== undefined) return task.assigneeIds;
+  if (task.assigneeId !== undefined) return [task.assigneeId];
+  return [];
 }

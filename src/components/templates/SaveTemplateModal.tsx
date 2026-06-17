@@ -63,8 +63,8 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#FF5C35]/10 flex items-center justify-center">
-                <Layers size={15} className="text-[#FF5C35]" />
+              <div className="w-8 h-8 rounded-lg bg-[#1f6feb]/10 flex items-center justify-center">
+                <Layers size={15} className="text-[#1f6feb]" />
               </div>
               <div>
                 <p className="text-[14px] font-bold text-gray-900">Salvar como template</p>
@@ -120,7 +120,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
                 onChange={e => setName(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSave()}
                 placeholder="Ex: Onboarding de cliente, Sprint de lançamento..."
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] text-gray-800 outline-none focus:border-[#FF5C35]/50 focus:ring-2 focus:ring-[#FF5C35]/10 placeholder-gray-300 transition-colors"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] text-gray-800 outline-none focus:border-[#1f6feb]/50 focus:ring-2 focus:ring-[#1f6feb]/10 placeholder-gray-300 transition-colors"
               />
             </div>
             <div>
@@ -132,7 +132,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
                 onChange={e => setDescription(e.target.value)}
                 placeholder="Descreva quando usar este template..."
                 rows={2}
-                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] text-gray-700 outline-none resize-none focus:border-[#FF5C35]/50 focus:ring-2 focus:ring-[#FF5C35]/10 placeholder-gray-300 transition-colors"
+                className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-[13px] text-gray-700 outline-none resize-none focus:border-[#1f6feb]/50 focus:ring-2 focus:ring-[#1f6feb]/10 placeholder-gray-300 transition-colors"
               />
             </div>
           </div>
@@ -149,7 +149,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
               onClick={handleSave}
               disabled={!name.trim()}
               className="px-5 py-2 rounded-lg text-[13px] font-semibold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               Salvar template
             </button>

@@ -1,6 +1,22 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, TeamMember, AppFilters, TaskStatus, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig } from '../types';
+
+// ─── Recurrence helper ────────────────────────────────────────────────────────
+
+function calcNextDueDate(from: string, type: RecurrenceType, daysAfter = 7): string {
+  if (type === 'days_after') {
+    const d = new Date();
+    d.setDate(d.getDate() + daysAfter);
+    return d.toISOString().split('T')[0];
+  }
+  const d = new Date(from + 'T00:00:00');
+  if (type === 'daily')   d.setDate(d.getDate() + 1);
+  if (type === 'weekly')  d.setDate(d.getDate() + 7);
+  if (type === 'monthly') d.setMonth(d.getMonth() + 1);
+  if (type === 'yearly')  d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().split('T')[0];
+}
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
 
 // IDs that belong to seed data — used to distinguish user-created records
@@ -26,6 +42,9 @@ interface AppState {
   darkMode: boolean;
   memberPasswords: Record<string, string>;
   deletedMemberIds: string[];
+  taskTypes: TaskTypeConfig[];
+
+  teams: Team[];
 
   // Navigation
   activeCompanyId: string | null;
@@ -33,6 +52,7 @@ interface AppState {
   activeTaskId: string | null;
   view: AppView;
   memberAccess: Record<string, string[]>;
+  memberCompanyAccess: Record<string, string[]>;
 
   // Actions
   setActiveCompany: (id: string | null) => void;
@@ -44,9 +64,19 @@ interface AppState {
   logout: () => void;
   toggleDarkMode: () => void;
   addTeamMember: (data: Omit<TeamMember, 'id'>, password: string) => void;
+  updateTeamMember: (id: string, data: Partial<Omit<TeamMember, 'id'>>, newPassword?: string) => void;
   deleteTeamMember: (id: string) => void;
+
+  // Teams
+  addTeam: (name: string, color: string, companyId?: string) => void;
+  updateTeam: (id: string, data: Partial<Pick<Team, 'name' | 'color' | 'companyId'>>) => void;
+  deleteTeam: (id: string) => void;
+  addPersonToTeam: (teamId: string, memberId: string) => void;
+  removePersonFromTeam: (teamId: string, memberId: string) => void;
   setMemberProjectAccess: (memberId: string, projectId: string, hasAccess: boolean) => void;
   setMemberAllAccess: (memberId: string, hasAccess: boolean) => void;
+  setMemberCompanyAccess: (memberId: string, companyId: string, hasAccess: boolean) => void;
+  setMemberAllCompanyAccess: (memberId: string, hasAccess: boolean) => void;
   setFilters: (filters: Partial<AppFilters>) => void;
 
   // Personal Tasks
@@ -76,7 +106,7 @@ interface AppState {
 
   // Project CRUD
   addProject: (project: Project) => void;
-  updateProject: (id: string, patch: Partial<Pick<Project, 'name' | 'description' | 'color' | 'startDate' | 'endDate'>>) => void;
+  updateProject: (id: string, patch: Partial<Pick<Project, 'name' | 'description' | 'color' | 'startDate' | 'endDate' | 'document'>>) => void;
   deleteProject: (id: string) => void;
 
   // Task CRUD
@@ -111,6 +141,12 @@ interface AppState {
   permanentlyDeleteFromTrash: (trashId: string) => void;
   clearTrash: () => void;
   purgeExpiredTrash: () => void;
+
+  // Task Types CRUD
+  addTaskType: (type: TaskTypeConfig) => void;
+  updateTaskType: (value: string, patch: Partial<TaskTypeConfig>) => void;
+  deleteTaskType: (value: string) => void;
+  reorderTaskTypes: (types: TaskTypeConfig[]) => void;
 }
 
 const trashId = () => `trash-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -123,6 +159,18 @@ const defaultFilters: AppFilters = {
   status: null,
   dueDateRange: 'all',
 };
+
+const DEFAULT_TASK_TYPES: TaskTypeConfig[] = [
+  { value: 'Copy',      label: 'Copy',      emoji: '✍️',  color: 'bg-purple-50 text-purple-700' },
+  { value: 'Design',    label: 'Design',    emoji: '🎨',  color: 'bg-pink-50 text-pink-700'     },
+  { value: 'Trafego',   label: 'Tráfego',   emoji: '📣',  color: 'bg-orange-50 text-orange-700' },
+  { value: 'Email',     label: 'E-mail',    emoji: '📧',  color: 'bg-blue-50 text-blue-700'     },
+  { value: 'Campanha',  label: 'Campanha',  emoji: '🚀',  color: 'bg-red-50 text-red-700'       },
+  { value: 'Conteudo',  label: 'Conteúdo',  emoji: '📱',  color: 'bg-cyan-50 text-cyan-700'     },
+  { value: 'Analytics', label: 'Analytics', emoji: '📊',  color: 'bg-indigo-50 text-indigo-700' },
+  { value: 'Meeting',   label: 'Reunião',   emoji: '🗓️', color: 'bg-gray-100 text-gray-700'    },
+  { value: 'Comercial', label: 'Comercial', emoji: '💼',  color: 'bg-green-50 text-green-700'   },
+];
 
 const seedFlow: FlowBoard = {
   id: 'flow-1',
@@ -197,6 +245,7 @@ export const useAppStore = create<AppState>()(
       tasks: seedTasks,
       personalTasks: [],
       teamMembers: seedTeamMembers,
+      teams: [],
       templates: [],
       phaseTemplates: [],
       filters: defaultFilters,
@@ -207,12 +256,14 @@ export const useAppStore = create<AppState>()(
       activeTaskId: null,
       view: 'dashboard',
       memberAccess: {},
+      memberCompanyAccess: {},
       trash: [],
       currentUserId: null,
       isAuthenticated: false,
       darkMode: false,
       memberPasswords: {},
       deletedMemberIds: [],
+      taskTypes: DEFAULT_TASK_TYPES,
 
       setActiveCompany: (id) => set({ activeCompanyId: id, activeProjectId: null, view: id ? 'company' : 'dashboard' }),
       setActiveProject: (id) => set({ activeProjectId: id, view: id ? 'project' : 'company' }),
@@ -224,6 +275,8 @@ export const useAppStore = create<AppState>()(
           m => m.email?.toLowerCase() === email.trim().toLowerCase()
         );
         if (!member) return false;
+        // Externos não têm acesso ao sistema
+        if (member.permission === 'Externo') return false;
         const expectedPw = MEMBER_PASSWORDS[member.id] ?? get().memberPasswords[member.id];
         if (!expectedPw || expectedPw !== password) return false;
         set({ isAuthenticated: true, currentUserId: member.id });
@@ -242,6 +295,16 @@ export const useAppStore = create<AppState>()(
         };
       }),
 
+      updateTeamMember: (id, data, newPassword) => set((s) => {
+        const passwords = newPassword
+          ? { ...s.memberPasswords, [id]: newPassword }
+          : s.memberPasswords;
+        return {
+          teamMembers: s.teamMembers.map(m => m.id === id ? { ...m, ...data } : m),
+          memberPasswords: passwords,
+        };
+      }),
+
       deleteTeamMember: (id) => set((s) => {
         const newMemberPasswords = { ...s.memberPasswords };
         delete newMemberPasswords[id];
@@ -252,13 +315,49 @@ export const useAppStore = create<AppState>()(
           memberPasswords: newMemberPasswords,
           memberAccess: newMemberAccess,
           deletedMemberIds: [...s.deletedMemberIds, id],
-          tasks: s.tasks.map(t => t.assigneeId === id ? { ...t, assigneeId: undefined } : t),
+          tasks: s.tasks.map(t => ({
+            ...t,
+            assigneeId: t.assigneeId === id ? undefined : t.assigneeId,
+            assigneeIds: t.assigneeIds?.filter(aid => aid !== id),
+          })),
           projects: s.projects.map(p => ({
             ...p,
             teamMemberIds: p.teamMemberIds.filter(mid => mid !== id),
           })),
         };
       }),
+      // ── Teams ─────────────────────────────────────────────────────────────────
+      addTeam: (name, color, companyId) => set((s) => ({
+        teams: [...s.teams, {
+          id: `team-${Date.now()}`,
+          name,
+          color,
+          companyId,
+          memberIds: [],
+          createdAt: new Date().toISOString().split('T')[0],
+        }],
+      })),
+      updateTeam: (id, data) => set((s) => ({
+        teams: s.teams.map(t => t.id === id ? { ...t, ...data } : t),
+      })),
+      deleteTeam: (id) => set((s) => ({
+        teams: s.teams.filter(t => t.id !== id),
+      })),
+      addPersonToTeam: (teamId, memberId) => set((s) => ({
+        teams: s.teams.map(t =>
+          t.id === teamId && !t.memberIds.includes(memberId)
+            ? { ...t, memberIds: [...t.memberIds, memberId] }
+            : t
+        ),
+      })),
+      removePersonFromTeam: (teamId, memberId) => set((s) => ({
+        teams: s.teams.map(t =>
+          t.id === teamId
+            ? { ...t, memberIds: t.memberIds.filter(id => id !== memberId) }
+            : t
+        ),
+      })),
+
       setFilters: (filters) => set((s) => ({ filters: { ...s.filters, ...filters } })),
 
       addPersonalTask: (taskData) => set((s) => ({
@@ -332,7 +431,17 @@ export const useAppStore = create<AppState>()(
         teamMembers: s.teamMembers.map(m => m.id === memberId ? { ...m, permission } : m),
       })),
 
-      addProject: (project) => set((s) => ({ projects: [...s.projects, project] })),
+      addProject: (project) => set((s) => {
+        // Also grant memberAccess to every member listed in teamMemberIds
+        const newAccess = { ...s.memberAccess };
+        for (const memberId of (project.teamMemberIds ?? [])) {
+          const existing = newAccess[memberId] ?? s.projects.map(p => p.id);
+          if (!existing.includes(project.id)) {
+            newAccess[memberId] = [...existing, project.id];
+          }
+        }
+        return { projects: [...s.projects, project], memberAccess: newAccess };
+      }),
       updateProject: (id, patch) => set((s) => ({
         projects: s.projects.map(p => p.id === id ? { ...p, ...patch } : p),
       })),
@@ -352,7 +461,58 @@ export const useAppStore = create<AppState>()(
 
       addTask: (task) => set((s) => ({ tasks: [...s.tasks, task] })),
       updateTask: (id, updates) =>
-        set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)) })),
+        set((s) => {
+          const existing = s.tasks.find(t => t.id === id);
+          const newStatus = (updates as Partial<Task>).status;
+          const rec = existing?.recurrence;
+
+          // ── Recurrence trigger (fires when task is marked Concluído) ──────
+          if (rec && newStatus === 'Concluído') {
+            const nextDue = calcNextDueDate(existing!.dueDate, rec.type, rec.daysAfter);
+
+            if (rec.createNewTask) {
+              // Spawn the next occurrence
+              const newTask: Task = {
+                ...existing!,
+                id: `t${Date.now()}`,
+                status: 'Backlog',
+                dueDate: nextDue,
+                phase: rec.targetPhase ?? existing!.phase,
+                createdAt: new Date().toISOString().split('T')[0],
+                recurrence: rec.repeatForever ? rec : undefined,
+              };
+
+              // Old task (now Done) moves to trash — keeps history without cluttering the list
+              const subtasks = s.tasks.filter(t => t.parentTaskId === id);
+              const trashEntry: TrashItem = {
+                id: trashId(),
+                deletedAt: now(),
+                type: 'task',
+                data: { ...existing!, status: 'Concluído' },
+                subtasks,
+              };
+
+              return {
+                tasks: [
+                  ...s.tasks.filter(t => t.id !== id && t.parentTaskId !== id),
+                  newTask,
+                ],
+                trash: [...s.trash, trashEntry],
+              };
+            }
+
+            // createNewTask is off: just update current task (reset status if configured)
+            const finalUpdates: Partial<Task> = rec.resetStatus
+              ? { ...updates, status: rec.resetStatusTo, dueDate: nextDue }
+              : updates;
+
+            return {
+              tasks: s.tasks.map(t => t.id === id ? { ...t, ...finalUpdates } : t),
+            };
+          }
+          // ── Normal update ────────────────────────────────────────────────
+          return { tasks: s.tasks.map(t => t.id === id ? { ...t, ...updates } : t) };
+        }),
       deleteTask: (id) => set((s) => {
         const task = s.tasks.find(t => t.id === id);
         if (!task) return s;
@@ -394,7 +554,7 @@ export const useAppStore = create<AppState>()(
               phase: tt.phase,
               title: tt.title,
               type: tt.type,
-              status: 'Not Started' as TaskStatus,
+              status: 'Backlog' as TaskStatus,
               priority: tt.priority,
               description: tt.description,
               notes: tt.notes,
@@ -408,7 +568,7 @@ export const useAppStore = create<AppState>()(
                 phase: tt.phase,
                 title: st.title,
                 type: st.type,
-                status: 'Not Started' as TaskStatus,
+                status: 'Backlog' as TaskStatus,
                 priority: st.priority,
                 description: st.description,
                 notes: st.notes,
@@ -550,6 +710,38 @@ export const useAppStore = create<AppState>()(
           },
         })),
 
+      setMemberCompanyAccess: (memberId, companyId, hasAccess) =>
+        set((s) => {
+          const currentCompanies = s.memberCompanyAccess[memberId] ?? s.companies.map(c => c.id);
+          const updatedCompanies = hasAccess
+            ? [...new Set([...currentCompanies, companyId])]
+            : currentCompanies.filter(id => id !== companyId);
+          // When revoking company access, also revoke all its projects
+          const currentProjects = s.memberAccess[memberId] ?? s.projects.map(p => p.id);
+          const updatedProjects = hasAccess
+            ? currentProjects
+            : currentProjects.filter(pid => {
+                const proj = s.projects.find(p => p.id === pid);
+                return proj?.companyId !== companyId;
+              });
+          return {
+            memberCompanyAccess: { ...s.memberCompanyAccess, [memberId]: updatedCompanies },
+            memberAccess: { ...s.memberAccess, [memberId]: updatedProjects },
+          };
+        }),
+
+      setMemberAllCompanyAccess: (memberId, hasAccess) =>
+        set((s) => ({
+          memberCompanyAccess: {
+            ...s.memberCompanyAccess,
+            [memberId]: hasAccess ? s.companies.map(c => c.id) : [],
+          },
+          memberAccess: {
+            ...s.memberAccess,
+            [memberId]: hasAccess ? s.projects.map(p => p.id) : [],
+          },
+        })),
+
       applyPhaseTemplate: (templateId, projectId) =>
         set((s) => {
           const template = s.phaseTemplates.find(t => t.id === templateId);
@@ -574,6 +766,16 @@ export const useAppStore = create<AppState>()(
             }),
           };
         }),
+
+      // ── Task Types CRUD ────────────────────────────────────────────────────
+      addTaskType: (type) => set((s) => ({ taskTypes: [...s.taskTypes, type] })),
+      updateTaskType: (value, patch) => set((s) => ({
+        taskTypes: s.taskTypes.map(t => t.value === value ? { ...t, ...patch } : t),
+      })),
+      deleteTaskType: (value) => set((s) => ({
+        taskTypes: s.taskTypes.filter(t => t.value !== value),
+      })),
+      reorderTaskTypes: (types) => set({ taskTypes: types }),
 
       // ── Trash ──────────────────────────────────────────────────────────────
       restoreFromTrash: (trashItemId) => set((s) => {
@@ -619,7 +821,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'marketflow-store',
-      version: 10,
+      version: 13,
       migrate: (persistedState: any) => {
         // v0 → v1: add phases to projects that were saved without them
         if (persistedState?.projects) {
@@ -699,6 +901,56 @@ export const useAppStore = create<AppState>()(
         if (!persistedState.deletedMemberIds) persistedState.deletedMemberIds = [];
         // v9 → v10: add personalTasks
         if (!persistedState.personalTasks) persistedState.personalTasks = [];
+        // v10 → v11: add memberCompanyAccess (derive from existing project access)
+        if (!persistedState.memberCompanyAccess) {
+          persistedState.memberCompanyAccess = {};
+          if (persistedState.teamMembers && persistedState.projects) {
+            persistedState.teamMembers.forEach((m: any) => {
+              const projectIds: string[] = persistedState.memberAccess?.[m.id]
+                ?? persistedState.projects.map((p: any) => p.id);
+              const companyIds = [...new Set(
+                persistedState.projects
+                  .filter((p: any) => projectIds.includes(p.id))
+                  .map((p: any) => p.companyId)
+              )];
+              persistedState.memberCompanyAccess[m.id] = companyIds;
+            });
+          }
+        }
+        // v11 → v12: migrate task statuses from English to Portuguese
+        const statusMigrationMap: Record<string, string> = {
+          'Not Started': 'Backlog',
+          'In Progress': 'Em andamento',
+          'Review':      'Em revisão',
+          'Done':        'Concluído',
+          'Blocked':     'Bloqueado',
+        };
+        if (persistedState?.tasks) {
+          persistedState.tasks = persistedState.tasks.map((t: any) =>
+            statusMigrationMap[t.status] ? { ...t, status: statusMigrationMap[t.status] } : t
+          );
+        }
+        if (persistedState?.personalTasks) {
+          persistedState.personalTasks = persistedState.personalTasks.map((t: any) =>
+            statusMigrationMap[t.status] ? { ...t, status: statusMigrationMap[t.status] } : t
+          );
+        }
+        // Reset filters.status if it holds an old value
+        if (persistedState?.filters?.status && statusMigrationMap[persistedState.filters.status]) {
+          persistedState.filters.status = statusMigrationMap[persistedState.filters.status];
+        }
+        // Migrate recurrence resetStatusTo fields
+        if (persistedState?.tasks) {
+          persistedState.tasks = persistedState.tasks.map((t: any) => {
+            if (t.recurrence?.resetStatusTo && statusMigrationMap[t.recurrence.resetStatusTo]) {
+              return { ...t, recurrence: { ...t.recurrence, resetStatusTo: statusMigrationMap[t.recurrence.resetStatusTo] } };
+            }
+            return t;
+          });
+        }
+
+        // v12 → v13: add taskTypes
+        if (!persistedState.taskTypes) persistedState.taskTypes = DEFAULT_TASK_TYPES;
 
         return persistedState;
       },
@@ -711,6 +963,7 @@ export const useAppStore = create<AppState>()(
         templates: state.templates,
         phaseTemplates: state.phaseTemplates,
         memberAccess: state.memberAccess,
+        memberCompanyAccess: state.memberCompanyAccess,
         flows: state.flows,
         activeFlowId: state.activeFlowId,
         trash: state.trash,
@@ -719,6 +972,7 @@ export const useAppStore = create<AppState>()(
         darkMode: state.darkMode,
         memberPasswords: state.memberPasswords,
         deletedMemberIds: state.deletedMemberIds,
+        taskTypes: state.taskTypes,
       }),
       merge: (persisted: any, current) => {
         const merged = { ...current, ...persisted };
@@ -730,6 +984,8 @@ export const useAppStore = create<AppState>()(
         if (!merged.memberPasswords) merged.memberPasswords = {};
         if (!merged.deletedMemberIds) merged.deletedMemberIds = [];
         if (!merged.personalTasks) merged.personalTasks = [];
+        if (!merged.memberCompanyAccess) merged.memberCompanyAccess = {};
+        if (!merged.taskTypes) merged.taskTypes = DEFAULT_TASK_TYPES;
         // Always sync seed companies — update existing ones, add any new ones
         // (user-created companies, i.e. not in seed, are left untouched)
         if (merged.companies) {
@@ -770,6 +1026,20 @@ export const useAppStore = create<AppState>()(
         }
         // Auto-purge expired items on hydration
         merged.trash = merged.trash.filter((item: any) => !isExpired(item.deletedAt));
+
+        // Security: if the persisted session belongs to a user who was deleted,
+        // clear the auth state so they're redirected to the login screen.
+        if (merged.isAuthenticated && merged.currentUserId) {
+          const deletedIds: string[] = merged.deletedMemberIds ?? [];
+          const stillExists = (merged.teamMembers ?? []).some(
+            (m: any) => m.id === merged.currentUserId
+          );
+          if (!stillExists || deletedIds.includes(merged.currentUserId)) {
+            merged.isAuthenticated = false;
+            merged.currentUserId   = null;
+          }
+        }
+
         return merged;
       },
     }
@@ -788,7 +1058,7 @@ export const selectCompanyHealth = (companyId: string) => (state: AppState) => {
   const projectIds = projects.map((p) => p.id);
   const tasks = state.tasks.filter((t) => projectIds.includes(t.projectId));
   if (tasks.length === 0) return 0;
-  const done = tasks.filter((t) => t.status === 'Done').length;
+  const done = tasks.filter((t) => t.status === 'Concluído').length;
   return Math.round((done / tasks.length) * 100);
 };
 
@@ -797,7 +1067,7 @@ export const selectNextDeadline = (companyId: string) => (state: AppState) => {
   const projectIds = projects.map((p) => p.id);
   const today = new Date().toISOString().split('T')[0];
   const upcoming = state.tasks
-    .filter((t) => projectIds.includes(t.projectId) && t.dueDate >= today && t.status !== 'Done')
+    .filter((t) => projectIds.includes(t.projectId) && t.dueDate >= today && t.status !== 'Concluído')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   return upcoming[0]?.dueDate ?? null;
 };

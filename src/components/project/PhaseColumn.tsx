@@ -15,13 +15,13 @@ const knownConfig: Record<string, { emoji: string; accent: string }> = {
   'Estratégia':  { emoji: '🧭', accent: '#3B82F6' },
   'Produção':    { emoji: '⚙️', accent: '#F59E0B' },
   'Revisão':     { emoji: '🔍', accent: '#EF4444' },
-  'Lançamento':  { emoji: '🚀', accent: '#FF5C35' },
+  'Lançamento':  { emoji: '🚀', accent: '#1f6feb' },
   'Análise':     { emoji: '📊', accent: '#10B981' },
   // English fallbacks for backwards compatibility
   'Strategy':   { emoji: '🧭', accent: '#3B82F6' },
   'Production': { emoji: '⚙️', accent: '#F59E0B' },
   'Review':     { emoji: '🔍', accent: '#EF4444' },
-  'Launch':     { emoji: '🚀', accent: '#FF5C35' },
+  'Launch':     { emoji: '🚀', accent: '#1f6feb' },
   'Analysis':   { emoji: '📊', accent: '#10B981' },
 };
 
@@ -39,11 +39,14 @@ export function PhaseColumn({ phase, tasks, onAddTask }: PhaseColumnProps) {
   const { updateTask } = useAppStore();
   const [dragOver, setDragOver] = useState(false);
   const cfg = getPhaseConfig(phase, Object.keys(knownConfig).length);
-  const done = tasks.filter(t => t.status === 'Done').length;
+  const done = tasks.filter(t => t.status === 'Concluído').length;
   const progress = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
 
-  const statusOrder = ['Blocked', 'In Progress', 'Review', 'Not Started', 'Done'];
+  const statusOrder = ['Bloqueado', 'Em andamento', 'Em revisão', 'Sprint', 'Backlog', 'Concluído'];
   const sorted = [...tasks].sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status));
+  const milestones = sorted.filter(t => t.isMilestone);
+  const metas = sorted.filter(t => t.isMeta);
+  const regularTasks = sorted.filter(t => !t.isMilestone && !t.isMeta);
 
   const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragOver(true); };
   const handleDragLeave = () => setDragOver(false);
@@ -96,13 +99,29 @@ export function PhaseColumn({ phase, tasks, onAddTask }: PhaseColumnProps) {
 
       {/* ── Task cards ── */}
       <div className={`flex flex-col gap-2.5 flex-1 overflow-y-auto pb-2 rounded-xl transition-colors ${dragOver ? 'bg-gray-100/60 ring-2 ring-dashed ring-gray-300' : ''}`}>
-        {sorted.map(task => (
+        {metas.length > 0 && (
+          <>
+            <p className="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1.5 mt-1">Metas</p>
+            {metas.map(task => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </>
+        )}
+        {milestones.length > 0 && (
+          <>
+            <p className="text-[10px] font-bold text-[#1f6feb] uppercase tracking-wider mb-1.5 mt-1">Marcos</p>
+            {milestones.map(task => (
+              <TaskCard key={task.id} task={task} />
+            ))}
+          </>
+        )}
+        {regularTasks.map(task => (
           <TaskCard key={task.id} task={task} />
         ))}
 
         <button
           onClick={() => onAddTask(phase)}
-          className="flex items-center gap-2 px-3.5 py-3 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#FF5C35]/40 hover:text-[#FF5C35] hover:bg-[#FF5C35]/3 transition-all"
+          className="flex items-center gap-2 px-3.5 py-3 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#1f6feb]/40 hover:text-[#1f6feb] hover:bg-[#1f6feb]/3 transition-all"
         >
           <Plus size={13} />
           Nova tarefa

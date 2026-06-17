@@ -14,7 +14,7 @@ export function Button({ children, onClick, variant = 'primary', size = 'md', ic
   const base = 'inline-flex items-center gap-1.5 font-medium rounded-lg transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
   const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm' };
   const variants = {
-    primary: 'bg-[#FF5C35] text-white hover:bg-[#e64d28] shadow-sm',
+    primary: 'bg-[#1f6feb] text-white hover:bg-[#e64d28] shadow-sm',
     ghost: 'text-gray-600 hover:bg-gray-100',
     outline: 'border border-gray-200 text-gray-700 hover:bg-gray-50',
   };

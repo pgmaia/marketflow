@@ -1,4 +1,5 @@
 import { useAppStore } from '../../store/useAppStore';
+import { getAssigneeIds } from '../../types';
 
 interface TeamPanelProps {
   projectId: string;
@@ -13,9 +14,9 @@ export function TeamPanel({ projectId }: TeamPanelProps) {
   const projectTasks = tasks.filter(t => t.projectId === projectId);
 
   const getMemberStats = (memberId: string) => {
-    const assigned = projectTasks.filter(t => t.assigneeId === memberId);
-    const done = assigned.filter(t => t.status === 'Done').length;
-    const blocked = assigned.filter(t => t.status === 'Blocked').length;
+    const assigned = projectTasks.filter(t => getAssigneeIds(t).includes(memberId));
+    const done = assigned.filter(t => t.status === 'Concluído').length;
+    const blocked = assigned.filter(t => t.status === 'Bloqueado').length;
     const progress = assigned.length ? Math.round((done / assigned.length) * 100) : 0;
     return { total: assigned.length, done, blocked, progress };
   };

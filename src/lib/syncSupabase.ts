@@ -3,12 +3,52 @@ import { useAppStore } from '../store/useAppStore';
 
 const ROW_KEY = 'main';
 
+// ── Status migration (English → Portuguese) ───────────────────────────────────
+// Applied whenever data arrives from Supabase (bypasses Zustand migrate).
+const STATUS_MAP: Record<string, string> = {
+  'Not Started': 'Backlog',
+  'In Progress': 'Em andamento',
+  'Review':      'Em revisão',
+  'Done':        'Concluído',
+  'Blocked':     'Bloqueado',
+};
+
+function migrateStatuses(state: SyncState): SyncState {
+  const migrateStatus = (s: string) => STATUS_MAP[s] ?? s;
+
+  // Tasks
+  if (Array.isArray(state.tasks)) {
+    state.tasks = (state.tasks as any[]).map((t: any) => ({
+      ...t,
+      status: migrateStatus(t.status),
+    }));
+  }
+  // Personal tasks
+  if (Array.isArray(state.personalTasks)) {
+    state.personalTasks = (state.personalTasks as any[]).map((t: any) => ({
+      ...t,
+      status: migrateStatus(t.status),
+    }));
+  }
+  // Trash tasks
+  if (Array.isArray(state.trash)) {
+    state.trash = (state.trash as any[]).map((item: any) => ({
+      ...item,
+      data: item.data ? { ...item.data, status: migrateStatus(item.data.status) } : item.data,
+      subtasks: Array.isArray(item.subtasks)
+        ? item.subtasks.map((s: any) => ({ ...s, status: migrateStatus(s.status) }))
+        : item.subtasks,
+    }));
+  }
+  return state;
+}
+
 // Only these fields are synced across devices.
 // Session state (isAuthenticated, currentUserId, darkMode, navigation) stays local per device.
 const SYNC_FIELDS = [
   'tasks', 'personalTasks', 'companies', 'projects',
-  'teamMembers', 'templates', 'phaseTemplates',
-  'memberAccess', 'flows', 'trash',
+  'teamMembers', 'teams', 'templates', 'phaseTemplates',
+  'memberAccess', 'memberCompanyAccess', 'flows', 'trash',
   'memberPasswords', 'deletedMemberIds',
 ] as const;
 
@@ -21,21 +61,43 @@ function extractSyncState(state: ReturnType<typeof useAppStore.getState>): SyncS
 }
 
 // ── Guards ────────────────────────────────────────────────────────────────────
-// isSyncing: prevents feedback loop when setState is called from a remote update
-// supabaseLoaded: prevents any save BEFORE the initial Supabase load completes
-let isSyncing      = false;
-let supabaseLoaded = false;
+// isSyncing:           prevents feedback loop when setState is called from a remote update
+// supabaseLoaded:      prevents any save BEFORE the initial Supabase load completes
+// hasPendingLocalSave: real-time updates are ignored while we have unsaved local changes
+//                      to prevent a stale Supabase broadcast from overwriting them
+let isSyncing           = false;
+let supabaseLoaded      = false;
+let hasPendingLocalSave = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ── Local-vs-Supabase freshness tracking ──────────────────────────────────────
+// Written to localStorage so they survive page refreshes.
+// On startup, if LOCAL_MODIFIED_KEY > LAST_PUSH_KEY, the local state is newer
+// than what was last pushed to Supabase (tasks may have been created just before
+// the browser was closed). In that case we push local first instead of overwriting.
+const LOCAL_MODIFIED_KEY = 'icarus-local-modified'; // timestamp of last LOCAL change
+const LAST_PUSH_KEY      = 'icarus-last-push';      // timestamp of last successful push
+
+/** Call whenever a real local mutation happens (not when isSyncing). */
+export function markLocalModified() {
+  if (!isSyncing) localStorage.setItem(LOCAL_MODIFIED_KEY, Date.now().toString());
+}
+
 async function pushToSupabase(syncState: SyncState) {
+  const pushTs = Date.now();
   const { error } = await supabase
     .from('marketflow')
     .upsert(
-      { key: ROW_KEY, data: syncState, updated_at: new Date().toISOString() },
+      { key: ROW_KEY, data: syncState, updated_at: new Date(pushTs).toISOString() },
       { onConflict: 'key' }
     );
-  if (error) console.error('[sync] push error:', error.message);
-  else maybeCreateDailyBackup(syncState);
+  if (error) {
+    console.error('[sync] push error:', error.message);
+  } else {
+    // Record when we last successfully pushed so loadFromSupabase can compare.
+    localStorage.setItem(LAST_PUSH_KEY, pushTs.toString());
+    maybeCreateDailyBackup(syncState);
+  }
 }
 
 // ── Backup ────────────────────────────────────────────────────────────────────
@@ -88,10 +150,11 @@ export async function restoreBackup(id: number) {
     .single();
   if (error || !data?.data) throw new Error('Backup não encontrado');
 
-  // Push backup data as the new current state
-  await pushToSupabase(data.data as SyncState);
+  // Push backup data as the new current state (migrate statuses first)
+  const migrated = migrateStatuses(data.data as SyncState);
+  await pushToSupabase(migrated);
   isSyncing = true;
-  useAppStore.setState(data.data as Partial<ReturnType<typeof useAppStore.getState>>);
+  useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
   isSyncing = false;
 }
 
@@ -119,7 +182,7 @@ export function exportStateAsJSON() {
 /** Import state from a JSON file the user uploads. */
 export async function importStateFromJSON(file: File) {
   const text = await file.text();
-  const parsed = JSON.parse(text) as SyncState;
+  const parsed = migrateStatuses(JSON.parse(text) as SyncState);
   await pushToSupabase(parsed);
   isSyncing = true;
   useAppStore.setState(parsed as Partial<ReturnType<typeof useAppStore.getState>>);
@@ -133,6 +196,23 @@ export async function loadFromSupabase() {
     clearTimeout(saveTimer);
     saveTimer = null;
   }
+
+  // ── Freshness check ───────────────────────────────────────────────────────
+  // If the local state was modified more recently than the last successful
+  // Supabase push, it means tasks may have been created just before the
+  // browser was closed (within the 1.2s debounce window). Push local FIRST
+  // so those tasks aren't overwritten by an older Supabase snapshot.
+  const localModified = parseInt(localStorage.getItem(LOCAL_MODIFIED_KEY) ?? '0', 10);
+  const lastPush      = parseInt(localStorage.getItem(LAST_PUSH_KEY)      ?? '0', 10);
+
+  if (localModified > lastPush) {
+    console.log('[sync] local state is newer than last push — pushing local first');
+    const localState = useAppStore.getState();
+    await pushToSupabase(extractSyncState(localState));
+    supabaseLoaded = true;
+    return; // local IS the latest truth — no need to overwrite from Supabase
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const { data, error } = await supabase
     .from('marketflow')
@@ -151,23 +231,39 @@ export async function loadFromSupabase() {
     const state = useAppStore.getState();
     await pushToSupabase(extractSyncState(state));
   } else {
-    // Supabase has data — hydrate the store (suppress the save triggered by setState)
+    // Supabase has data — migrate statuses then hydrate the store
+    const migrated = migrateStatuses(data.data as SyncState);
     isSyncing = true;
-    useAppStore.setState(data.data as Partial<ReturnType<typeof useAppStore.getState>>);
+    useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
     isSyncing = false;
+    // Persist the migrated data back to Supabase so next load is already clean
+    await pushToSupabase(migrated);
   }
 
   // Only NOW are saves allowed
   supabaseLoaded = true;
 }
 
-/** Debounced save — called on every store mutation, but gated by supabaseLoaded. */
-export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
+/** Debounced save — called on every store mutation, but gated by supabaseLoaded.
+ *  Uses the CURRENT store state at fire-time (not the captured snapshot) so that
+ *  rapid changes (e.g. applying a template with many tasks) are never lost.
+ *  Sets hasPendingLocalSave = true for the whole debounce window so that any
+ *  Supabase Realtime broadcast arriving in that window is ignored. */
+export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
+  // Record that local state has changed (skipped when isSyncing = from Realtime)
+  markLocalModified();
   if (isSyncing || !supabaseLoaded) return;
+  hasPendingLocalSave = true;           // block real-time overwrites
   if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    pushToSupabase(extractSyncState(state));
-  }, 1000);
+  saveTimer = setTimeout(async () => {
+    // Always read the LATEST state at fire-time — not the snapshot captured when
+    // scheduleSave was called — so template/phase applications are never lost.
+    const latest = useAppStore.getState();
+    await pushToSupabase(extractSyncState(latest));
+    // Only release the lock AFTER the save completes so a Realtime echo of this
+    // very push isn't mistaken for a stale remote update.
+    hasPendingLocalSave = false;
+  }, 1200);
 }
 
 /** Subscribe to Supabase Realtime — changes from other devices update local store instantly. */
@@ -185,9 +281,13 @@ export function subscribeToRealtime() {
       },
       (payload: { new?: { data?: SyncState } }) => {
         if (!payload.new?.data) return;
+        // If we have unsaved local changes, this broadcast is stale — skip it.
+        // Our pending save will push the correct state and produce a fresh event.
+        if (hasPendingLocalSave) return;
+        const migrated = migrateStatuses(payload.new.data as SyncState);
         isSyncing = true;
         useAppStore.setState(
-          payload.new.data as Partial<ReturnType<typeof useAppStore.getState>>
+          migrated as Partial<ReturnType<typeof useAppStore.getState>>
         );
         isSyncing = false;
       }

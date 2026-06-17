@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { UserPermission } from '../../types';
 import { MEMBER_PASSWORDS } from '../../data/seed';
@@ -9,6 +9,7 @@ const PERMISSION_COLORS: Record<UserPermission, string> = {
   Gerente:      '#f97316',
   Membro:       '#3b82f6',
   Visualizador: '#9ca3af',
+  Externo:      '#d1d5db',
 };
 
 export function LoginView() {
@@ -21,7 +22,6 @@ export function LoginView() {
   const [loading, setLoading]   = useState(false);
   const [showDemo, setShowDemo] = useState(false);
 
-  // Find matching member as user types email (for avatar preview)
   const matchedMember = teamMembers.find(
     m => m.email?.toLowerCase() === email.trim().toLowerCase()
   );
@@ -29,206 +29,214 @@ export function LoginView() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
-
     setLoading(true);
     setError('');
-
-    // Tiny artificial delay for UX feel
     setTimeout(() => {
       const ok = login(email, password);
-      if (!ok) {
-        setError('E-mail ou senha incorretos.');
-        setPassword('');
-      }
+      if (!ok) { setError('E-mail ou senha incorretos.'); setPassword(''); }
       setLoading(false);
     }, 400);
   };
 
   return (
-    <div
-      className="w-full min-h-screen flex items-center justify-center"
-      style={{ backgroundColor: '#0d0d0d' }}
-    >
-      {/* Background grid lines */}
+    <div className="w-full min-h-screen flex" style={{ fontFamily: "'Geist', -apple-system, system-ui, sans-serif" }}>
+
+      {/* ── Left brand panel ── */}
       <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-        }}
-      />
+        className="hidden lg:flex flex-col justify-between flex-[46%] p-11 relative overflow-hidden"
+        style={{ background: '#0a1626' }}
+      >
+        {/* Wordmark */}
+        <img src="/icarus-wordmark-light.svg" alt="Icarus" style={{ height: 28, width: 'auto', filter: 'brightness(0) invert(1)', alignSelf: 'flex-start' }} />
 
-      {/* Glow */}
-      <div
-        className="absolute pointer-events-none"
-        style={{
-          width: 600, height: 600,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(255,92,53,0.12) 0%, transparent 70%)',
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-        }}
-      />
-
-      <div className="relative w-full max-w-sm mx-4">
-
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-8">
-          <div
-            className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3 shadow-lg"
-            style={{ backgroundColor: '#FF5C35' }}
-          >
-            <span className="text-white font-bold text-[22px] tracking-tight">M</span>
-          </div>
-          <h1 className="text-white font-bold text-[22px] tracking-tight">MarketFlow</h1>
-          <p className="text-white/30 text-[13px] mt-1">Sua plataforma de marketing</p>
+        {/* Hero copy */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          <h1 style={{ fontSize: 42, fontWeight: 600, letterSpacing: '-0.025em', lineHeight: 1.08, color: '#fff', maxWidth: '11ch', margin: 0 }}>
+            Leve o marketing mais alto.
+          </h1>
+          <p style={{ fontSize: 16, color: 'rgba(255,255,255,0.55)', marginTop: 18, lineHeight: 1.55, maxWidth: '34ch' }}>
+            Tarefas, projetos e equipe — tudo em um só lugar, do briefing à entrega.
+          </p>
         </div>
 
-        {/* Card */}
-        <div
-          className="rounded-2xl overflow-hidden"
-          style={{ backgroundColor: '#1a1a1a', border: '1px solid rgba(255,255,255,0.08)' }}
-        >
-          <div className="px-7 pt-7 pb-6">
-            <h2 className="text-white text-[16px] font-semibold mb-1">
-              {matchedMember ? `Olá, ${matchedMember.name.split(' ')[0]} 👋` : 'Bem-vindo de volta'}
-            </h2>
-            <p className="text-white/35 text-[13px] mb-6">
-              Entre com suas credenciais para continuar
-            </p>
+        {/* Footer */}
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', position: 'relative', zIndex: 1, margin: 0 }}>
+          © 2026 Icarus · Plataforma de gestão de marketing
+        </p>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Email */}
-              <div>
-                <label className="block text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-                  E-mail
-                </label>
-                <div className="relative">
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => { setEmail(e.target.value); setError(''); }}
-                    placeholder="seu@email.com"
-                    autoFocus
-                    className="w-full text-[14px] text-white placeholder-white/20 rounded-xl px-4 py-3 outline-none transition-all"
-                    style={{
-                      backgroundColor: '#252525',
-                      border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                    }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#FF5C35'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; }}
-                  />
-                  {/* Matched member avatar */}
-                  {matchedMember && (
-                    <div
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white"
-                      style={{ backgroundColor: matchedMember.color }}
-                    >
-                      {matchedMember.avatar}
-                    </div>
-                  )}
-                </div>
-              </div>
+        {/* Oversized faint brand mark */}
+        <img
+          src="/icarus-mark-light.svg"
+          alt=""
+          aria-hidden="true"
+          style={{ position: 'absolute', right: -70, bottom: -60, width: 360, opacity: 0.05, pointerEvents: 'none' }}
+        />
+      </div>
 
-              {/* Password */}
-              <div>
-                <label className="block text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-1.5">
-                  Senha
-                </label>
-                <div className="relative">
-                  <input
-                    type={showPwd ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => { setPassword(e.target.value); setError(''); }}
-                    placeholder="••••••••"
-                    className="w-full text-[14px] text-white placeholder-white/20 rounded-xl px-4 py-3 pr-11 outline-none transition-all"
-                    style={{
-                      backgroundColor: '#252525',
-                      border: `1px solid ${error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'}`,
-                    }}
-                    onFocus={e => { e.currentTarget.style.borderColor = '#FF5C35'; }}
-                    onBlur={e => { e.currentTarget.style.borderColor = error ? 'rgba(239,68,68,0.5)' : 'rgba(255,255,255,0.08)'; }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPwd(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/25 hover:text-white/60 transition-colors"
-                  >
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </div>
+      {/* ── Right form panel ── */}
+      <div
+        className="flex-1 flex items-center justify-center p-8"
+        style={{ background: '#f5f7fa' }}
+      >
+        <div style={{ width: '100%', maxWidth: 360 }}>
 
-              {/* Error */}
-              {error && (
-                <p className="text-[12px] text-red-400 font-medium">{error}</p>
-              )}
-
-              {/* Submit */}
-              <button
-                type="submit"
-                disabled={loading || !email.trim() || !password}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-[14px] font-semibold text-white transition-all mt-2 disabled:opacity-40"
-                style={{ backgroundColor: '#FF5C35' }}
-                onMouseEnter={e => { if (!loading) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e54e2a'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#FF5C35'; }}
-              >
-                {loading ? (
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <LogIn size={15} />
-                    Entrar
-                  </>
-                )}
-              </button>
-            </form>
+          {/* Mobile logo */}
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <img src="/icarus-mark.svg" alt="Icarus" style={{ height: 28 }} />
+            <img src="/icarus-wordmark.svg" alt="Icarus" style={{ height: 22 }} />
           </div>
 
+          {/* Heading */}
+          <h2 style={{ fontSize: 24, fontWeight: 600, letterSpacing: '-0.02em', color: '#161a21', margin: 0 }}>
+            {matchedMember ? `Olá, ${matchedMember.name.split(' ')[0]}` : 'Entrar na sua conta'}
+          </h2>
+          <p style={{ fontSize: 14, color: '#6b7484', marginTop: 6, marginBottom: 28 }}>
+            {matchedMember ? 'Continue de onde parou.' : 'Bem-vindo de volta. Continue de onde parou.'}
+          </p>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+            {/* Email */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#4d5562' }}>E-mail</span>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => { setEmail(e.target.value); setError(''); }}
+                  placeholder="seu@email.com"
+                  autoFocus
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    height: 40, padding: '0 12px',
+                    paddingRight: matchedMember ? 44 : 12,
+                    fontSize: 14, color: '#161a21',
+                    background: '#fff',
+                    border: `1px solid ${error ? '#e5484d' : '#dbe1ea'}`,
+                    borderRadius: 6, outline: 'none',
+                    transition: 'border-color 120ms',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#1f6feb'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = error ? '#e5484d' : '#dbe1ea'; }}
+                />
+                {matchedMember && (
+                  <div
+                    style={{
+                      position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                      width: 24, height: 24, borderRadius: '50%',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, fontWeight: 700, color: '#fff',
+                      backgroundColor: matchedMember.color,
+                    }}
+                  >
+                    {matchedMember.avatar}
+                  </div>
+                )}
+              </div>
+            </label>
+
+            {/* Password */}
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#4d5562' }}>Senha</span>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError(''); }}
+                  placeholder="••••••••"
+                  style={{
+                    width: '100%', boxSizing: 'border-box',
+                    height: 40, padding: '0 40px 0 12px',
+                    fontSize: 14, color: '#161a21',
+                    background: '#fff',
+                    border: `1px solid ${error ? '#e5484d' : '#dbe1ea'}`,
+                    borderRadius: 6, outline: 'none',
+                    transition: 'border-color 120ms',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#1f6feb'; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = error ? '#e5484d' : '#dbe1ea'; }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(v => !v)}
+                  style={{
+                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                    background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                    color: '#98a2b3', display: 'flex',
+                  }}
+                >
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </label>
+
+            {/* Error */}
+            {error && (
+              <p style={{ fontSize: 13, color: '#cb2c31', margin: 0 }}>{error}</p>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading || !email.trim() || !password}
+              style={{
+                height: 40, borderRadius: 6, border: 'none', cursor: 'pointer',
+                fontSize: 14, fontWeight: 600, color: '#fff',
+                backgroundColor: loading || !email.trim() || !password ? '#93bbfd' : '#1f6feb',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                transition: 'background-color 120ms',
+                marginTop: 4,
+              }}
+              onMouseEnter={e => { if (!loading && email.trim() && password) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1a5bd0'; }}
+              onMouseLeave={e => { if (!loading && email.trim() && password) (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#1f6feb'; }}
+            >
+              {loading
+                ? <span style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'block' }} />
+                : 'Entrar'
+              }
+            </button>
+          </form>
+
           {/* Demo credentials */}
-          <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ marginTop: 28, borderTop: '1px solid #eef1f6', paddingTop: 20 }}>
             <button
               onClick={() => setShowDemo(v => !v)}
-              className="w-full flex items-center justify-between px-7 py-3 text-[12px] text-white/25 hover:text-white/40 transition-colors"
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '0 0 12px', background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, color: '#98a2b3',
+              }}
             >
               <span>Credenciais de demonstração</span>
-              <span className="text-[10px]">{showDemo ? '▲' : '▼'}</span>
+              <span style={{ fontSize: 10 }}>{showDemo ? '▲' : '▼'}</span>
             </button>
 
             {showDemo && (
-              <div className="px-7 pb-5 space-y-2">
-                {teamMembers.map(m => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {teamMembers.filter(m => m.permission !== 'Externo').map(m => {
                   const perm = (m.permission ?? 'Membro') as UserPermission;
                   return (
                     <button
                       key={m.id}
-                      onClick={() => {
-                        setEmail(m.email);
-                        setPassword(MEMBER_PASSWORDS[m.id] ?? '');
-                        setError('');
-                        setShowDemo(false);
+                      onClick={() => { setEmail(m.email); setPassword(MEMBER_PASSWORDS[m.id] ?? ''); setError(''); setShowDemo(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 10px', borderRadius: 6, border: '1px solid #eef1f6',
+                        background: '#fff', cursor: 'pointer', textAlign: 'left',
+                        transition: 'border-color 120ms',
                       }}
-                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-colors text-left"
-                      style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
-                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.07)'; }}
-                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.04)'; }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#dbe1ea'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = '#eef1f6'; }}
                     >
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
-                        style={{ backgroundColor: m.color }}
-                      >
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', backgroundColor: m.color }}>
                         {m.avatar}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] text-white/70 font-medium truncate">{m.name}</p>
-                        <p className="text-[10px] text-white/25 truncate">{m.email}</p>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, fontWeight: 500, color: '#232831', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</p>
+                        <p style={{ fontSize: 11, color: '#98a2b3', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</p>
                       </div>
-                      <span
-                        className="text-[10px] font-semibold shrink-0"
-                        style={{ color: PERMISSION_COLORS[perm] }}
-                      >
-                        {perm}
-                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 600, flexShrink: 0, color: PERMISSION_COLORS[perm] }}>{perm}</span>
                     </button>
                   );
                 })}
@@ -236,11 +244,9 @@ export function LoginView() {
             )}
           </div>
         </div>
-
-        <p className="text-center text-white/15 text-[11px] mt-6">
-          MarketFlow · Todos os direitos reservados
-        </p>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

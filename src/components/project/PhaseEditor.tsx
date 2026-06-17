@@ -113,7 +113,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
                   onDrop={() => handleDrop(ph.id)}
                   onDragLeave={() => setDragOver(null)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-colors group ${
-                    dragOver === ph.id ? 'border-[#FF5C35]/40 bg-orange-50/40' : 'border-gray-100 hover:border-gray-200 bg-white'
+                    dragOver === ph.id ? 'border-[#1f6feb]/40 bg-orange-50/40' : 'border-gray-100 hover:border-gray-200 bg-white'
                   }`}
                 >
                   {/* Drag handle */}
@@ -131,7 +131,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
                         if (e.key === 'Escape') setEditingId(null);
                       }}
                       onBlur={() => commitEdit(ph.id)}
-                      className="flex-1 text-[13px] font-medium text-gray-800 bg-transparent outline-none border-b border-[#FF5C35]/50"
+                      className="flex-1 text-[13px] font-medium text-gray-800 bg-transparent outline-none border-b border-[#1f6feb]/50"
                     />
                   ) : (
                     <span
@@ -174,8 +174,8 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
 
             {/* Add new phase */}
             {addingNew ? (
-              <div className="flex items-center gap-2 mt-2 px-3 py-2.5 rounded-xl border border-[#FF5C35]/30 bg-orange-50/30">
-                <Plus size={13} className="text-[#FF5C35] shrink-0" />
+              <div className="flex items-center gap-2 mt-2 px-3 py-2.5 rounded-xl border border-[#1f6feb]/30 bg-orange-50/30">
+                <Plus size={13} className="text-[#1f6feb] shrink-0" />
                 <input
                   ref={newInputRef}
                   autoFocus
@@ -194,7 +194,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
             ) : (
               <button
                 onClick={() => { setAddingNew(true); setTimeout(() => newInputRef.current?.focus(), 50); }}
-                className="w-full mt-2 flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-gray-200 text-[13px] text-gray-400 hover:border-[#FF5C35]/40 hover:text-[#FF5C35] transition-colors"
+                className="w-full mt-2 flex items-center gap-2 px-3 py-2.5 rounded-xl border border-dashed border-gray-200 text-[13px] text-gray-400 hover:border-[#1f6feb]/40 hover:text-[#1f6feb] transition-colors"
               >
                 <Plus size={13} />
                 Adicionar fase
@@ -230,7 +230,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
                     </div>
                     <button
                       onClick={() => { applyPhaseTemplate(tpl.id, projectId); onClose(); }}
-                      className="text-[11px] font-semibold text-[#FF5C35] hover:underline shrink-0"
+                      className="text-[11px] font-semibold text-[#1f6feb] hover:underline shrink-0"
                     >
                       Aplicar
                     </button>
@@ -263,7 +263,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
 
                 {/* Save current phases as template */}
                 {showSaveTemplate ? (
-                  <div className="flex items-center gap-2 mt-1 px-3 py-2 rounded-xl border border-[#FF5C35]/30 bg-orange-50/30">
+                  <div className="flex items-center gap-2 mt-1 px-3 py-2 rounded-xl border border-[#1f6feb]/30 bg-orange-50/30">
                     <input
                       ref={templateInputRef}
                       autoFocus
@@ -284,7 +284,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
                 ) : (
                   <button
                     onClick={() => setShowSaveTemplate(true)}
-                    className="w-full flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#FF5C35]/40 hover:text-[#FF5C35] transition-colors"
+                    className="w-full flex items-center gap-1.5 px-3 py-2 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#1f6feb]/40 hover:text-[#1f6feb] transition-colors"
                   >
                     <Plus size={11} />
                     Salvar fases atuais como template
@@ -299,7 +299,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
             <button
               onClick={onClose}
               className="w-full py-2.5 rounded-xl text-[13px] font-semibold text-white transition-colors"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               Concluído
             </button>

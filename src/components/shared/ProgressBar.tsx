@@ -5,7 +5,7 @@ interface ProgressBarProps {
   showLabel?: boolean;
 }
 
-export function ProgressBar({ value, color = '#FF5C35', height = 'normal', showLabel = false }: ProgressBarProps) {
+export function ProgressBar({ value, color = '#1f6feb', height = 'normal', showLabel = false }: ProgressBarProps) {
   const h = height === 'thin' ? 'h-1' : 'h-1.5';
   return (
     <div className="flex items-center gap-2">

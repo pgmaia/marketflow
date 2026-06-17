@@ -14,16 +14,16 @@ export function CompanyCard({ company }: CompanyCardProps) {
   const projectIds = companyProjects.map(p => p.id);
   const allTasks = tasks.filter(t => projectIds.includes(t.projectId));
 
-  const done = allTasks.filter(t => t.status === 'Done').length;
-  const blocked = allTasks.filter(t => t.status === 'Blocked').length;
-  const inProgress = allTasks.filter(t => t.status === 'In Progress').length;
+  const done = allTasks.filter(t => t.status === 'Concluído').length;
+  const blocked = allTasks.filter(t => t.status === 'Bloqueado').length;
+  const inProgress = allTasks.filter(t => t.status === 'Em andamento').length;
   const health = allTasks.length ? Math.round((done / allTasks.length) * 100) : 0;
 
   const today = new Date().toISOString().split('T')[0];
-  const overdue = allTasks.filter(t => t.dueDate < today && t.status !== 'Done').length;
+  const overdue = allTasks.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
 
   const upcoming = allTasks
-    .filter(t => t.dueDate >= today && t.status !== 'Done')
+    .filter(t => t.dueDate >= today && t.status !== 'Concluído')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const nextDeadline = upcoming[0]?.dueDate;
 

@@ -14,17 +14,17 @@ export function StatsBar() {
   });
 
   const today = new Date().toISOString().split('T')[0];
-  const done = filtered.filter(t => t.status === 'Done').length;
-  const inProgress = filtered.filter(t => t.status === 'In Progress').length;
-  const blocked = filtered.filter(t => t.status === 'Blocked').length;
-  const overdue = filtered.filter(t => t.dueDate < today && t.status !== 'Done').length;
+  const done = filtered.filter(t => t.status === 'Concluído').length;
+  const inProgress = filtered.filter(t => t.status === 'Em andamento').length;
+  const blocked = filtered.filter(t => t.status === 'Bloqueado').length;
+  const overdue = filtered.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
 
   const stats = [
-    { label: 'Total Tasks', value: filtered.length, icon: TrendingUp, color: 'text-gray-600', bg: 'bg-gray-50' },
-    { label: 'Done', value: done, icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
-    { label: 'In Progress', value: inProgress, icon: Clock, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Blocked', value: blocked, icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-50' },
-    { label: 'Overdue', value: overdue, icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50' },
+    { label: 'Total',        value: filtered.length, icon: TrendingUp,    color: 'text-gray-600',  bg: 'bg-gray-50'  },
+    { label: 'Concluídas',   value: done,            icon: CheckCircle2,  color: 'text-green-600', bg: 'bg-green-50' },
+    { label: 'Em andamento', value: inProgress,      icon: Clock,         color: 'text-blue-600',  bg: 'bg-blue-50'  },
+    { label: 'Bloqueadas',   value: blocked,         icon: AlertTriangle, color: 'text-red-600',   bg: 'bg-red-50'   },
+    { label: 'Atrasadas',    value: overdue,         icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50' },
   ];
 
   return (
