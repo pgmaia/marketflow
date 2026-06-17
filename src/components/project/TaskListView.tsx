@@ -1007,13 +1007,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
   const clearSelection = () => setSelectedIds(new Set());
 
   const selectedTasks = tasks.filter(t => selectedIds.has(t.id));
-  const topLevelTasks = tasks.filter(t => !t.parentTaskId);
-
-  const sortPhase = (arr: Task[]) => sortFn ? [...arr].sort(sortFn) : arr;
+  const rawTopLevel = tasks.filter(t => !t.parentTaskId);
+  const topLevelTasks = sortFn ? [...rawTopLevel].sort(sortFn) : rawTopLevel;
 
   // In "separate" mode, subtasks appear as flat rows grouped by phase
   const getPhaseRows = (phaseName: string): Task[] => {
-    const parents = sortPhase(topLevelTasks.filter(t => t.phase === phaseName));
+    const parents = topLevelTasks.filter(t => t.phase === phaseName);
     if (subtaskMode !== 'separate') return parents;
     const subs = tasks.filter(t => t.parentTaskId && t.phase === phaseName);
     return [...parents, ...subs];
@@ -1148,7 +1147,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                             customCols={customColumns}
                           />
                         ))
-                      : sortPhase(topLevelTasks.filter(t => t.phase === ph.name)).map(task => {
+                      : topLevelTasks.filter(t => t.phase === ph.name).map(task => {
                           const subtasks = tasks.filter(t => t.parentTaskId === task.id);
                           const isExpanded = subtaskMode === 'expanded' || !!expandedTasks[task.id];
                           return (
