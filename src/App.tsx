@@ -5,6 +5,7 @@ import { loadFromSupabase, scheduleSave, subscribeToRealtime } from './lib/syncS
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { VisualizadorView } from './components/dashboard/VisualizadorView';
 import { CompanyView } from './components/dashboard/CompanyView';
 import { KanbanBoard } from './components/project/KanbanBoard';
 import { TaskModal } from './components/task/TaskModal';
@@ -16,12 +17,35 @@ import { ScheduleView } from './components/schedule/ScheduleView';
 import { BackupView } from './components/backup/BackupView';
 
 export default function App() {
-  const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode } = useAppStore();
+  const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode, teamMembers, currentUserId, logout } = useAppStore();
+  const currentMember = teamMembers.find(m => m.id === currentUserId);
+  const isAdmin        = currentMember?.permission === 'Admin';
+  const isVisualizador = currentMember?.permission === 'Visualizador';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Supabase sync — load on mount, save on change, listen for remote updates
   useEffect(() => {
-    loadFromSupabase();
+    loadFromSupabase().then(() => {
+      // Deep-link: ?task=TASK_ID opens the task modal directly
+      const params = new URLSearchParams(window.location.search);
+      const taskId = params.get('task');
+      if (taskId) {
+        const { tasks, projects, companies, setActiveCompany, setActiveProject, setActiveTask } = useAppStore.getState();
+        const target = tasks.find(t => t.id === taskId);
+        if (target) {
+          const project = projects.find(p => p.id === target.projectId);
+          if (project) {
+            const company = companies.find(c => c.id === project.companyId);
+            if (company) setActiveCompany(company.id);
+            setActiveProject(project.id);
+          }
+          setActiveTask(taskId);
+          // Remove the param from the URL bar without reloading
+          const clean = window.location.pathname;
+          window.history.replaceState({}, '', clean);
+        }
+      }
+    });
     const channel = subscribeToRealtime();
     const unsubscribe = useAppStore.subscribe((state) => scheduleSave(state));
     return () => {
@@ -34,6 +58,14 @@ export default function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // Security: if the current user was deleted while they had an active session
+  // (detected via real-time Supabase update), force immediate logout.
+  useEffect(() => {
+    if (isAuthenticated && currentUserId && !currentMember) {
+      logout();
+    }
+  }, [isAuthenticated, currentUserId, currentMember, logout]);
+
   if (!isAuthenticated) return <LoginView />;
 
   const handleNewTask = activeProjectId ? () => {
@@ -45,7 +77,7 @@ export default function App() {
       phase: project.phases[0]?.name ?? 'Production',
       title: 'New task',
       type: 'Copy' as const,
-      status: 'Not Started' as const,
+      status: 'Backlog' as const,
       priority: 'Medium' as const,
       dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       createdAt: new Date().toISOString().split('T')[0],
@@ -57,7 +89,7 @@ export default function App() {
   const isFullscreenView = view === 'project' || view === 'flow';
 
   return (
-    <div className="flex w-full min-h-screen bg-white">
+    <div className="flex w-full h-screen overflow-hidden bg-white">
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
 
       {/* Floating hamburger — only on mobile, only for views without a TopBar */}
@@ -70,14 +102,14 @@ export default function App() {
         </button>
       )}
 
-      <div className="flex flex-col flex-1 min-h-screen min-w-0">
+      <div className="flex flex-col flex-1 min-h-0 min-w-0">
         {!isFullscreenView && <TopBar onNewTask={handleNewTask} onMenuToggle={() => setMobileMenuOpen(v => !v)} />}
 
         <main className="flex flex-1 min-h-0 overflow-hidden">
-          {view === 'dashboard' && <DashboardView />}
-          {view === 'company' && <CompanyView />}
+          {view === 'dashboard' && (isVisualizador ? <VisualizadorView /> : <DashboardView />)}
+          {view === 'company' && !isVisualizador && <CompanyView />}
           {view === 'project' && <KanbanBoard />}
-          {view === 'users' && <UserManagementView />}
+          {view === 'users' && isAdmin && <UserManagementView />}
           {view === 'flow' && <FlowView />}
           {view === 'trash' && <TrashView />}
           {view === 'schedule' && <ScheduleView />}
