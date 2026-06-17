@@ -41,7 +41,7 @@ function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, stri
         const bName = memberMap[b.assigneeIds?.[0] ?? b.assigneeId ?? ''] ?? '';
         return aName.localeCompare(bName, 'pt-BR');
       }
-      case 'title':  return a.title.localeCompare(b.title, 'pt-BR');
+      case 'title':  return a.title.localeCompare(b.title, 'pt-BR', { numeric: true, sensitivity: 'base' });
       case 'status': return (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
       default:       return 0;
     }
