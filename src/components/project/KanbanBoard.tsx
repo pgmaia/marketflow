@@ -1,19 +1,55 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check } from 'lucide-react';
 import type { Task } from '../../types';
+import { hasAdminPower } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { PhaseColumn } from './PhaseColumn';
 import { TeamPanel } from './TeamPanel';
 import { TaskListView } from './TaskListView';
+import { CalendarView } from './CalendarView';
 import { ApplyTemplateModal } from '../templates/ApplyTemplateModal';
 import { PhaseEditor } from './PhaseEditor';
 import { EditProjectModal } from './EditProjectModal';
+import { ProjectDocumentView } from './ProjectDocumentView';
 
-type ViewMode = 'board' | 'list';
-const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista' };
+type ViewMode = 'board' | 'list' | 'calendar' | 'document';
+const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Documento' };
+
+type SortBy = 'manual' | 'dueDate' | 'priority' | 'assignee' | 'title' | 'status';
+const SORT_OPTIONS: { value: SortBy; label: string }[] = [
+  { value: 'manual',   label: 'Manual (padrão)' },
+  { value: 'dueDate',  label: 'Prazo'           },
+  { value: 'priority', label: 'Prioridade'      },
+  { value: 'assignee', label: 'Responsável'     },
+  { value: 'title',    label: 'Nome'            },
+  { value: 'status',   label: 'Status'          },
+];
+
+const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
+const STATUS_ORDER: Record<string, number> = {
+  'Em andamento': 0, 'Sprint': 1, 'Em revisão': 2, 'Bloqueado': 3, 'Backlog': 4, 'Concluído': 5,
+};
+
+function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, string>): Task[] {
+  if (sortBy === 'manual') return tasks;
+  return [...tasks].sort((a, b) => {
+    switch (sortBy) {
+      case 'dueDate':  return a.dueDate.localeCompare(b.dueDate);
+      case 'priority': return (PRIORITY_ORDER[a.priority] ?? 9) - (PRIORITY_ORDER[b.priority] ?? 9);
+      case 'assignee': {
+        const aName = memberMap[a.assigneeIds?.[0] ?? a.assigneeId ?? ''] ?? '';
+        const bName = memberMap[b.assigneeIds?.[0] ?? b.assigneeId ?? ''] ?? '';
+        return aName.localeCompare(bName, 'pt-BR');
+      }
+      case 'title':  return a.title.localeCompare(b.title, 'pt-BR');
+      case 'status': return (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+      default:       return 0;
+    }
+  });
+}
 
 export function KanbanBoard() {
-  const { projects, tasks, companies, teamMembers, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany } = useAppStore();
+  const { projects, tasks, companies, teamMembers, teams, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany, updateProject } = useAppStore();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [showTeam, setShowTeam] = useState(true);
   const [showDone, setShowDone] = useState(true);
@@ -23,7 +59,10 @@ export function KanbanBoard() {
   const [showProblems, setShowProblems] = useState(false);
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<SortBy>('manual');
+  const [showSortMenu, setShowSortMenu] = useState(false);
   const problemsRef = useRef<HTMLDivElement>(null);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!showProblems) return;
@@ -36,34 +75,49 @@ export function KanbanBoard() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showProblems]);
 
+  useEffect(() => {
+    if (!showSortMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) {
+        setShowSortMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showSortMenu]);
+
   const project = projects.find(p => p.id === activeProjectId);
   if (!project) return null;
 
+  const currentUser = teamMembers.find(m => m.id === currentUserId);
   const company = companies.find(c => c.id === project.companyId);
   const allProjectTasks = tasks.filter(t => t.projectId === project.id);
   const projectTasks = allProjectTasks.filter(t => !t.parentTaskId);
-  const displayTasks = showDone ? allProjectTasks : allProjectTasks.filter(t => t.status !== 'Done');
-  const displayTopLevel = showDone ? projectTasks : projectTasks.filter(t => t.status !== 'Done');
+  const displayTasks = showDone ? allProjectTasks : allProjectTasks.filter(t => t.status !== 'Concluído');
+  const displayTopLevel = showDone ? projectTasks : projectTasks.filter(t => t.status !== 'Concluído');
 
   // User filter (applied on top of showDone filter)
-  const currentUser = teamMembers.find(m => m.id === currentUserId);
-  const isAdminOrManager = currentUser?.permission === 'Admin' || currentUser?.permission === 'Gerente';
+  // Gerentes de uma equipe associada a esta empresa também têm poder de Admin aqui
+  const isAdminOrManager = hasAdminPower(currentUserId, project.companyId, teamMembers, teams);
   const projectMembers = teamMembers.filter(m => project.teamMemberIds.includes(m.id));
+  const memberMap: Record<string, string> = Object.fromEntries(teamMembers.map(m => [m.id, m.name]));
   const userFiltered = selectedUserIds.length > 0;
-  const filteredTasks = userFiltered
-    ? displayTasks.filter(t => selectedUserIds.includes(t.assigneeId ?? ''))
-    : displayTasks;
-  const filteredTopLevel = userFiltered
-    ? displayTopLevel.filter(t => selectedUserIds.includes(t.assigneeId ?? ''))
-    : displayTopLevel;
+  const filteredTasks = sortTasks(
+    userFiltered ? displayTasks.filter(t => selectedUserIds.includes(t.assigneeId ?? '')) : displayTasks,
+    sortBy, memberMap,
+  );
+  const filteredTopLevel = sortTasks(
+    userFiltered ? displayTopLevel.filter(t => selectedUserIds.includes(t.assigneeId ?? '')) : displayTopLevel,
+    sortBy, memberMap,
+  );
 
   const toggleUser = (id: string) =>
     setSelectedUserIds(prev => prev.includes(id) ? prev.filter(u => u !== id) : [...prev, id]);
 
-  const done = projectTasks.filter(t => t.status === 'Done').length;
-  const blockedTasks = projectTasks.filter(t => t.status === 'Blocked');
+  const done = projectTasks.filter(t => t.status === 'Concluído').length;
+  const blockedTasks = projectTasks.filter(t => t.status === 'Bloqueado');
   const today = new Date().toISOString().split('T')[0];
-  const overdueTasks = projectTasks.filter(t => t.dueDate < today && t.status !== 'Done');
+  const overdueTasks = projectTasks.filter(t => t.dueDate < today && t.status !== 'Concluído');
   const blocked = blockedTasks.length;
   const overdue = overdueTasks.length;
   const progress = projectTasks.length ? Math.round((done / projectTasks.length) * 100) : 0;
@@ -77,7 +131,7 @@ export function KanbanBoard() {
       phase,
       title: 'New task',
       type: 'Copy',
-      status: 'Not Started',
+      status: 'Backlog',
       priority: 'Medium',
       dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
       createdAt: new Date().toISOString().split('T')[0],
@@ -89,7 +143,7 @@ export function KanbanBoard() {
   const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 bg-white">
+    <div className="flex flex-col flex-1 min-h-0 min-w-0 bg-white">
 
       {/* Project Header */}
       <div className="border-b border-[#E5E7EB] shrink-0">
@@ -106,7 +160,7 @@ export function KanbanBoard() {
                 <button
                   onClick={() => setShowEditProject(true)}
                   title="Editar projeto"
-                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-300 hover:text-[#FF5C35] transition-colors shrink-0"
+                  className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-300 hover:text-[#1f6feb] transition-colors shrink-0"
                 >
                   <Pencil size={13} />
                 </button>
@@ -216,13 +270,13 @@ export function KanbanBoard() {
         <div className="px-4 md:px-12 flex items-center justify-between gap-2 flex-wrap">
           {/* View tabs */}
           <div className="flex items-center">
-            {(['board', 'list'] as ViewMode[]).map(v => (
+            {(['board', 'list', 'calendar', 'document'] as ViewMode[]).map(v => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors ${viewMode === v ? 'border-[#FF5C35] text-[#FF5C35]' : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'}`}
+                className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors ${viewMode === v ? 'border-[#1f6feb] text-[#1f6feb]' : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'}`}
               >
-                {v === 'board' ? <LayoutGrid size={13} /> : <List size={13} />}
+                {v === 'board' ? <LayoutGrid size={13} /> : v === 'list' ? <List size={13} /> : v === 'calendar' ? <CalendarDays size={13} /> : <FileText size={13} />}
                 {viewLabel[v]}
               </button>
             ))}
@@ -232,7 +286,7 @@ export function KanbanBoard() {
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
               onClick={() => setShowDone(v => !v)}
-              className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${!showDone ? 'border-[#FF5C35]/30 bg-[#FF5C35]/5 text-[#FF5C35]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+              className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${!showDone ? 'border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
             >
               {showDone ? <Eye size={12} /> : <EyeOff size={12} />}
               <span className="hidden sm:inline">Concluídas</span>
@@ -246,7 +300,7 @@ export function KanbanBoard() {
             </button>
             <button
               onClick={() => setShowTeam(s => !s)}
-              className={`hidden sm:flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${showTeam ? 'border-[#FF5C35]/30 bg-[#FF5C35]/5 text-[#FF5C35]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+              className={`hidden sm:flex h-7 items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${showTeam ? 'border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
             >
               <Users size={12} />
               Equipe
@@ -258,10 +312,36 @@ export function KanbanBoard() {
               <Settings2 size={12} />
               Fases
             </button>
+            {/* Sort dropdown */}
+            <div ref={sortMenuRef} className="relative">
+              <button
+                onClick={() => setShowSortMenu(v => !v)}
+                className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${sortBy !== 'manual' ? 'border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+              >
+                <ArrowUpDown size={12} />
+                <span className="hidden sm:inline">{sortBy === 'manual' ? 'Ordenar' : SORT_OPTIONS.find(o => o.value === sortBy)?.label}</span>
+              </button>
+              {showSortMenu && (
+                <div className="absolute right-0 top-full mt-1.5 bg-white rounded-xl border border-gray-150 shadow-xl z-50 py-1.5 min-w-[180px]" style={{ boxShadow: '0 8px 32px rgba(0,0,0,0.12)' }}>
+                  <p className="px-3 py-1.5 text-[10px] font-bold text-gray-300 uppercase tracking-wider">Ordenar por</p>
+                  {SORT_OPTIONS.map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => { setSortBy(opt.value); setShowSortMenu(false); }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-[13px] hover:bg-gray-50 transition-colors ${sortBy === opt.value ? 'text-[#1f6feb] font-semibold' : 'text-gray-700'}`}
+                    >
+                      {opt.label}
+                      {sortBy === opt.value && <Check size={12} className="text-[#1f6feb]" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => handleAddTask(project.phases[0]?.name ?? 'Production')}
               className="h-7 flex items-center gap-1.5 px-3 rounded-md text-[12px] font-semibold text-white"
-              style={{ backgroundColor: '#FF5C35' }}
+              style={{ backgroundColor: '#1f6feb' }}
             >
               <Plus size={13} />
               Nova tarefa
@@ -287,7 +367,7 @@ export function KanbanBoard() {
                 onClick={() => setSelectedUserIds([])}
                 className="h-6 px-2.5 rounded-full text-[11px] font-semibold transition-all shrink-0"
                 style={!userFiltered
-                  ? { backgroundColor: '#FF5C35', color: '#fff' }
+                  ? { backgroundColor: '#1f6feb', color: '#fff' }
                   : { backgroundColor: '#f3f4f6', color: '#9ca3af' }}
               >
                 Todos
@@ -300,16 +380,16 @@ export function KanbanBoard() {
                 onClick={() => toggleUser(currentUserId)}
                 className="h-6 flex items-center gap-1.5 px-2.5 rounded-full text-[11px] font-semibold transition-all shrink-0"
                 style={selectedUserIds.includes(currentUserId)
-                  ? { backgroundColor: currentUser?.color ?? '#FF5C35', color: '#fff' }
+                  ? { backgroundColor: currentUser?.color ?? '#1f6feb', color: '#fff' }
                   : !isAdminOrManager && !userFiltered
-                    ? { backgroundColor: '#FF5C35', color: '#fff' }  // default "active" for non-admins
+                    ? { backgroundColor: '#1f6feb', color: '#fff' }  // default "active" for non-admins
                     : { backgroundColor: '#f3f4f6', color: '#6b7280' }}
               >
                 <span
                   className="w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] font-bold shrink-0"
                   style={{
                     backgroundColor: selectedUserIds.includes(currentUserId) || (!isAdminOrManager && !userFiltered)
-                      ? 'rgba(255,255,255,0.3)' : (currentUser?.color ?? '#FF5C35'),
+                      ? 'rgba(255,255,255,0.3)' : (currentUser?.color ?? '#1f6feb'),
                     color: '#fff',
                   }}
                 >
@@ -354,7 +434,19 @@ export function KanbanBoard() {
       </div>
 
       {/* Content area */}
-      <div className="flex flex-1 min-h-0 overflow-hidden bg-white">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white">
+
+        {/* Document view — full width, no member filter/team panel */}
+        {viewMode === 'document' && (
+          <ProjectDocumentView
+            key={project.id}
+            projectId={project.id}
+            initialContent={project.document ?? ''}
+            projectColor={project.color}
+            onSave={html => updateProject(project.id, { document: html })}
+          />
+        )}
+
         {viewMode === 'board' ? (
           <div className="flex-1 overflow-x-auto px-8 py-6">
             <div className="flex gap-4 h-full" style={{ minWidth: 'max-content' }}>
@@ -368,8 +460,31 @@ export function KanbanBoard() {
               ))}
             </div>
           </div>
-        ) : (
+        ) : viewMode === 'list' ? (
           <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} />
+        ) : null}
+
+        {viewMode === 'calendar' && (
+          <CalendarView
+            tasks={filteredTasks}
+            projectColor={project.color}
+            onTaskClick={setActiveTask}
+            onAddTask={(date) => {
+              const newTask: Task = {
+                id: `t${Date.now()}`,
+                projectId: project.id,
+                phase: project.phases[0]?.name ?? 'Produção',
+                title: 'New task',
+                type: 'Copy',
+                status: 'Backlog',
+                priority: 'Medium',
+                dueDate: date,
+                createdAt: new Date().toISOString().split('T')[0],
+              };
+              addTask(newTask);
+              setTimeout(() => setActiveTask(newTask.id), 50);
+            }}
+          />
         )}
 
         {/* Team panel — only in board view */}
