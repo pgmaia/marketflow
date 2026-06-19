@@ -466,7 +466,13 @@ function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
 function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
   const { updateTask } = useAppStore();
   const [editing, setEditing] = useState(false);
-  const val = task.customFields?.[col.id] ?? '';
+  const storeVal = task.customFields?.[col.id] ?? '';
+  const [localVal, setLocalVal] = useState(storeVal);
+
+  // While not editing, keep local value in sync with the store
+  useEffect(() => {
+    if (!editing) setLocalVal(storeVal);
+  }, [storeVal, editing]);
 
   // Delegate link type to its own component
   if (col.type === 'link') return <LinkCell task={task} col={col} />;
@@ -480,7 +486,7 @@ function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
     return (
       <div className="px-2">
         <select
-          value={val}
+          value={storeVal}
           onChange={e => save(e.target.value)}
           onClick={e => e.stopPropagation()}
           className="w-full text-[12px] text-gray-700 bg-transparent outline-none cursor-pointer truncate"
@@ -500,18 +506,19 @@ function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
         <input
           autoFocus
           type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
-          defaultValue={val}
-          onBlur={e => save(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') save((e.target as HTMLInputElement).value); if (e.key === 'Escape') setEditing(false); }}
+          value={localVal}
+          onChange={e => setLocalVal(e.target.value)}
+          onBlur={() => save(localVal)}
+          onKeyDown={e => { if (e.key === 'Enter') save(localVal); if (e.key === 'Escape') setEditing(false); }}
           className="w-full text-[12px] text-gray-700 bg-white border border-blue-300 rounded px-1 outline-none"
         />
       </div>
     );
   }
 
-  const display = col.type === 'date' && val
-    ? new Date(val + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
-    : val;
+  const display = col.type === 'date' && storeVal
+    ? new Date(storeVal + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' })
+    : storeVal;
 
   return (
     <div
