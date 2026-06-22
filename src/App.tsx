@@ -26,9 +26,11 @@ export default function App() {
   // Supabase sync — load on mount, save on change, listen for remote updates
   useEffect(() => {
     loadFromSupabase().then(() => {
-      // Deep-link: ?task=TASK_ID opens the task modal directly
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get('task');
+      const projectId = params.get('project');
+
+      // Deep-link: ?task=TASK_ID opens the task modal directly
       if (taskId) {
         const { tasks, projects, companies, setActiveCompany, setActiveProject, setActiveTask } = useAppStore.getState();
         const target = tasks.find(t => t.id === taskId);
@@ -40,9 +42,20 @@ export default function App() {
             setActiveProject(project.id);
           }
           setActiveTask(taskId);
-          // Remove the param from the URL bar without reloading
-          const clean = window.location.pathname;
-          window.history.replaceState({}, '', clean);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+
+      // Deep-link: ?project=PROJECT_ID navigates directly to the project
+      if (projectId && !taskId) {
+        const { projects, companies, setActiveCompany, setActiveProject, setView } = useAppStore.getState();
+        const project = projects.find(p => p.id === projectId);
+        if (project) {
+          const company = companies.find(c => c.id === project.companyId);
+          if (company) setActiveCompany(company.id);
+          setActiveProject(project.id);
+          setView('project');
+          window.history.replaceState({}, '', window.location.pathname);
         }
       }
     });

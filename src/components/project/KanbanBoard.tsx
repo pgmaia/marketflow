@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -71,6 +71,7 @@ export function KanbanBoard() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>('manual');
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const problemsRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
 
@@ -348,6 +349,19 @@ export function KanbanBoard() {
               )}
             </div>
 
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}${window.location.pathname}?project=${project.id}`;
+                navigator.clipboard.writeText(url).then(() => {
+                  setLinkCopied(true);
+                  setTimeout(() => setLinkCopied(false), 2000);
+                });
+              }}
+              className="h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-semibold transition-all"
+              style={linkCopied ? { backgroundColor: '#16a34a', color: '#fff' } : { backgroundColor: '#1f6feb', color: '#fff' }}
+            >
+              {linkCopied ? <><Check size={12} /> Copiado!</> : <><Link size={12} /> Compartilhar</>}
+            </button>
             <button
               onClick={() => handleAddTask(project.phases[0]?.name ?? 'Production')}
               className="h-7 flex items-center gap-1.5 px-3 rounded-md text-[12px] font-semibold text-white"
