@@ -478,7 +478,10 @@ function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
   if (col.type === 'link') return <LinkCell task={task} col={col} />;
 
   const save = (v: string) => {
-    updateTask(task.id, { customFields: { ...task.customFields, [col.id]: v } });
+    // Read freshest customFields from the store — the prop may be stale if another
+    // column was saved in the same render cycle (e.g. rapid Tab traversal).
+    const freshFields = useAppStore.getState().tasks.find(t => t.id === task.id)?.customFields;
+    updateTask(task.id, { customFields: { ...(freshFields ?? task.customFields), [col.id]: v } });
     setEditing(false);
   };
 
