@@ -511,8 +511,8 @@ function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
           type={col.type === 'number' ? 'number' : col.type === 'date' ? 'date' : 'text'}
           value={localVal}
           onChange={e => setLocalVal(e.target.value)}
-          onBlur={() => save(localVal)}
-          onKeyDown={e => { if (e.key === 'Enter') save(localVal); if (e.key === 'Escape') setEditing(false); }}
+          onBlur={e => save(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') save((e.target as HTMLInputElement).value); if (e.key === 'Escape') setEditing(false); }}
           className="w-full text-[12px] text-gray-700 bg-white border border-blue-300 rounded px-1 outline-none"
         />
       </div>
