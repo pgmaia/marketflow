@@ -37,9 +37,9 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
   const to   = nodes.find(n => n.id === edge.toId);
   if (!from || !to) return null;
 
-  // Estimate node heights based on tasks
-  const fromH = 52 + from.tasks.length * 32 + 44;
-  const toH   = 52 + to.tasks.length * 32 + 44;
+  // Estimate node heights based on tasks + description area
+  const fromH = 52 + (from.description ? 52 : 32) + from.tasks.length * 32 + 44;
+  const toH   = 52 + (to.description ? 52 : 32) + to.tasks.length * 32 + 44;
 
   const sx = from.x + from.width;
   const sy = from.y + fromH / 2;
@@ -125,12 +125,20 @@ function FlowNodeCard({
   const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask } = useAppStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(node.title);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descVal, setDescVal] = useState(node.description ?? '');
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  const nodeHeight = 52 + node.tasks.length * 32 + 44;
+  const descHeight = node.description ? 52 : 32;
+  const nodeHeight = 52 + descHeight + node.tasks.length * 32 + 44;
+
+  const handleDescSave = () => {
+    updateFlowNode(flowId, node.id, { description: descVal.trim() });
+    setEditingDesc(false);
+  };
 
   const handleTitleSave = () => {
     if (titleVal.trim()) updateFlowNode(flowId, node.id, { title: titleVal.trim() });
@@ -191,7 +199,7 @@ function FlowNodeCard({
             />
           ) : (
             <span
-              className="flex-1 text-[13px] font-bold text-white truncate cursor-text"
+              className="flex-1 text-[13px] font-bold text-white break-words cursor-text leading-snug"
               onDoubleClick={e => { e.stopPropagation(); setEditingTitle(true); }}
             >
               {node.title}
@@ -220,6 +228,33 @@ function FlowNodeCard({
                     />
                   ))}
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Description */}
+        <div className="bg-white border-b border-gray-100 px-3 py-1.5" onClick={e => e.stopPropagation()}>
+          {editingDesc ? (
+            <textarea
+              autoFocus
+              value={descVal}
+              onChange={e => setDescVal(e.target.value)}
+              onBlur={handleDescSave}
+              onKeyDown={e => { if (e.key === 'Escape') { setDescVal(node.description ?? ''); setEditingDesc(false); } }}
+              rows={2}
+              placeholder="Descrição da etapa..."
+              className="w-full text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-1.5 py-1 outline-none focus:border-blue-300 resize-none"
+            />
+          ) : (
+            <div
+              className="cursor-text min-h-[18px]"
+              onClick={() => setEditingDesc(true)}
+            >
+              {node.description ? (
+                <p className="text-[11px] text-gray-500 break-words leading-snug">{node.description}</p>
+              ) : (
+                <p className="text-[11px] text-gray-300 italic">Adicionar descrição...</p>
               )}
             </div>
           )}
@@ -277,14 +312,16 @@ function FlowNodeCard({
 
       {/* Connection handle — shown on hover or when selected */}
       {(hovered || selected) && !connecting && (
-        <>
-          {/* Right handle */}
-          <div
-            className="absolute w-4 h-4 rounded-full bg-white border-2 border-gray-300 hover:border-[#1f6feb] hover:bg-[#1f6feb] cursor-crosshair transition-colors flex items-center justify-center"
-            style={{ right: -8, top: nodeHeight / 2 - 8 }}
-            onMouseDown={e => { e.stopPropagation(); onConnectFrom(e); }}
-          />
-        </>
+        <div
+          className="absolute w-8 h-8 rounded-full bg-white border-2 border-[#1f6feb] hover:bg-[#1f6feb] cursor-crosshair transition-colors flex items-center justify-center shadow-md group/handle"
+          style={{ right: -16, top: nodeHeight / 2 - 16 }}
+          onMouseDown={e => { e.stopPropagation(); onConnectFrom(e); }}
+          title="Arrastar para conectar"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-[#1f6feb] group-hover/handle:text-white transition-colors">
+            <path d="M1 6H10M7 3L10 6L7 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </div>
       )}
 
       {/* Actions — shown when selected */}
@@ -318,7 +355,7 @@ function FlowNodeCard({
 function PreviewEdge({ fromId, toPos, nodes }: { fromId: string; toPos: { x: number; y: number }; nodes: FlowNode[] }) {
   const from = nodes.find(n => n.id === fromId);
   if (!from) return null;
-  const fromH = 52 + from.tasks.length * 32 + 44;
+  const fromH = 52 + (from.description ? 52 : 32) + from.tasks.length * 32 + 44;
   const sx = from.x + from.width;
   const sy = from.y + fromH / 2;
   const tx = toPos.x;
@@ -699,7 +736,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     const minX = Math.min(...board.nodes.map(n => n.x));
     const minY = Math.min(...board.nodes.map(n => n.y));
     const maxX = Math.max(...board.nodes.map(n => n.x + n.width));
-    const maxY = Math.max(...board.nodes.map(n => { const h = 52 + n.tasks.length * 32 + 44; return n.y + h; }));
+    const maxY = Math.max(...board.nodes.map(n => { const h = 52 + (n.description ? 52 : 32) + n.tasks.length * 32 + 44; return n.y + h; }));
     const contentW = maxX - minX;
     const contentH = maxY - minY;
     const newZoom = Math.min(0.95, Math.min((rect.width - 120) / contentW, (rect.height - 120) / contentH));
