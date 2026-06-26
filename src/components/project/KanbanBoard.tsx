@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -152,6 +152,50 @@ export function KanbanBoard() {
   };
 
   const fmtDate = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  const handleExport = () => {
+    const customCols = project.customColumns ?? [];
+    const escape = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
+
+    const headers = [
+      'Fase', 'Título', 'Tipo', 'Status', 'Prioridade',
+      'Responsável', 'Prazo', 'Criado em', 'Descrição', 'Notas',
+      ...customCols.map(c => c.name),
+      'Subtarefa de',
+    ];
+
+    const rows = allProjectTasks.map(t => {
+      const assigneeNames = (t.assigneeIds ?? (t.assigneeId ? [t.assigneeId] : []))
+        .map(id => memberMap[id] ?? id)
+        .join(', ');
+      const parentTitle = t.parentTaskId
+        ? (allProjectTasks.find(p => p.id === t.parentTaskId)?.title ?? t.parentTaskId)
+        : '';
+      return [
+        t.phase,
+        t.title,
+        t.type,
+        t.status,
+        t.priority,
+        assigneeNames,
+        t.dueDate,
+        t.createdAt,
+        t.description ?? '',
+        t.notes ?? '',
+        ...customCols.map(c => t.customFields?.[c.id] ?? ''),
+        parentTitle,
+      ].map(escape);
+    });
+
+    const csv = '﻿' + [headers.map(escape), ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${company?.name ?? 'Projeto'} - ${project.name} - ${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="flex flex-col flex-1 min-h-0 min-w-0 bg-white">
@@ -361,6 +405,14 @@ export function KanbanBoard() {
               style={linkCopied ? { backgroundColor: '#16a34a', color: '#fff' } : { backgroundColor: '#1f6feb', color: '#fff' }}
             >
               {linkCopied ? <><Check size={12} /> Copiado!</> : <><Link size={12} /> Compartilhar</>}
+            </button>
+            <button
+              onClick={handleExport}
+              className="h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-semibold border border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-800 transition-colors"
+              title="Exportar tarefas do projeto em CSV"
+            >
+              <Download size={12} />
+              Exportar
             </button>
             <button
               onClick={() => handleAddTask(project.phases[0]?.name ?? 'Production')}
