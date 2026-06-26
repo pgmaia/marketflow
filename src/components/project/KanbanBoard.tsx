@@ -158,11 +158,18 @@ export function KanbanBoard() {
     const escape = (v: string) => `"${(v ?? '').replace(/"/g, '""')}"`;
 
     const headers = [
-      'Fase', 'Título', 'Tipo', 'Status', 'Prioridade',
+      'Categoria', 'Fase', 'Título', 'Tipo', 'Status', 'Prioridade',
       'Responsável', 'Prazo', 'Criado em', 'Descrição', 'Notas',
       ...customCols.map(c => c.name),
       'Subtarefa de',
     ];
+
+    const itemCategory = (t: Task) => {
+      if (t.isMilestone) return 'Marco';
+      if (t.isMeta) return 'Meta';
+      if (t.parentTaskId) return 'Subtarefa';
+      return 'Tarefa';
+    };
 
     const rows = allProjectTasks.map(t => {
       const assigneeNames = (t.assigneeIds ?? (t.assigneeId ? [t.assigneeId] : []))
@@ -172,6 +179,7 @@ export function KanbanBoard() {
         ? (allProjectTasks.find(p => p.id === t.parentTaskId)?.title ?? t.parentTaskId)
         : '';
       return [
+        itemCategory(t),
         t.phase,
         t.title,
         t.type,
