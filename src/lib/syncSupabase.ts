@@ -65,10 +65,15 @@ function extractSyncState(state: ReturnType<typeof useAppStore.getState>): SyncS
 // supabaseLoaded:      prevents any save BEFORE the initial Supabase load completes
 // hasPendingLocalSave: real-time updates are ignored while we have unsaved local changes
 //                      to prevent a stale Supabase broadcast from overwriting them
+// loadStartedAt:       timestamp when loadFromSupabase started the Supabase fetch
+// lastRealtimeAt:      timestamp when a Realtime event was last applied to the store
+//                      — if lastRealtimeAt > loadStartedAt, the fetch result is stale
 let isSyncing           = false;
 let supabaseLoaded      = false;
 let hasPendingLocalSave = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let loadStartedAt       = 0;
+let lastRealtimeAt      = 0;
 
 // ── Local-vs-Supabase freshness tracking ──────────────────────────────────────
 // Written to localStorage so they survive page refreshes.
@@ -214,9 +219,11 @@ export async function loadFromSupabase() {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
+  loadStartedAt = Date.now();
+
   const { data, error } = await supabase
     .from('marketflow')
-    .select('data')
+    .select('data, updated_at')
     .eq('key', ROW_KEY)
     .maybeSingle();
 
@@ -231,13 +238,37 @@ export async function loadFromSupabase() {
     const state = useAppStore.getState();
     await pushToSupabase(extractSyncState(state));
   } else {
+    // ── Staleness checks ────────────────────────────────────────────────────
+    // 1. If our last successful push (on this device) is more recent than the
+    //    Supabase updated_at, the row we fetched is already behind what we
+    //    pushed earlier. Skip applying it — our in-memory state is correct.
+    const fetchedUpdatedAt = data.updated_at
+      ? new Date(data.updated_at as string).getTime()
+      : 0;
+    const localLastPush = parseInt(localStorage.getItem(LAST_PUSH_KEY) ?? '0', 10);
+    if (localLastPush > fetchedUpdatedAt) {
+      console.log('[sync] fetched snapshot is older than our last push — skipping apply');
+      supabaseLoaded = true;
+      return;
+    }
+
+    // 2. If a Realtime event arrived and was applied while we were awaiting the
+    //    fetch, the fetched snapshot is stale — applying it would revert those
+    //    fresh changes. Skip it; the Realtime state is already in the store.
+    if (lastRealtimeAt > loadStartedAt) {
+      console.log('[sync] Realtime delivered fresher data during fetch — skipping apply');
+      supabaseLoaded = true;
+      return;
+    }
+
     // Supabase has data — migrate statuses then hydrate the store
     const migrated = migrateStatuses(data.data as SyncState);
     isSyncing = true;
     useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
     isSyncing = false;
-    // Persist the migrated data back to Supabase so next load is already clean
-    await pushToSupabase(migrated);
+    // NOTE: do NOT push migrated data back — that would create a Realtime event
+    // that could overwrite recent saves from other tabs/devices. The next user
+    // action will naturally push any migration changes.
   }
 
   // Only NOW are saves allowed
@@ -263,7 +294,7 @@ export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
     // Only release the lock AFTER the save completes so a Realtime echo of this
     // very push isn't mistaken for a stale remote update.
     hasPendingLocalSave = false;
-  }, 1200);
+  }, 500);
 }
 
 /** Subscribe to Supabase Realtime — changes from other devices update local store instantly. */
@@ -285,6 +316,7 @@ export function subscribeToRealtime() {
         // Our pending save will push the correct state and produce a fresh event.
         if (hasPendingLocalSave) return;
         const migrated = migrateStatuses(payload.new.data as SyncState);
+        lastRealtimeAt = Date.now();
         isSyncing = true;
         useAppStore.setState(
           migrated as Partial<ReturnType<typeof useAppStore.getState>>
