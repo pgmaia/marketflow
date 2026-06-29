@@ -88,7 +88,7 @@ export function markLocalModified() {
   if (!isSyncing) localStorage.setItem(LOCAL_MODIFIED_KEY, Date.now().toString());
 }
 
-async function pushToSupabase(syncState: SyncState) {
+async function pushToSupabase(syncState: SyncState): Promise<boolean> {
   const pushTs = Date.now();
   const { error } = await supabase
     .from('marketflow')
@@ -98,11 +98,12 @@ async function pushToSupabase(syncState: SyncState) {
     );
   if (error) {
     console.error('[sync] push error:', error.message);
-  } else {
-    // Record when we last successfully pushed so loadFromSupabase can compare.
-    localStorage.setItem(LAST_PUSH_KEY, pushTs.toString());
-    maybeCreateDailyBackup(syncState);
+    return false;
   }
+  // Record when we last successfully pushed so loadFromSupabase can compare.
+  localStorage.setItem(LAST_PUSH_KEY, pushTs.toString());
+  maybeCreateDailyBackup(syncState);
+  return true;
 }
 
 // ── Backup ────────────────────────────────────────────────────────────────────
@@ -290,11 +291,48 @@ export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
     // Always read the LATEST state at fire-time — not the snapshot captured when
     // scheduleSave was called — so template/phase applications are never lost.
     const latest = useAppStore.getState();
-    await pushToSupabase(extractSyncState(latest));
-    // Only release the lock AFTER the save completes so a Realtime echo of this
-    // very push isn't mistaken for a stale remote update.
-    hasPendingLocalSave = false;
+    let ok = false;
+    try {
+      ok = await pushToSupabase(extractSyncState(latest));
+    } finally {
+      // Always release the lock — even on failure — so Realtime events are not
+      // permanently blocked. Without this, a single network hiccup would make
+      // the app ignore ALL remote updates for the rest of the session.
+      hasPendingLocalSave = false;
+    }
+    if (!ok) {
+      // Push failed (network error, Supabase outage, etc.). Schedule a retry in
+      // 8 seconds. LOCAL_MODIFIED_KEY > LAST_PUSH_KEY so a page reload also
+      // triggers a push — but we retry in-session so the user doesn't have to.
+      console.warn('[sync] push failed — will retry in 8 s');
+      setTimeout(() => {
+        if (supabaseLoaded && !hasPendingLocalSave) scheduleSave(useAppStore.getState());
+      }, 8000);
+    }
   }, 500);
+}
+
+/** Re-fetch from Supabase and apply if the remote row is newer than our last push.
+ *  Used on Realtime reconnect to catch any events missed during a WebSocket gap. */
+async function refetchIfStale() {
+  if (hasPendingLocalSave || !supabaseLoaded) return;
+  const { data } = await supabase
+    .from('marketflow')
+    .select('data, updated_at')
+    .eq('key', ROW_KEY)
+    .maybeSingle();
+  if (!data?.data || hasPendingLocalSave) return;
+  const fetchedUpdatedAt = data.updated_at
+    ? new Date(data.updated_at as string).getTime()
+    : 0;
+  const localLastPush = parseInt(localStorage.getItem(LAST_PUSH_KEY) ?? '0', 10);
+  // Only apply if Supabase genuinely has something newer than our last push.
+  if (fetchedUpdatedAt <= localLastPush) return;
+  const migrated = migrateStatuses(data.data as SyncState);
+  lastRealtimeAt = Date.now();
+  isSyncing = true;
+  useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
+  isSyncing = false;
 }
 
 /** Subscribe to Supabase Realtime — changes from other devices update local store instantly. */
@@ -324,7 +362,14 @@ export function subscribeToRealtime() {
         isSyncing = false;
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      // When the WebSocket reconnects after a drop, Supabase does NOT replay
+      // missed postgres_changes events. We re-fetch manually so the user never
+      // sees a stale state due to an invisible network blip.
+      if (status === 'SUBSCRIBED' && supabaseLoaded) {
+        refetchIfStale();
+      }
+    });
 
   return channel;
 }
