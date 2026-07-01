@@ -411,8 +411,9 @@ function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
 
   const save = (newEntries: LinkEntry[]) => {
     const filtered = newEntries.filter(e => e.url.trim());
+    const freshFields = useAppStore.getState().tasks.find(t => t.id === task.id)?.customFields;
     updateTask(task.id, {
-      customFields: { ...task.customFields, [col.id]: filtered.length ? serializeLinkEntries(filtered) : '' },
+      customFields: { ...(freshFields ?? task.customFields), [col.id]: filtered.length ? serializeLinkEntries(filtered) : '' },
     });
     setOpen(false);
   };
