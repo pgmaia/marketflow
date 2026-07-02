@@ -75,18 +75,11 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let loadStartedAt       = 0;
 let lastRealtimeAt      = 0;
 
-// ── Local-vs-Supabase freshness tracking ──────────────────────────────────────
-// Written to localStorage so they survive page refreshes.
-// On startup, if LOCAL_MODIFIED_KEY > LAST_PUSH_KEY, the local state is newer
-// than what was last pushed to Supabase (tasks may have been created just before
-// the browser was closed). In that case we push local first instead of overwriting.
-const LOCAL_MODIFIED_KEY = 'icarus-local-modified'; // timestamp of last LOCAL change
-const LAST_PUSH_KEY      = 'icarus-last-push';      // timestamp of last successful push
-
-/** Call whenever a real local mutation happens (not when isSyncing). */
-export function markLocalModified() {
-  if (!isSyncing) localStorage.setItem(LOCAL_MODIFIED_KEY, Date.now().toString());
-}
+// ── Supabase push timestamp ───────────────────────────────────────────────────
+// Written to localStorage on every successful push so loadFromSupabase and
+// refetchIfStale can compare against the Supabase row's updated_at to decide
+// whether the remote row is genuinely newer than what we last sent.
+const LAST_PUSH_KEY = 'icarus-last-push'; // timestamp of last successful push
 
 async function pushToSupabase(syncState: SyncState): Promise<boolean> {
   const pushTs = Date.now();
@@ -203,23 +196,6 @@ export async function loadFromSupabase() {
     saveTimer = null;
   }
 
-  // ── Freshness check ───────────────────────────────────────────────────────
-  // If the local state was modified more recently than the last successful
-  // Supabase push, it means tasks may have been created just before the
-  // browser was closed (within the 1.2s debounce window). Push local FIRST
-  // so those tasks aren't overwritten by an older Supabase snapshot.
-  const localModified = parseInt(localStorage.getItem(LOCAL_MODIFIED_KEY) ?? '0', 10);
-  const lastPush      = parseInt(localStorage.getItem(LAST_PUSH_KEY)      ?? '0', 10);
-
-  if (localModified > lastPush) {
-    console.log('[sync] local state is newer than last push — pushing local first');
-    const localState = useAppStore.getState();
-    await pushToSupabase(extractSyncState(localState));
-    supabaseLoaded = true;
-    return; // local IS the latest truth — no need to overwrite from Supabase
-  }
-  // ─────────────────────────────────────────────────────────────────────────
-
   loadStartedAt = Date.now();
 
   const { data, error } = await supabase
@@ -282,8 +258,6 @@ export async function loadFromSupabase() {
  *  Sets hasPendingLocalSave = true for the whole debounce window so that any
  *  Supabase Realtime broadcast arriving in that window is ignored. */
 export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
-  // Record that local state has changed (skipped when isSyncing = from Realtime)
-  markLocalModified();
   if (isSyncing || !supabaseLoaded) return;
   hasPendingLocalSave = true;           // block real-time overwrites
   if (saveTimer) clearTimeout(saveTimer);
@@ -302,8 +276,7 @@ export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
     }
     if (!ok) {
       // Push failed (network error, Supabase outage, etc.). Schedule a retry in
-      // 8 seconds. LOCAL_MODIFIED_KEY > LAST_PUSH_KEY so a page reload also
-      // triggers a push — but we retry in-session so the user doesn't have to.
+      // 8 seconds so the user doesn't have to reload to recover.
       console.warn('[sync] push failed — will retry in 8 s');
       setTimeout(() => {
         if (supabaseLoaded && !hasPendingLocalSave) scheduleSave(useAppStore.getState());
