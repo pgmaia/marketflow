@@ -960,6 +960,7 @@ export const useAppStore = create<AppState>()(
         companies: state.companies,
         projects: state.projects,
         teamMembers: state.teamMembers,
+        teams: state.teams,
         templates: state.templates,
         phaseTemplates: state.phaseTemplates,
         memberAccess: state.memberAccess,
@@ -986,6 +987,7 @@ export const useAppStore = create<AppState>()(
         if (!merged.personalTasks) merged.personalTasks = [];
         if (!merged.memberCompanyAccess) merged.memberCompanyAccess = {};
         if (!merged.taskTypes) merged.taskTypes = DEFAULT_TASK_TYPES;
+        if (!merged.teams) merged.teams = [];
         // Always sync seed companies — update existing ones, add any new ones
         // (user-created companies, i.e. not in seed, are left untouched)
         if (merged.companies) {

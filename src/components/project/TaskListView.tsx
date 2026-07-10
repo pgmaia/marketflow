@@ -976,7 +976,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
   _gridRef = makeGrid(colWidths, customColumns, customColWidths);
   _minWRef = makeMinW(colWidths, customColumns, customColWidths);
   _selIds = selectedIds;
-  _selUpdateAll = (changes) => tasks.filter(t => selectedIds.has(t.id)).forEach(t => updateTask(t.id, changes));
+  _selUpdateAll = (changes) => useAppStore.getState().tasks.filter(t => selectedIds.has(t.id)).forEach(t => updateTask(t.id, changes));
 
   const startResize = (col: keyof ColWidths | string, e: React.MouseEvent, isCustom = false) => {
     e.preventDefault();

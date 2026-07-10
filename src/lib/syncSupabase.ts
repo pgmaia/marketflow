@@ -49,7 +49,7 @@ const SYNC_FIELDS = [
   'tasks', 'personalTasks', 'companies', 'projects',
   'teamMembers', 'teams', 'templates', 'phaseTemplates',
   'memberAccess', 'memberCompanyAccess', 'flows', 'trash',
-  'memberPasswords', 'deletedMemberIds',
+  'memberPasswords', 'deletedMemberIds', 'taskTypes',
 ] as const;
 
 type SyncState = Record<typeof SYNC_FIELDS[number], unknown>;
@@ -74,6 +74,11 @@ let hasPendingLocalSave = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let loadStartedAt       = 0;
 let lastRealtimeAt      = 0;
+// Reference snapshot of SYNC_FIELDS values — used to detect whether a store
+// change is a real data mutation vs. a navigation-only update (setView,
+// setActiveTask, etc.).  Zustand creates new object references on every
+// mutation, so identity comparison is accurate and fast.
+let prevSyncRefs: Record<string, unknown> | null = null;
 
 // ── Supabase push timestamp ───────────────────────────────────────────────────
 // Written to localStorage on every successful push so loadFromSupabase and
@@ -257,29 +262,51 @@ export async function loadFromSupabase() {
  *  rapid changes (e.g. applying a template with many tasks) are never lost.
  *  Sets hasPendingLocalSave = true for the whole debounce window so that any
  *  Supabase Realtime broadcast arriving in that window is ignored. */
-export function scheduleSave(_state: ReturnType<typeof useAppStore.getState>) {
-  if (isSyncing || !supabaseLoaded) return;
+export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
+  // When a Realtime / loadFromSupabase setState fires, update our reference
+  // baseline so subsequent navigation doesn't look like a data change.
+  if (isSyncing) {
+    prevSyncRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
+    return;
+  }
+  if (!supabaseLoaded) return;
+
+  // Skip saves triggered by navigation-only mutations (setView, setActiveTask…).
+  // Zustand produces new object references on every real data mutation, so
+  // identity comparison on SYNC_FIELDS is accurate and avoids blocking Realtime
+  // for 500ms on every click.
+  const currentRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
+  if (prevSyncRefs !== null && SYNC_FIELDS.every(k => currentRefs[k] === prevSyncRefs![k])) {
+    return; // no sync-relevant data changed
+  }
+  prevSyncRefs = currentRefs;
+
   hasPendingLocalSave = true;           // block real-time overwrites
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    // Always read the LATEST state at fire-time — not the snapshot captured when
-    // scheduleSave was called — so template/phase applications are never lost.
+    // Read latest state at fire-time so rapid batched changes are never lost.
     const latest = useAppStore.getState();
+    const snapshot = extractSyncState(latest);
     let ok = false;
     try {
-      ok = await pushToSupabase(extractSyncState(latest));
+      ok = await pushToSupabase(snapshot);
     } finally {
-      // Always release the lock — even on failure — so Realtime events are not
-      // permanently blocked. Without this, a single network hiccup would make
-      // the app ignore ALL remote updates for the rest of the session.
       hasPendingLocalSave = false;
     }
     if (!ok) {
-      // Push failed (network error, Supabase outage, etc.). Schedule a retry in
-      // 8 seconds so the user doesn't have to reload to recover.
+      // Push failed — retry in 8 s using the same snapshot, NOT getState(), because
+      // a Realtime event may arrive in the window and overwrite the store.
       console.warn('[sync] push failed — will retry in 8 s');
       setTimeout(() => {
-        if (supabaseLoaded && !hasPendingLocalSave) scheduleSave(useAppStore.getState());
+        if (supabaseLoaded && !hasPendingLocalSave) {
+          hasPendingLocalSave = true;
+          pushToSupabase(snapshot)
+            .then(retryOk => {
+              hasPendingLocalSave = false;
+              if (!retryOk) console.error('[sync] retry also failed');
+            })
+            .catch(() => { hasPendingLocalSave = false; });
+        }
       }, 8000);
     }
   }, 500);

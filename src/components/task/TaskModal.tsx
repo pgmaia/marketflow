@@ -159,6 +159,13 @@ export function TaskModal() {
   };
 
   useEffect(() => {
+    return () => {
+      if (descAutoSaveTimer.current) clearTimeout(descAutoSaveTimer.current);
+      if (notesAutoSaveTimer.current) clearTimeout(notesAutoSaveTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
     if (addingSubtask) subtaskInputRef.current?.focus();
   }, [addingSubtask]);
 
