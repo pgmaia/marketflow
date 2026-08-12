@@ -60,20 +60,113 @@ function extractSyncState(state: ReturnType<typeof useAppStore.getState>): SyncS
   ) as SyncState;
 }
 
+// ── Three-way merge ───────────────────────────────────────────────────────────
+// The whole app state is stored as ONE row, so a naive "last write wins" push
+// silently destroys whatever the other device changed in the meantime. Instead
+// we merge per entity against the last state we know the server had (the base):
+// an entity only loses to the remote copy if WE did not touch it.
+//
+// Collections keyed by an identifier — merged entity by entity.
+const ENTITY_KEY: Record<string, string> = {
+  tasks: 'id', personalTasks: 'id', companies: 'id', projects: 'id',
+  teamMembers: 'id', teams: 'id', templates: 'id', phaseTemplates: 'id',
+  flows: 'id', trash: 'id', taskTypes: 'value',
+};
+// Plain objects keyed by member id — merged key by key.
+const OBJECT_MAPS = new Set(['memberAccess', 'memberCompanyAccess', 'memberPasswords']);
+// Append-only id lists — a deletion recorded anywhere must stick, so union them.
+const ID_UNIONS = new Set(['deletedMemberIds']);
+
+/** JSON with object keys sorted, so two structurally equal values that were
+ *  built in a different key order still compare as equal. */
+function canon(v: unknown): string {
+  return JSON.stringify(v, (_k, val) =>
+    val && typeof val === 'object' && !Array.isArray(val)
+      ? Object.fromEntries(Object.keys(val as object).sort().map(k => [k, (val as Record<string, unknown>)[k]]))
+      : val
+  ) ?? '';
+}
+
+type Entity = Record<string, unknown>;
+
+function mergeEntityArrays(base: unknown, local: unknown, remote: unknown, key: string): unknown[] {
+  const toMap = (arr: unknown) => {
+    const m = new Map<unknown, Entity>();
+    if (Array.isArray(arr)) for (const e of arr) if (e && typeof e === 'object') m.set((e as Entity)[key], e as Entity);
+    return m;
+  };
+  const B = toMap(base), L = toMap(local), R = toMap(remote);
+  // Local order first (keeps the user's view stable), then remote-only additions.
+  const ids = [...L.keys(), ...[...R.keys()].filter(id => !L.has(id))];
+  const out: unknown[] = [];
+
+  for (const id of ids) {
+    const inB = B.has(id), inL = L.has(id), inR = R.has(id);
+    const localChanged  = inL !== inB || (inL && inB && canon(L.get(id)) !== canon(B.get(id)));
+    const remoteChanged = inR !== inB || (inR && inB && canon(R.get(id)) !== canon(B.get(id)));
+
+    // We touched it (edit, create, delete) — our version wins, including when
+    // both sides changed it: the person at this screen just made that edit.
+    if (localChanged) { if (inL) out.push(L.get(id)); continue; }
+    // Only the other device touched it — take theirs (absent means they deleted it).
+    if (remoteChanged) { if (inR) out.push(R.get(id)); continue; }
+    // Untouched on both sides.
+    if (inL) out.push(L.get(id)); else if (inR) out.push(R.get(id));
+  }
+  return out;
+}
+
+function mergeMaps(base: unknown, local: unknown, remote: unknown): Record<string, unknown> {
+  const obj = (v: unknown) => (v && typeof v === 'object' ? v as Record<string, unknown> : {});
+  const B = obj(base), L = obj(local), R = obj(remote);
+  const out: Record<string, unknown> = {};
+  for (const k of new Set([...Object.keys(L), ...Object.keys(R)])) {
+    const inB = k in B, inL = k in L, inR = k in R;
+    const localChanged  = inL !== inB || (inL && inB && canon(L[k]) !== canon(B[k]));
+    const remoteChanged = inR !== inB || (inR && inB && canon(R[k]) !== canon(B[k]));
+    if (localChanged) { if (inL) out[k] = L[k]; continue; }
+    if (remoteChanged) { if (inR) out[k] = R[k]; continue; }
+    if (inL) out[k] = L[k]; else if (inR) out[k] = R[k];
+  }
+  return out;
+}
+
+/** Merge a remote snapshot into local state relative to `base` (the last state
+ *  both sides agreed on). With no base there is nothing to reason about, so the
+ *  remote snapshot wins — same as the behaviour before merging existed. */
+export function merge3(base: SyncState | null, local: SyncState, remote: SyncState): SyncState {
+  if (!base) return remote;
+  const out = {} as Record<string, unknown>;
+  for (const f of SYNC_FIELDS) {
+    const b = base[f], l = local[f], r = remote[f];
+    // Field the remote snapshot doesn't carry (written by an older app version).
+    if (r === undefined) { out[f] = l; continue; }
+    if (ENTITY_KEY[f])        out[f] = mergeEntityArrays(b, l, r, ENTITY_KEY[f]);
+    else if (OBJECT_MAPS.has(f)) out[f] = mergeMaps(b, l, r);
+    else if (ID_UNIONS.has(f))   out[f] = [...new Set([...(Array.isArray(l) ? l : []), ...(Array.isArray(r) ? r : [])])];
+    else                          out[f] = canon(l) !== canon(b) ? l : r;
+  }
+  return out as SyncState;
+}
+
 // ── Guards ────────────────────────────────────────────────────────────────────
 // isSyncing:           prevents feedback loop when setState is called from a remote update
 // supabaseLoaded:      prevents any save BEFORE the initial Supabase load completes
-// hasPendingLocalSave: real-time updates are ignored while we have unsaved local changes
-//                      to prevent a stale Supabase broadcast from overwriting them
+// hasPendingLocalSave: a push is queued or in flight; refetchIfStale stands down
+//                      so it can't race the push. Realtime events are NOT dropped
+//                      any more — they are merged (see merge3).
 // loadStartedAt:       timestamp when loadFromSupabase started the Supabase fetch
 // lastRealtimeAt:      timestamp when a Realtime event was last applied to the store
 //                      — if lastRealtimeAt > loadStartedAt, the fetch result is stale
+// lastPushed:          the last state we know the server had — the common
+//                      ancestor every three-way merge is measured against.
 let isSyncing           = false;
 let supabaseLoaded      = false;
 let hasPendingLocalSave = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let loadStartedAt       = 0;
 let lastRealtimeAt      = 0;
+let lastPushed: SyncState | null = null;
 // Reference snapshot of SYNC_FIELDS values — used to detect whether a store
 // change is a real data mutation vs. a navigation-only update (setView,
 // setActiveTask, etc.).  Zustand creates new object references on every
@@ -100,6 +193,8 @@ async function pushToSupabase(syncState: SyncState): Promise<boolean> {
   }
   // Record when we last successfully pushed so loadFromSupabase can compare.
   localStorage.setItem(LAST_PUSH_KEY, pushTs.toString());
+  // The server now holds exactly this — it becomes the base for future merges.
+  lastPushed = syncState;
   maybeCreateDailyBackup(syncState);
   return true;
 }
@@ -248,6 +343,8 @@ export async function loadFromSupabase() {
     isSyncing = true;
     useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
     isSyncing = false;
+    // Both sides now agree — this is the base every later merge measures against.
+    lastPushed = migrated;
     // NOTE: do NOT push migrated data back — that would create a Realtime event
     // that could overwrite recent saves from other tabs/devices. The next user
     // action will naturally push any migration changes.
@@ -257,31 +354,10 @@ export async function loadFromSupabase() {
   supabaseLoaded = true;
 }
 
-/** Debounced save — called on every store mutation, but gated by supabaseLoaded.
- *  Uses the CURRENT store state at fire-time (not the captured snapshot) so that
- *  rapid changes (e.g. applying a template with many tasks) are never lost.
- *  Sets hasPendingLocalSave = true for the whole debounce window so that any
- *  Supabase Realtime broadcast arriving in that window is ignored. */
-export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
-  // When a Realtime / loadFromSupabase setState fires, update our reference
-  // baseline so subsequent navigation doesn't look like a data change.
-  if (isSyncing) {
-    prevSyncRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
-    return;
-  }
-  if (!supabaseLoaded) return;
-
-  // Skip saves triggered by navigation-only mutations (setView, setActiveTask…).
-  // Zustand produces new object references on every real data mutation, so
-  // identity comparison on SYNC_FIELDS is accurate and avoids blocking Realtime
-  // for 500ms on every click.
-  const currentRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
-  if (prevSyncRefs !== null && SYNC_FIELDS.every(k => currentRefs[k] === prevSyncRefs![k])) {
-    return; // no sync-relevant data changed
-  }
-  prevSyncRefs = currentRefs;
-
-  hasPendingLocalSave = true;           // block real-time overwrites
+/** Debounced push of the current store state. Reads the state at fire-time so
+ *  rapid batched changes (e.g. applying a template) are never lost. */
+function queueSave() {
+  hasPendingLocalSave = true;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
     // Read latest state at fire-time so rapid batched changes are never lost.
@@ -312,7 +388,48 @@ export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
   }, 500);
 }
 
-/** Re-fetch from Supabase and apply if the remote row is newer than our last push.
+/** Called on every store mutation, gated by supabaseLoaded. */
+export function scheduleSave(state: ReturnType<typeof useAppStore.getState>) {
+  // When a Realtime / loadFromSupabase setState fires, update our reference
+  // baseline so subsequent navigation doesn't look like a data change.
+  if (isSyncing) {
+    prevSyncRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
+    return;
+  }
+  if (!supabaseLoaded) return;
+
+  // Skip saves triggered by navigation-only mutations (setView, setActiveTask…).
+  // Zustand produces new object references on every real data mutation, so
+  // identity comparison on SYNC_FIELDS is accurate and avoids a pointless push
+  // (and a pointless hasPendingLocalSave window) on every click.
+  const currentRefs = Object.fromEntries(SYNC_FIELDS.map(k => [k, state[k as keyof typeof state]]));
+  if (prevSyncRefs !== null && SYNC_FIELDS.every(k => currentRefs[k] === prevSyncRefs![k])) {
+    return; // no sync-relevant data changed
+  }
+  prevSyncRefs = currentRefs;
+  queueSave();
+}
+
+/** Fold a remote snapshot into the store without discarding local work.
+ *  Anything we changed since `lastPushed` survives; everything else follows the
+ *  remote copy. If the merge kept local-only changes, they're pushed back so
+ *  both devices converge instead of silently diverging. */
+function applyRemote(remote: SyncState) {
+  const local  = extractSyncState(useAppStore.getState());
+  const merged = merge3(lastPushed, local, remote);
+
+  lastRealtimeAt = Date.now();
+  isSyncing = true;
+  useAppStore.setState(merged as Partial<ReturnType<typeof useAppStore.getState>>);
+  isSyncing = false;
+
+  // The server holds `remote`; that's the new common ancestor.
+  lastPushed = remote;
+  // We still hold edits the server hasn't seen — send them.
+  if (canon(merged) !== canon(remote)) queueSave();
+}
+
+/** Re-fetch from Supabase and merge if the remote row is newer than our last push.
  *  Used on Realtime reconnect to catch any events missed during a WebSocket gap. */
 async function refetchIfStale() {
   if (hasPendingLocalSave || !supabaseLoaded) return;
@@ -328,11 +445,7 @@ async function refetchIfStale() {
   const localLastPush = parseInt(localStorage.getItem(LAST_PUSH_KEY) ?? '0', 10);
   // Only apply if Supabase genuinely has something newer than our last push.
   if (fetchedUpdatedAt <= localLastPush) return;
-  const migrated = migrateStatuses(data.data as SyncState);
-  lastRealtimeAt = Date.now();
-  isSyncing = true;
-  useAppStore.setState(migrated as Partial<ReturnType<typeof useAppStore.getState>>);
-  isSyncing = false;
+  applyRemote(migrateStatuses(data.data as SyncState));
 }
 
 /** Subscribe to Supabase Realtime — changes from other devices update local store instantly. */
@@ -350,16 +463,12 @@ export function subscribeToRealtime() {
       },
       (payload: { new?: { data?: SyncState } }) => {
         if (!payload.new?.data) return;
-        // If we have unsaved local changes, this broadcast is stale — skip it.
-        // Our pending save will push the correct state and produce a fresh event.
-        if (hasPendingLocalSave) return;
-        const migrated = migrateStatuses(payload.new.data as SyncState);
-        lastRealtimeAt = Date.now();
-        isSyncing = true;
-        useAppStore.setState(
-          migrated as Partial<ReturnType<typeof useAppStore.getState>>
-        );
-        isSyncing = false;
+        // Echo of our own push — nothing to fold in.
+        if (canon(payload.new.data) === canon(lastPushed)) return;
+        // Merge rather than drop. Dropping the event (the previous behaviour)
+        // meant the next local push overwrote the row WITHOUT the other
+        // device's change, destroying it for everyone.
+        applyRemote(migrateStatuses(payload.new.data as SyncState));
       }
     )
     .subscribe((status) => {
