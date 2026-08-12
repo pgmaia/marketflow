@@ -33,6 +33,11 @@ const NODE_DEFAULTS: Record<FlowNodeType, { width: number; title: string; color:
 // ─── Edge renderer ────────────────────────────────────────────────────────────
 
 function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]; onDelete: () => void }) {
+  // Hooks must run before any early return — otherwise React sees a different
+  // hook count between renders (e.g. when a node is deleted and this edge is
+  // briefly orphaned) and tears down the whole tree with a white screen.
+  const [hovered, setHovered] = useState(false);
+
   const from = nodes.find(n => n.id === edge.fromId);
   const to   = nodes.find(n => n.id === edge.toId);
   if (!from || !to) return null;
@@ -54,8 +59,6 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
 
   const midX = (sx + tx) / 2;
   const midY = (sy + ty) / 2;
-
-  const [hovered, setHovered] = useState(false);
 
   return (
     <g>
