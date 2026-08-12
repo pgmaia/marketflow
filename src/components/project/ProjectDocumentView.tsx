@@ -76,10 +76,28 @@ export function ProjectDocumentView({ projectId: _projectId, initialContent, onS
       if (!editorRef.current) return;
       setSaveState('saving');
       const html = editorRef.current.innerHTML;
+      saveTimerRef.current = undefined;
       onSave(html);
       setSaveState('saved');
     }, 800);
   }, [onSave]);
+
+  // Keep the latest onSave reachable from the unmount cleanup without making
+  // the cleanup re-run (and lose the pending timer) every time it changes.
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  // Switching tabs or projects unmounts this view. Without flushing, anything
+  // typed in the last 800 ms is dropped: the timer fires after unmount, finds
+  // editorRef.current === null and returns without ever calling onSave.
+  useEffect(() => {
+    return () => {
+      if (!saveTimerRef.current) return;
+      clearTimeout(saveTimerRef.current);
+      // Cleanup runs before the DOM node is detached, so this is still readable.
+      if (editorRef.current) onSaveRef.current(editorRef.current.innerHTML);
+    };
+  }, []);
 
   // ── Format helpers ─────────────────────────────────────────────────────────
 

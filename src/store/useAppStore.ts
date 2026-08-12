@@ -277,7 +277,9 @@ export const useAppStore = create<AppState>()(
         if (!member) return false;
         // Externos não têm acesso ao sistema
         if (member.permission === 'Externo') return false;
-        const expectedPw = MEMBER_PASSWORDS[member.id] ?? get().memberPasswords[member.id];
+        // A password set by an admin must win over the hardcoded seed password,
+        // otherwise changing a seed member's password silently has no effect.
+        const expectedPw = get().memberPasswords[member.id] ?? MEMBER_PASSWORDS[member.id];
         if (!expectedPw || expectedPw !== password) return false;
         set({ isAuthenticated: true, currentUserId: member.id });
         return true;
@@ -579,7 +581,22 @@ export const useAppStore = create<AppState>()(
             });
           });
 
-          return { tasks: [...s.tasks, ...newTasks] };
+          // A template carries its source project's phase names. If the target
+          // project has no column with that name the tasks land in no group and
+          // are invisible in every view, so create the missing phases here.
+          const target = s.projects.find(p => p.id === projectId);
+          const existing = new Set((target?.phases ?? []).map(ph => ph.name));
+          const missing = [...new Set(newTasks.map(t => t.phase))].filter(name => !existing.has(name));
+
+          return {
+            tasks: [...s.tasks, ...newTasks],
+            projects: missing.length === 0 ? s.projects : s.projects.map(p =>
+              p.id !== projectId ? p : {
+                ...p,
+                phases: [...p.phases, ...missing.map((name, i) => ({ id: `ph-${ts}-tpl${i}`, name }))],
+              }
+            ),
+          };
         }),
 
       // ── Phase CRUD ──
@@ -622,7 +639,11 @@ export const useAppStore = create<AppState>()(
           const phaseToDelete = project.phases.find(ph => ph.id === phaseId);
           if (!phaseToDelete) return s;
           const remaining = project.phases.filter(ph => ph.id !== phaseId);
-          const fallback = remaining[0]?.name ?? '';
+          // Deleting the last phase would leave every task with phase: '' — no
+          // column matches that name, so the tasks vanish from the board and the
+          // list with no way to get them back. Refuse instead.
+          if (remaining.length === 0) return s;
+          const fallback = remaining[0].name;
           const entry: TrashItem = { id: trashId(), deletedAt: now(), type: 'phase', data: phaseToDelete, projectId };
           return {
             projects: s.projects.map(p =>
@@ -823,6 +844,10 @@ export const useAppStore = create<AppState>()(
       name: 'marketflow-store',
       version: 13,
       migrate: (persistedState: any) => {
+        // A null/!object persisted blob would make the assignments below throw,
+        // and a throw here aborts hydration and blanks the app with no recovery
+        // path other than clearing site data. Fall back to a clean slate instead.
+        if (!persistedState || typeof persistedState !== 'object') return persistedState;
         // v0 → v1: add phases to projects that were saved without them
         if (persistedState?.projects) {
           persistedState.projects = persistedState.projects.map((p: any) =>
@@ -977,7 +1002,10 @@ export const useAppStore = create<AppState>()(
       }),
       merge: (persisted: any, current) => {
         const merged = { ...current, ...persisted };
-        if (!merged.flows || merged.flows.length === 0) merged.flows = [seedFlow];
+        // An empty array is a deliberate user choice (they deleted every board) —
+        // only seed when the key is absent entirely, i.e. a fresh install.
+        // Otherwise the seed board reappeared on every reload, un-deletable.
+        if (!merged.flows) merged.flows = [seedFlow];
         if (merged.activeFlowId === undefined) merged.activeFlowId = null;
         if (!merged.trash) merged.trash = [];
         if (merged.currentUserId === undefined) merged.currentUserId = null;
@@ -988,19 +1016,17 @@ export const useAppStore = create<AppState>()(
         if (!merged.memberCompanyAccess) merged.memberCompanyAccess = {};
         if (!merged.taskTypes) merged.taskTypes = DEFAULT_TASK_TYPES;
         if (!merged.teams) merged.teams = [];
-        // Always sync seed companies — update existing ones, add any new ones
-        // (user-created companies, i.e. not in seed, are left untouched)
+        // Seed companies are only planted on a FRESH install (no persisted array).
+        // Re-adding them on every hydration resurrected companies the user had
+        // deleted — they reappeared on every reload and could never be removed.
+        // Existing entries keep their persisted values; seed only backfills
+        // fields a stored company is missing.
         if (merged.companies) {
           merged.companies = merged.companies.map((c: any) =>
             SEED_COMPANY_IDS.has(c.id)
-              ? { ...seedCompanies.find(s => s.id === c.id)! }
+              ? { ...seedCompanies.find(s => s.id === c.id)!, ...c }
               : c
           );
-          seedCompanies.forEach(s => {
-            if (!merged.companies.find((c: any) => c.id === s.id)) {
-              merged.companies.push(s);
-            }
-          });
         } else {
           merged.companies = [...seedCompanies];
         }
@@ -1015,10 +1041,11 @@ export const useAppStore = create<AppState>()(
             .map((m: any) => {
               const seed = seedTeamMembers.find(s => s.id === m.id);
               if (!seed) return m; // user-created member — keep as-is
-              return {
-                ...seed,
-                permission: m.permission ?? seed.permission,
-              };
+              // Seed only fills in fields the persisted member is missing.
+              // Spreading `m` last is essential: otherwise every admin edit to a
+              // seed member (name, email, role, colour) is reverted on reload,
+              // and since email is the login key they also lose access.
+              return { ...seed, ...m };
             });
           seedTeamMembers.forEach(s => {
             if (!deletedIds.includes(s.id) && !merged.teamMembers.find((m: any) => m.id === s.id)) {

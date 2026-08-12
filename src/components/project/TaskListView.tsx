@@ -86,7 +86,9 @@ function StatusPicker({ task }: { task: Task }) {
 function PriorityPicker({ task }: { task: Task }) {
   const { updateTask } = useAppStore();
   const { open, setOpen, ref } = usePopover();
-  const cfg = PRIORITY_META[task.priority];
+  // Fall back like StatusPicker does — an out-of-enum priority (older backup,
+  // imported JSON) would otherwise read `.bg` off undefined and blank the view.
+  const cfg = PRIORITY_META[task.priority] ?? PRIORITY_META['Medium'];
   const isBulk = _selIds.has(task.id) && _selIds.size > 1;
   return (
     <div ref={ref} className="relative">
@@ -141,10 +143,13 @@ function DueDatePicker({ task }: { task: Task }) {
           defaultValue={task.dueDate}
           autoFocus
           onChange={e => {
-            if (e.target.value) {
-              applyBulkOrSingle(task.id, { dueDate: e.target.value }, updateTask);
-              setEditing(false);
-            }
+            const v = e.target.value;
+            // A date input fires change for every complete intermediate value, so
+            // typing the year emits "0002-03-15" after the first digit. Committing
+            // that would save a year-2 due date and close the editor mid-typing.
+            if (!v || Number(v.slice(0, 4)) < 1900) return;
+            applyBulkOrSingle(task.id, { dueDate: v }, updateTask);
+            setEditing(false);
           }}
           onBlur={() => setEditing(false)}
           className="text-[12px] border border-blue-300 rounded-md px-2 py-1 outline-none bg-white w-full"
@@ -1218,6 +1223,64 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
             );
           })}
 
+          {/* Rescue bucket — tasks whose `phase` matches no column of this project
+              (left behind by a deleted/renamed phase, or by a template applied
+              from another project). Every view groups strictly by phase name, so
+              without this they exist in the data but are invisible everywhere and
+              impossible to fix from the UI. Drag one onto a phase to re-home it. */}
+          {(() => {
+            const known = new Set(phases.map(p => p.name));
+            const orphans = topLevelTasks.filter(t => !known.has(t.phase));
+            if (orphans.length === 0) return null;
+            return (
+              <div>
+                <div
+                  className="w-full flex items-center gap-3 px-3 py-2.5 bg-amber-50/50"
+                  style={{ minWidth: _minWRef }}
+                >
+                  <span className="text-[11px] font-bold text-amber-700 uppercase tracking-[0.7px]">Sem fase</span>
+                  <span className="text-[11px] text-amber-600">{orphans.length}</span>
+                  <span className="text-[11px] text-amber-600/80 font-normal normal-case tracking-normal">
+                    — arraste para uma fase acima
+                  </span>
+                  <div className="flex-1 h-px bg-amber-200 ml-2" />
+                </div>
+                {orphans.map(task => {
+                  const subtasks = tasks.filter(t => t.parentTaskId === task.id);
+                  const isExpanded = subtaskMode === 'expanded' || !!expandedTasks[task.id];
+                  return (
+                    <div key={task.id}>
+                      <TaskRow
+                        task={task}
+                        subtasks={subtasks}
+                        expanded={isExpanded}
+                        onToggle={() => toggleTask(task.id)}
+                        selected={selectedIds.has(task.id)}
+                        onSelect={() => toggleSelect(task.id)}
+                        selectionActive={selectedIds.size > 0}
+                        customCols={customColumns}
+                      />
+                      {isExpanded && subtasks.map(sub => (
+                        <TaskRow
+                          key={sub.id}
+                          task={sub}
+                          indent
+                          subtasks={[]}
+                          expanded={false}
+                          onToggle={() => {}}
+                          selected={selectedIds.has(sub.id)}
+                          onSelect={() => toggleSelect(sub.id)}
+                          selectionActive={selectedIds.size > 0}
+                          customCols={customColumns}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
         </div>{/* /content wrapper */}
       </div>{/* /scroll area */}
 
@@ -1333,10 +1396,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                     autoFocus
                     className="text-[13px] border border-gray-200 rounded-lg px-2 py-1.5 outline-none focus:border-[#1f6feb] w-full transition-colors"
                     onChange={e => {
-                      if (e.target.value) {
-                        selectedTasks.forEach(t => updateTask(t.id, { dueDate: e.target.value }));
-                        setBulkPopover(null);
-                      }
+                      const v = e.target.value;
+                      // Same partial-year guard as the per-row picker — here a bad
+                      // value would be written to every selected task at once.
+                      if (!v || Number(v.slice(0, 4)) < 1900) return;
+                      selectedTasks.forEach(t => updateTask(t.id, { dueDate: v }));
+                      setBulkPopover(null);
                     }}
                   />
                 </div>

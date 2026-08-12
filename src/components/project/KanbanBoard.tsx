@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download } from 'lucide-react';
 import type { Task } from '../../types';
-import { hasAdminPower } from '../../types';
+import { hasAdminPower, getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { PhaseColumn } from './PhaseColumn';
 import { TeamPanel } from './TeamPanel';
@@ -113,12 +113,15 @@ export function KanbanBoard() {
   const projectMembers = teamMembers.filter(m => project.teamMemberIds.includes(m.id));
   const memberMap: Record<string, string> = Object.fromEntries(teamMembers.map(m => [m.id, m.name]));
   const userFiltered = selectedUserIds.length > 0;
+  // Tasks can have several assignees; `assigneeId` is only the first of them.
+  // Filtering on it alone hid every task where the picked member wasn't first.
+  const matchesUser = (t: Task) => getAssigneeIds(t).some(id => selectedUserIds.includes(id));
   const filteredTasks = sortTasks(
-    userFiltered ? displayTasks.filter(t => selectedUserIds.includes(t.assigneeId ?? '')) : displayTasks,
+    userFiltered ? displayTasks.filter(matchesUser) : displayTasks,
     sortBy, memberMap,
   );
   const filteredTopLevel = sortTasks(
-    userFiltered ? displayTopLevel.filter(t => selectedUserIds.includes(t.assigneeId ?? '')) : displayTopLevel,
+    userFiltered ? displayTopLevel.filter(matchesUser) : displayTopLevel,
     sortBy, memberMap,
   );
 

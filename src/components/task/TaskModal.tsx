@@ -114,6 +114,21 @@ export function TaskModal() {
   const editingSubtaskRef = useRef<HTMLInputElement>(null);
   const notesAutoSaveTimer = useRef<ReturnType<typeof setTimeout>>();
 
+  // Un-saved edits, tagged with the task they belong to. The 2s auto-save timer
+  // is a single shared ref, so switching tasks used to cancel it and drop the
+  // text entirely. Keeping the owning task id lets us flush to the RIGHT task.
+  const pendingDesc  = useRef<{ id: string; value: string } | null>(null);
+  const pendingNotes = useRef<{ id: string; value: string } | null>(null);
+
+  const flushPending = () => {
+    if (descAutoSaveTimer.current) clearTimeout(descAutoSaveTimer.current);
+    if (notesAutoSaveTimer.current) clearTimeout(notesAutoSaveTimer.current);
+    const d = pendingDesc.current;
+    if (d) { pendingDesc.current = null; updateTask(d.id, { description: d.value }); }
+    const n = pendingNotes.current;
+    if (n) { pendingNotes.current = null; updateTask(n.id, { notes: n.value }); }
+  };
+
   useEffect(() => {
     if (task) {
       setLocalDescription(task.description ?? ''); setDescDirty(false); setDescSaved(false);
@@ -123,10 +138,14 @@ export function TaskModal() {
     setNewSubtaskTitle('');
     setEditingSubtaskId(null);
     setEditingSubtaskTitle('');
+    // Runs before the next task is loaded (and on unmount) — commit whatever the
+    // user typed instead of silently discarding it.
+    return flushPending;
   }, [task?.id]);
 
   const saveDescription = useCallback((value: string) => {
     if (descAutoSaveTimer.current) clearTimeout(descAutoSaveTimer.current);
+    pendingDesc.current = null;
     updateTask(activeTaskId!, { description: value });
     setDescDirty(false);
     setDescSaved(true);
@@ -137,12 +156,14 @@ export function TaskModal() {
     setLocalDescription(value);
     setDescDirty(true);
     setDescSaved(false);
+    pendingDesc.current = { id: activeTaskId!, value };
     if (descAutoSaveTimer.current) clearTimeout(descAutoSaveTimer.current);
     descAutoSaveTimer.current = setTimeout(() => saveDescription(value), 2000);
   };
 
   const saveNotes = useCallback((value: string) => {
     if (notesAutoSaveTimer.current) clearTimeout(notesAutoSaveTimer.current);
+    pendingNotes.current = null;
     updateTask(activeTaskId!, { notes: value });
     setNotesDirty(false);
     setNotesSaved(true);
@@ -153,17 +174,11 @@ export function TaskModal() {
     setLocalNotes(value);
     setNotesDirty(true);
     setNotesSaved(false);
+    pendingNotes.current = { id: activeTaskId!, value };
     // Auto-save after 2s of inactivity (fallback)
     if (notesAutoSaveTimer.current) clearTimeout(notesAutoSaveTimer.current);
     notesAutoSaveTimer.current = setTimeout(() => saveNotes(value), 2000);
   };
-
-  useEffect(() => {
-    return () => {
-      if (descAutoSaveTimer.current) clearTimeout(descAutoSaveTimer.current);
-      if (notesAutoSaveTimer.current) clearTimeout(notesAutoSaveTimer.current);
-    };
-  }, []);
 
   useEffect(() => {
     if (addingSubtask) subtaskInputRef.current?.focus();
