@@ -51,8 +51,10 @@ function buildCalendarGrid(year: number, month: number): Date[] {
   while (cells.length < 42) {
     cells.push(new Date(cur));
     cur.setDate(cur.getDate() + 1);
-    // Stop early if we've passed the last day of the month and completed a row
-    if (cells.length >= 35 && cur.getMonth() > month && cur.getDay() === 0) break;
+    // Stop early if we've passed the last day of the month and completed a row.
+    // Compare absolute months: in December the cursor rolls into January (month
+    // 0), and 0 > 11 is false, so this never fired and the grid gained a row.
+    if (cells.length >= 35 && (cur.getFullYear() * 12 + cur.getMonth()) > (year * 12 + month) && cur.getDay() === 0) break;
   }
   return cells;
 }

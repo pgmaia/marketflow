@@ -82,14 +82,18 @@ export default function App() {
 
   if (!isAuthenticated) return <LoginView />;
 
-  const handleNewTask = activeProjectId ? () => {
+  // activeProjectId survives navigation to Trash/Backup/Schedule, so the button
+  // stayed enabled there and dropped a task into the previously open project —
+  // out of sight, with a modal opening on top of an unrelated screen.
+  const canCreateTask = !!activeProjectId && (view === 'project' || view === 'company');
+  const handleNewTask = canCreateTask ? () => {
     const project = projects.find(p => p.id === activeProjectId);
     if (!project) return;
     const newTask = {
       id: `t${Date.now()}`,
       projectId: activeProjectId,
-      phase: project.phases[0]?.name ?? 'Production',
-      title: 'New task',
+      phase: project.phases[0]?.name ?? 'Backlog',
+      title: 'Nova tarefa',
       type: 'Copy' as const,
       status: 'Backlog' as const,
       priority: 'Medium' as const,
@@ -121,7 +125,7 @@ export default function App() {
 
         <main className="flex flex-1 min-h-0 overflow-hidden">
           {view === 'dashboard' && (isVisualizador ? <VisualizadorView /> : <DashboardView />)}
-          {view === 'company' && !isVisualizador && <CompanyView />}
+          {view === 'company' && (isVisualizador ? <VisualizadorView /> : <CompanyView />)}
           {view === 'project' && <KanbanBoard />}
           {view === 'users' && isAdmin && <UserManagementView />}
           {view === 'flow' && <FlowView />}

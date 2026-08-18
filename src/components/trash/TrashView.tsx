@@ -81,7 +81,9 @@ function TrashRow({ item, onRestore, onDelete }: {
   onRestore: () => void;
   onDelete: () => void;
 }) {
-  const meta = TYPE_META[item.type];
+  // An item of an unrecognised type used to break the whole Trash screen,
+  // leaving the user unable to even empty it.
+  const meta = TYPE_META[item.type] ?? TYPE_META['task'];
   const { elapsed, remaining } = daysInfo(item.deletedAt);
   const name = itemName(item);
   const sub = itemSubline(item);
@@ -123,7 +125,7 @@ function TrashRow({ item, onRestore, onDelete }: {
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <button
           onClick={onRestore}
           className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[12px] font-semibold text-green-600 bg-green-50 hover:bg-green-100 border border-green-100 transition-colors"
@@ -170,7 +172,7 @@ export function TrashView() {
           </div>
           {sorted.length > 0 && (
             <button
-              onClick={clearTrash}
+              onClick={() => { if (window.confirm(`Apagar permanentemente ${sorted.length} ${sorted.length === 1 ? 'item' : 'itens'}? Esta ação não pode ser desfeita.`)) clearTrash(); }}
               className="ml-auto flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 transition-colors"
             >
               <Trash2 size={12} />

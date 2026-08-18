@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertCircle, Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil, CheckSquare } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { ProgressBar } from '../shared/ProgressBar';
@@ -261,11 +261,19 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
 // ─── Company view ─────────────────────────────────────────────────────────────
 
 export function CompanyView() {
-  const { companies, activeCompanyId, projects, tasks, teamMembers, teams, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany, setActiveTask } = useAppStore();
+  const { companies, activeCompanyId, projects, tasks, teamMembers, teams, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany, setActiveTask, memberAccess } = useAppStore();
   const [showNewProject, setShowNewProject] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { type: 'company' } | { type: 'project'; id: string; name: string }>(null);
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all');
+
+  // The sidebar's "+ Novo projeto" fires this event and nothing was listening,
+  // so the button navigated here and then did nothing at all.
+  useEffect(() => {
+    const open = () => setShowNewProject(true);
+    window.addEventListener('open-new-project', open);
+    return () => window.removeEventListener('open-new-project', open);
+  }, []);
 
   const company = companies.find(c => c.id === activeCompanyId);
   if (!company) return null;
@@ -273,7 +281,15 @@ export function CompanyView() {
   // Gerentes de uma equipe ligada a esta empresa têm poder de Admin aqui
   const isAdminOrManager = hasAdminPower(currentUserId, company.id, teamMembers, teams);
 
-  const companyProjects = projects.filter(p => p.companyId === company.id);
+  // Honour revoked access here too. This screen listed every project of the
+  // company regardless of permissions, so a member whose access an admin had
+  // removed could still open it from the company page.
+  const isAdminUser = teamMembers.find(m => m.id === currentUserId)?.permission === 'Admin';
+  const allowedProjectIds = memberAccess[currentUserId ?? ''];
+  const companyProjects = projects.filter(p =>
+    p.companyId === company.id &&
+    (isAdminUser || !allowedProjectIds || allowedProjectIds.includes(p.id))
+  );
   const today = localISO();
 
   const allTasks = tasks.filter(t => companyProjects.some(p => p.id === t.projectId));
@@ -409,7 +425,7 @@ export function CompanyView() {
                         {isAdminOrManager && (
                           <button
                             onClick={e => { e.stopPropagation(); setEditProjectId(project.id); }}
-                            className="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-blue-50 text-gray-300 hover:text-blue-500 transition-all"
+                            className="w-6 h-6 flex items-center justify-center rounded-md opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 hover:bg-blue-50 text-gray-300 hover:text-blue-500 transition-all"
                             title="Editar projeto"
                           >
                             <Pencil size={12} />
@@ -417,7 +433,7 @@ export function CompanyView() {
                         )}
                         <button
                           onClick={e => { e.stopPropagation(); setConfirmDelete({ type: 'project', id: project.id, name: project.name }); }}
-                          className="w-6 h-6 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-400 transition-all"
+                          className="w-6 h-6 flex items-center justify-center rounded-md opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 hover:bg-red-50 text-gray-300 hover:text-red-400 transition-all"
                           title="Apagar projeto"
                         >
                           <Trash2 size={12} />

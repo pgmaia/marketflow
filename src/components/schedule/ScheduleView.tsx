@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CalendarDays, ListTodo } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { getAssigneeIds } from '../../types';
 import { MyTasksTab } from './MyTasksTab';
 import { AgendaTab } from './AgendaTab';
 
@@ -8,11 +9,15 @@ type Tab = 'tasks' | 'agenda';
 
 export function ScheduleView() {
   const [activeTab, setActiveTab] = useState<Tab>('tasks');
-  const { teamMembers, currentUserId, personalTasks } = useAppStore();
+  const { teamMembers, currentUserId, personalTasks, tasks } = useAppStore();
   const currentUser = teamMembers.find(m => m.id === currentUserId);
 
-  const myPersonalTotal = personalTasks.filter(t => t.ownerId === currentUserId).length;
-  const myPersonalDone  = personalTasks.filter(t => t.ownerId === currentUserId && t.status === 'Concluído').length;
+  // Count what is still OPEN across both lists this tab shows. The old badge
+  // fell back to the total when nothing was pending, so finishing every task
+  // left it reading the same number as before, and project tasks never counted.
+  const myPending =
+    personalTasks.filter(t => t.ownerId === currentUserId && t.status !== 'Concluído').length +
+    tasks.filter(t => getAssigneeIds(t).includes(currentUserId ?? '') && t.status !== 'Concluído').length;
 
   return (
     <div className="flex flex-col flex-1 min-h-0 bg-[#f8f8f7]">
@@ -46,11 +51,11 @@ export function ScheduleView() {
           >
             <ListTodo size={14} />
             Minhas Tarefas
-            {myPersonalTotal > 0 && (
+            {myPending > 0 && (
               <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
                 activeTab === 'tasks' ? 'bg-[#1f6feb]/10 text-[#1f6feb]' : 'bg-gray-100 text-gray-400'
               }`}>
-                {myPersonalTotal - myPersonalDone > 0 ? myPersonalTotal - myPersonalDone : myPersonalTotal}
+                {myPending}
               </span>
             )}
           </button>

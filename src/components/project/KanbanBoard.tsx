@@ -544,9 +544,10 @@ export function KanbanBoard() {
         {viewMode === 'board' ? (
           <div className="flex-1 overflow-x-auto px-8 py-6">
             <div className="flex gap-4 h-full" style={{ minWidth: 'max-content' }}>
-              {project.phases.map(ph => (
+              {project.phases.map((ph, i) => (
                 <PhaseColumn
                   key={ph.id}
+                  index={i}
                   phase={ph.name}
                   tasks={filteredTopLevel.filter(t => t.phase === ph.name)}
                   onAddTask={handleAddTask}

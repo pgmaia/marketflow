@@ -6,6 +6,7 @@ import { TaskCard } from './TaskCard';
 
 interface PhaseColumnProps {
   phase: string;
+  index: number;
   tasks: Task[];
   onAddTask: (phase: string) => void;
 }
@@ -35,10 +36,10 @@ function getPhaseConfig(phase: string, index: number) {
   return { emoji: emojiFallback[i], accent: accentPalette[i] };
 }
 
-export function PhaseColumn({ phase, tasks, onAddTask }: PhaseColumnProps) {
+export function PhaseColumn({ phase, index, tasks, onAddTask }: PhaseColumnProps) {
   const { updateTask } = useAppStore();
   const [dragOver, setDragOver] = useState(false);
-  const cfg = getPhaseConfig(phase, Object.keys(knownConfig).length);
+  const cfg = getPhaseConfig(phase, index);
   const done = tasks.filter(t => t.status === 'Concluído').length;
   const progress = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
 

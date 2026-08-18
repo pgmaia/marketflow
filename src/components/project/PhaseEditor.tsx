@@ -98,9 +98,11 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }}>
+      {/* The click handler has to live on the layer that actually receives the
+          click: this wrapper covers the tinted backdrop below it. */}
+      <div className="fixed inset-0 bg-black/40 z-50" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col" style={{ maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">

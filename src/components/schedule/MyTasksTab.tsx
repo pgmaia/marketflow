@@ -99,8 +99,10 @@ function PersonalTaskModal({ initial, ownerId, onSave, onClose }: TaskModalProps
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/40 z-50" onClick={onClose} />
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* The click handler has to live on the layer that actually receives the
+          click: this wrapper covers the tinted backdrop below it. */}
+      <div className="fixed inset-0 bg-black/40 z-50" />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
         <div
           className="bg-white rounded-2xl shadow-2xl w-full flex flex-col overflow-hidden"
           style={{ maxWidth: 480, maxHeight: '90vh' }}
@@ -325,7 +327,7 @@ function TaskRow({ item, onEditPersonal, onDeletePersonal, onToggleDone, onOpenP
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+      <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
         {item.kind === 'project' ? (
           /* Project task: open in project board */
           <button

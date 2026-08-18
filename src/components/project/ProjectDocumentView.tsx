@@ -60,23 +60,36 @@ export function ProjectDocumentView({ projectId: _projectId, initialContent, onS
 
   // Seed content on mount / project change
   useEffect(() => {
-    if (editorRef.current) {
-      editorRef.current.innerHTML = initialContent || '';
-    }
+    const el = editorRef.current;
+    if (!el) return;
+    const incoming = initialContent || '';
+    // Re-seed when the document changes underneath us (another device saved via
+    // Realtime), but never while the caret is in here — that would yank the text
+    // out from under the person typing.
+    const isFocused = el === document.activeElement || el.contains(document.activeElement);
+    if (isFocused || incoming === el.innerHTML) return;
+    el.innerHTML = incoming;
     setSaveState('saved');
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [_projectId]);
+  }, [_projectId, initialContent]);
 
   // ── Auto-save ──────────────────────────────────────────────────────────────
 
+  // Capture the HTML at schedule time. React detaches host refs during the
+  // commit's mutation phase, which runs BEFORE passive effect cleanups, so the
+  // unmount flush below cannot read editorRef — it is already null by then.
+  const pendingHtmlRef = useRef<string | null>(null);
+
   const scheduleSave = useCallback(() => {
     setSaveState('unsaved');
+    if (editorRef.current) pendingHtmlRef.current = editorRef.current.innerHTML;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      if (!editorRef.current) return;
-      setSaveState('saving');
-      const html = editorRef.current.innerHTML;
+      const html = editorRef.current?.innerHTML ?? pendingHtmlRef.current;
       saveTimerRef.current = undefined;
+      pendingHtmlRef.current = null;
+      if (html == null) return;
+      setSaveState('saving');
       onSave(html);
       setSaveState('saved');
     }, 800);
@@ -94,8 +107,11 @@ export function ProjectDocumentView({ projectId: _projectId, initialContent, onS
     return () => {
       if (!saveTimerRef.current) return;
       clearTimeout(saveTimerRef.current);
-      // Cleanup runs before the DOM node is detached, so this is still readable.
-      if (editorRef.current) onSaveRef.current(editorRef.current.innerHTML);
+      saveTimerRef.current = undefined;
+      // Flush the captured HTML, not the DOM: the editor node is gone by now.
+      const html = pendingHtmlRef.current;
+      pendingHtmlRef.current = null;
+      if (html != null) onSaveRef.current(html);
     };
   }, []);
 

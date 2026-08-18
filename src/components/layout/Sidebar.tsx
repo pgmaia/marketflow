@@ -664,7 +664,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               <div className="py-1 max-h-52 overflow-y-auto">
                 {teamMembers.filter(m => m.permission !== 'Externo').map(m => {
                   const perm = (m.permission ?? 'Membro') as UserPermission;
-                  const meta = PERMISSION_META[perm];
+                  // A permission value from an older build or an imported backup would
+                  // otherwise read .color off undefined and blank the entire app.
+                  const meta = PERMISSION_META[perm] ?? PERMISSION_META['Membro'];
                   const isActive = m.id === currentUserId;
                   return (
                     <button

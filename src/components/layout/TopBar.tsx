@@ -87,7 +87,13 @@ export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
             {darkMode ? <Sun size={14} /> : <Moon size={14} />}
           </button>
 
-          <button className="w-8 h-8 rounded-md hover:bg-gray-100 flex items-center justify-center text-gray-400 transition-colors shrink-0">
+          {/* No notifications feature yet. It used to carry a hover state and no
+              handler, so it read as clickable and simply did nothing. */}
+          <button
+            disabled
+            title="Notificações — em breve"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-gray-300 opacity-40 cursor-default shrink-0"
+          >
             <Bell size={14} />
           </button>
         </div>

@@ -326,10 +326,16 @@ function LinkEditor({
   entries: init,
   onSave,
   onClose,
-}: { entries: LinkEntry[]; onSave: (e: LinkEntry[]) => void; onClose: () => void }) {
+  draftRef,
+}: { entries: LinkEntry[]; onSave: (e: LinkEntry[]) => void; onClose: () => void; draftRef?: React.MutableRefObject<LinkEntry[] | null> }) {
   const [entries, setEntries] = useState<LinkEntry[]>(
     init.length > 0 ? init.map(e => ({ ...e })) : [{ url: '', label: '' }]
   );
+
+  // Publish the rows being edited so closing by clicking outside can commit
+  // them — they live only in this component's state, so the popover used to
+  // throw away everything just typed without a word.
+  useEffect(() => { if (draftRef) draftRef.current = entries; }, [entries, draftRef]);
 
   const upd = (i: number, field: keyof LinkEntry, val: string) =>
     setEntries(prev => prev.map((e, idx) => idx === i ? { ...e, [field]: val } : e));
@@ -405,17 +411,25 @@ function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
   const { updateTask } = useAppStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const draftRef = useRef<LinkEntry[] | null>(null);
   const raw = task.customFields?.[col.id] ?? '';
   const entries = parseLinkEntries(raw);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const h = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        // Save what's in the editor rather than just closing it.
+        if (draftRef.current) save(draftRef.current);
+        else setOpen(false);
+      }
+    };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [open]);
 
   const save = (newEntries: LinkEntry[]) => {
+    draftRef.current = null;
     const filtered = newEntries.filter(e => e.url.trim());
     const freshFields = useAppStore.getState().tasks.find(t => t.id === task.id)?.customFields;
     updateTask(task.id, {
@@ -465,7 +479,7 @@ function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
           </button>
         </div>
       )}
-      {open && <LinkEditor entries={entries} onSave={save} onClose={() => setOpen(false)} />}
+      {open && <LinkEditor entries={entries} onSave={save} onClose={() => setOpen(false)} draftRef={draftRef} />}
     </div>
   );
 }
@@ -1291,7 +1305,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
         <div className="absolute bottom-4 left-0 right-0 flex justify-center pointer-events-none z-40">
           {/* Backdrop to close popover on outside click */}
           {bulkPopover && (
-            <div className="fixed inset-0 z-30" onClick={() => setBulkPopover(null)} />
+            <div className="fixed inset-0 z-30 pointer-events-auto" onClick={() => setBulkPopover(null)} />
           )}
           <div className="pointer-events-auto relative z-40 flex items-center gap-1.5 bg-gray-900 text-white rounded-2xl px-4 py-2.5 shadow-2xl border border-gray-700">
 

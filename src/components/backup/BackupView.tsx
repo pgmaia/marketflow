@@ -67,6 +67,18 @@ export function BackupView() {
     if (!file) return;
     setBusy(true);
     try {
+      // importStateFromJSON pushes to Supabase before inspecting anything, so a
+      // wrong file (any .json at all) used to replace everyone's data and then
+      // blank the app, after reporting success. Check the shape first.
+      const parsed = JSON.parse(await file.text());
+      const required = ['tasks', 'projects', 'companies', 'teamMembers'];
+      const invalid = required.filter(k => !Array.isArray(parsed?.[k]));
+      if (invalid.length) throw new Error(`não parece um backup (campos inválidos: ${invalid.join(', ')})`);
+      if (!window.confirm('Isso substitui TODOS os dados atuais, para todos os usuários. Continuar?')) {
+        setBusy(false);
+        if (fileRef.current) fileRef.current.value = '';
+        return;
+      }
       await importStateFromJSON(file);
       notify('success', 'Dados importados com sucesso');
     } catch (e: unknown) {

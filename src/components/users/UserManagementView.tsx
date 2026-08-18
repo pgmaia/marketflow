@@ -204,11 +204,12 @@ function getInitials(name: string): string {
 // ─── Add Member Modal ─────────────────────────────────────────────────────────
 
 interface AddMemberModalProps {
+  existingEmails: string[];
   onClose: () => void;
   onAdd: (name: string, email: string, role: string, permission: UserPermission, color: string, password: string) => void;
 }
 
-function AddMemberModal({ onClose, onAdd }: AddMemberModalProps) {
+function AddMemberModal({ existingEmails, onClose, onAdd }: AddMemberModalProps) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
@@ -228,6 +229,9 @@ function AddMemberModal({ onClose, onAdd }: AddMemberModalProps) {
     if (!name.trim()) { setError('Nome é obrigatório'); return; }
     if (!isExterno) {
       if (!email.trim() || !email.includes('@')) { setError('E-mail inválido'); return; }
+      // login() matches by email with find(), so a duplicate address means the new
+      // member can never sign in — the first holder always wins.
+      if (existingEmails.includes(email.trim().toLowerCase())) { setError('Já existe um membro com este e-mail'); return; }
       if (!role.trim()) { setError('Cargo é obrigatório'); return; }
       if (password.length < 4) { setError('Senha deve ter ao menos 4 caracteres'); return; }
       if (password !== confirm) { setError('As senhas não conferem'); return; }
@@ -592,7 +596,9 @@ export function UserManagementView() {
   const [newTeamCompany,  setNewTeamCompany]   = useState<string>('');
   const [showNewTeam,     setShowNewTeam]      = useState(false);
   // Edit-team inline
-  const [editingTeamName, setEditingTeamName]  = useState('');
+  // null = not renaming. Using '' as the flag meant clearing the field exited
+  // edit mode mid-typing, so the name could never be retyped from scratch.
+  const [editingTeamName, setEditingTeamName]  = useState<string | null>(null);
   // Task types tab
   const [showTypeForm,    setShowTypeForm]     = useState(false);
   const [editingType,     setEditingType]      = useState<TaskTypeConfig | null>(null);
@@ -820,7 +826,7 @@ export function UserManagementView() {
               {selectedTeam ? (() => {
                 const teamMemberList = teamMembers.filter(m => selectedTeam.memberIds.includes(m.id));
                 const available = teamMembers.filter(m => !selectedTeam.memberIds.includes(m.id));
-                const isEditing = editingTeamName !== '';
+                const isEditing = editingTeamName !== null;
                 return (
                   <div className="space-y-4">
                     {/* Team header card */}
@@ -833,15 +839,15 @@ export function UserManagementView() {
                         {isEditing ? (
                           <input
                             autoFocus
-                            value={editingTeamName}
+                            value={editingTeamName ?? ''}
                             onChange={e => setEditingTeamName(e.target.value)}
                             onBlur={() => {
-                              if (editingTeamName.trim()) updateTeam(selectedTeam.id, { name: editingTeamName.trim() });
-                              setEditingTeamName('');
+                              if (editingTeamName?.trim()) updateTeam(selectedTeam.id, { name: editingTeamName.trim() });
+                              setEditingTeamName(null);
                             }}
                             onKeyDown={e => {
-                              if (e.key === 'Enter') { if (editingTeamName.trim()) updateTeam(selectedTeam.id, { name: editingTeamName.trim() }); setEditingTeamName(''); }
-                              if (e.key === 'Escape') setEditingTeamName('');
+                              if (e.key === 'Enter') { if (editingTeamName?.trim()) updateTeam(selectedTeam.id, { name: editingTeamName.trim() }); setEditingTeamName(null); }
+                              if (e.key === 'Escape') setEditingTeamName(null);
                             }}
                             className="text-[16px] font-bold text-gray-900 bg-transparent border-b-2 border-[#1f6feb] outline-none w-full"
                           />
@@ -924,7 +930,7 @@ export function UserManagementView() {
                                 </div>
                                 {isAdmin && (
                                   <button onClick={() => removePersonFromTeam(selectedTeam.id, m.id)}
-                                    className="opacity-0 group-hover:opacity-100 flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-all">
+                                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-red-500 bg-red-50 hover:bg-red-100 rounded-lg transition-all">
                                     <X size={11} /> Remover
                                   </button>
                                 )}
@@ -955,7 +961,7 @@ export function UserManagementView() {
                                   </div>
                                 </div>
                                 <button onClick={() => addPersonToTeam(selectedTeam.id, m.id)}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-[#1f6feb] bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                                  className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-[#1f6feb] bg-orange-50 hover:bg-orange-100 rounded-lg transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100">
                                   <Plus size={11} /> Adicionar
                                 </button>
                               </div>
@@ -1023,7 +1029,7 @@ export function UserManagementView() {
 
                         {/* Actions */}
                         {isAdmin && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
                             <button
                               onClick={() => { setEditingType(tt); setShowTypeForm(true); }}
                               className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
@@ -1319,6 +1325,7 @@ export function UserManagementView() {
       {/* Modals */}
       {showAddModal && (
         <AddMemberModal
+          existingEmails={teamMembers.map(m => (m.email ?? '').toLowerCase()).filter(Boolean)}
           onClose={() => setShowAddModal(false)}
           onAdd={handleAdd}
         />
