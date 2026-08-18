@@ -11,6 +11,7 @@ import { ApplyTemplateModal } from '../templates/ApplyTemplateModal';
 import { PhaseEditor } from './PhaseEditor';
 import { EditProjectModal } from './EditProjectModal';
 import { ProjectDocumentView } from './ProjectDocumentView';
+import { localISO } from '../../lib/date';
 
 type ViewMode = 'board' | 'list' | 'calendar' | 'document';
 const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Documento' };
@@ -130,7 +131,7 @@ export function KanbanBoard() {
 
   const done = projectTasks.filter(t => t.status === 'Concluído').length;
   const blockedTasks = projectTasks.filter(t => t.status === 'Bloqueado');
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const overdueTasks = projectTasks.filter(t => t.dueDate < today && t.status !== 'Concluído');
   const blocked = blockedTasks.length;
   const overdue = overdueTasks.length;
@@ -147,8 +148,8 @@ export function KanbanBoard() {
       type: 'Copy',
       status: 'Backlog',
       priority: 'Medium',
-      dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-      createdAt: new Date().toISOString().split('T')[0],
+      dueDate: localISO(new Date(Date.now() + 7 * 86400000)),
+      createdAt: localISO(),
     };
     addTask(newTask);
     setTimeout(() => setActiveTask(newTask.id), 50);
@@ -203,9 +204,15 @@ export function KanbanBoard() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${company?.name ?? 'Projeto'} - ${project.name} - ${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `${company?.name ?? 'Projeto'} - ${project.name} - ${localISO()}.csv`;
+    // The anchor has to be in the document for Firefox to honour the click, and
+    // revoking the blob URL in the same tick can abort the download before it
+    // starts — both leave the user clicking Exportar with nothing happening.
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 0);
   };
 
   return (
@@ -566,7 +573,7 @@ export function KanbanBoard() {
                 status: 'Backlog',
                 priority: 'Medium',
                 dueDate: date,
-                createdAt: new Date().toISOString().split('T')[0],
+                createdAt: localISO(),
               };
               addTask(newTask);
               setTimeout(() => setActiveTask(newTask.id), 50);

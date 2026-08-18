@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { useAppStore } from '../store/useAppStore';
+import { localISO } from './date';
 
 const ROW_KEY = 'main';
 
@@ -273,7 +274,7 @@ export function exportStateAsJSON() {
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = `marketflow-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.download = `marketflow-backup-${localISO()}.json`;
   a.click();
   URL.revokeObjectURL(url);
 }

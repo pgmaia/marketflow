@@ -2,6 +2,7 @@ import { ArrowRight, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import type { Company } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { ProgressBar } from '../shared/ProgressBar';
+import { localISO } from '../../lib/date';
 
 interface CompanyCardProps {
   company: Company;
@@ -19,7 +20,7 @@ export function CompanyCard({ company }: CompanyCardProps) {
   const inProgress = allTasks.filter(t => t.status === 'Em andamento').length;
   const health = allTasks.length ? Math.round((done / allTasks.length) * 100) : 0;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const overdue = allTasks.filter(t => t.dueDate < today && t.status !== 'Concluído').length;
 
   const upcoming = allTasks

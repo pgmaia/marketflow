@@ -1,6 +1,7 @@
 import { AlertTriangle, Calendar, CheckCircle2, Clock, TrendingUp } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { Project, Task } from '../../types';
+import { localISO } from '../../lib/date';
 
 // ─── Circular progress ring ───────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function ProjectCard({
   companyColor: string;
   companyLogo: string;
 }) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
 
   const total    = tasks.length;
   const done     = tasks.filter(t => t.status === 'Concluído').length;
@@ -162,7 +163,7 @@ function ProjectCard({
 // ─── Alert row ─────────────────────────────────────────────────────────────────
 
 function AlertRow({ task, projectName }: { task: Task; projectName: string }) {
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const isOverdue = task.dueDate < today && task.status !== 'Concluído';
   const isBlocked = task.status === 'Bloqueado';
 
@@ -196,7 +197,7 @@ function UpcomingRow({ task, projectName, projectColor }: { task: Task; projectN
   const fmtDate = (d: string) =>
     new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'short', month: 'short', day: 'numeric' });
 
-  const today   = new Date().toISOString().split('T')[0];
+  const today   = localISO();
   const diffMs  = new Date(task.dueDate + 'T00:00:00').getTime() - new Date(today + 'T00:00:00').getTime();
   const diffDays = Math.round(diffMs / 86400000);
   const soon    = diffDays <= 2;
@@ -274,7 +275,7 @@ export function VisualizadorView() {
   const myTasks     = tasks.filter(t => myProjectIds.has(t.projectId) && !t.parentTaskId);
 
   // ── Derived stats ─────────────────────────────────────────────────────────
-  const today     = new Date().toISOString().split('T')[0];
+  const today     = localISO();
   const doneCount = myTasks.filter(t => t.status === 'Concluído').length;
   const overallPct = myTasks.length ? Math.round((doneCount / myTasks.length) * 100) : 0;
 

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { X, Layers, Tag } from 'lucide-react';
 import type { Task, TaskTemplate } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
+import { localISO } from '../../lib/date';
 
 interface Props {
   tasks: Task[];
@@ -47,7 +48,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
             : undefined,
         };
       }),
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localISO(),
     };
 
     addTemplate(template);

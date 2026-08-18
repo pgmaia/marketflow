@@ -6,6 +6,7 @@ import {
 import { useAppStore } from '../../store/useAppStore';
 import { FlowCanvas } from './FlowCanvas';
 import type { FlowBoard, FlowNode, FlowEdge, FlowNodeTask, Project, Task, ProjectPhase } from '../../types';
+import { localISO } from '../../lib/date';
 
 // ─── Color palette for auto-assigning phase colors ───────────────────────────
 
@@ -81,7 +82,7 @@ function NewBoardModal({ onClose, onCreate }: {
   };
 
   const handleCreate = () => {
-    const now = new Date().toISOString().split('T')[0];
+    const now = localISO();
     const ts = Date.now();
     const id = `flow-${ts}`;
 
@@ -120,7 +121,7 @@ function NewBoardModal({ onClose, onCreate }: {
       ? nodes.map((n, i) => ({ id: `ph-${ts}-${i}`, name: n.title }))
       : [{ id: `ph-${ts}`, name: 'Tarefas' }];
 
-    const endDate = new Date(ts + 90 * 86400000).toISOString().split('T')[0];
+    const endDate = localISO(new Date(ts + 90 * 86400000));
 
     const teamMemberIds = [...new Set(
       teams
@@ -141,7 +142,7 @@ function NewBoardModal({ onClose, onCreate }: {
     };
 
     // Each node task → a Task
-    const taskDue = new Date(ts + 30 * 86400000).toISOString().split('T')[0];
+    const taskDue = localISO(new Date(ts + 30 * 86400000));
     const tasks: Task[] = nodes.flatMap((n, ni) =>
       n.tasks.map((ft, ti) => ({
         id: `t-${ts}-${ni}-${ti}`,

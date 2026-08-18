@@ -7,6 +7,7 @@ import { DEFAULT_PHASES } from '../../data/seed';
 import { EditProjectModal } from '../project/EditProjectModal';
 import type { TaskStatus } from '../../types';
 import { getAssigneeIds, hasAdminPower } from '../../types';
+import { localISO } from '../../lib/date';
 
 // ─── Status/priority meta (mirrors TaskListView) ──────────────────────────────
 
@@ -94,8 +95,8 @@ const PROJECT_COLORS = [
 function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: () => void }) {
   const { addProject, setActiveProject, teams } = useAppStore();
 
-  const today = new Date().toISOString().split('T')[0];
-  const defaultEnd = new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+  const today = localISO();
+  const defaultEnd = localISO(new Date(Date.now() + 90 * 86400000));
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -273,7 +274,7 @@ export function CompanyView() {
   const isAdminOrManager = hasAdminPower(currentUserId, company.id, teamMembers, teams);
 
   const companyProjects = projects.filter(p => p.companyId === company.id);
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
 
   const allTasks = tasks.filter(t => companyProjects.some(p => p.id === t.projectId));
   const done = allTasks.filter(t => t.status === 'Concluído').length;

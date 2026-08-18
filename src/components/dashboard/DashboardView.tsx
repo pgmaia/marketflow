@@ -10,6 +10,7 @@ import { DashboardCalendar } from './DashboardCalendar';
 import { getAssigneeIds } from '../../types';
 import { ProgressBar } from '../shared/ProgressBar';
 import { AvatarGroup } from '../shared/Avatar';
+import { localISO } from '../../lib/date';
 
 // ─── Stat card ────────────────────────────────────────────────────────────────
 
@@ -300,7 +301,7 @@ function ProjectGroupTable({
 
   const companyProjects = projects
     .filter(p => p.companyId === company.id && visibleProjectIds.has(p.id));
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
 
   if (!companyProjects.length) return null;
 
@@ -708,7 +709,7 @@ export function DashboardView() {
   );
 
   // ── Stats ─────────────────────────────────────────────────────────────────
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const done    = filteredTasks.filter(t => t.status === 'Concluído').length;
   const inProg  = filteredTasks.filter(t => t.status === 'Em andamento').length;
   const blocked = filteredTasks.filter(t => t.status === 'Bloqueado').length;

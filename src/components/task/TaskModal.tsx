@@ -4,6 +4,7 @@ import type { Task, TaskStatus, TaskPriority, TaskRecurrence, RecurrenceType } f
 import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar, AvatarGroup } from '../shared/Avatar';
+import { localISO } from '../../lib/date';
 
 const STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'Backlog',      label: 'Backlog'      },
@@ -230,7 +231,7 @@ export function TaskModal() {
     updateTask(task.id, { assigneeIds: next, assigneeId: next[0] });
   };
   const update = (field: keyof Task, value: any) => updateTask(task.id, { [field]: value });
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const isOverdue = task.dueDate < today && task.status !== 'Concluído';
   const subtasks = tasks.filter(t => t.parentTaskId === task.id);
   const subtasksDone = subtasks.filter(t => t.status === 'Concluído').length;
@@ -248,7 +249,7 @@ export function TaskModal() {
       status: 'Backlog',
       priority: task!.priority,
       dueDate: task!.dueDate,
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localISO(),
       parentTaskId: task!.id,
     });
     setNewSubtaskTitle('');
@@ -563,7 +564,7 @@ export function TaskModal() {
                   {subtasks.map((sub, i) => (
                     <div
                       key={sub.id}
-                      className={`flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${i < subtasks.length - 1 ? 'border-b border-gray-50' : ''}`}
+                      className={`group flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors ${i < subtasks.length - 1 ? 'border-b border-gray-50' : ''}`}
                     >
                       <button
                         onClick={() => updateTask(sub.id, { status: sub.status === 'Concluído' ? 'Backlog' : 'Concluído' })}

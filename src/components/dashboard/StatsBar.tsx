@@ -1,5 +1,6 @@
 import { CheckCircle2, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { localISO } from '../../lib/date';
 
 export function StatsBar() {
   const { tasks, projects, filters } = useAppStore();
@@ -13,7 +14,7 @@ export function StatsBar() {
     return true;
   });
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const done = filtered.filter(t => t.status === 'Concluído').length;
   const inProgress = filtered.filter(t => t.status === 'Em andamento').length;
   const blocked = filtered.filter(t => t.status === 'Bloqueado').length;

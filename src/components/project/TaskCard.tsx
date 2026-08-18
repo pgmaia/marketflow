@@ -3,6 +3,7 @@ import type { Task } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { TypeIcon } from '../shared/Badge';
 import { Avatar } from '../shared/Avatar';
+import { localISO } from '../../lib/date';
 
 interface TaskCardProps {
   task: Task;
@@ -38,7 +39,7 @@ export function TaskCard({ task }: TaskCardProps) {
   const assignee = teamMembers.find(m => m.id === task.assigneeId);
   const subtasks = tasks.filter(t => t.parentTaskId === task.id);
   const subtasksDone = subtasks.filter(t => t.status === 'Concluído').length;
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const isOverdue = task.dueDate < today && task.status !== 'Concluído';
   const isDone = task.status === 'Concluído';
   const formatDate = (d: string) =>

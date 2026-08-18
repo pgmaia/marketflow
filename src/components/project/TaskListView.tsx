@@ -5,6 +5,7 @@ import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { Avatar, AvatarGroup } from '../shared/Avatar';
 import { SaveTemplateModal } from '../templates/SaveTemplateModal';
+import { localISO } from '../../lib/date';
 
 type SubtaskMode = 'collapsed' | 'expanded' | 'separate';
 
@@ -127,7 +128,7 @@ function PriorityPicker({ task }: { task: Task }) {
 function DueDatePicker({ task }: { task: Task }) {
   const { updateTask } = useAppStore();
   const [editing, setEditing] = useState(false);
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const isOverdue = task.dueDate < today && task.status !== 'Concluído';
   const fmt = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('pt-BR', { month: 'short', day: 'numeric' });
   const isBulk = _selIds.has(task.id) && _selIds.size > 1;
@@ -888,8 +889,8 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
   const create = (andClose = false) => {
     if (!title.trim()) { onDone(); return; }
-    const now = new Date().toISOString().split('T')[0];
-    const due = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+    const now = localISO();
+    const due = localISO(new Date(Date.now() + 7 * 86400000));
     addTask({
       id: `t${Date.now()}`,
       projectId,

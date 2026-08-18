@@ -1,17 +1,18 @@
 import { useAppStore } from '../../store/useAppStore';
+import { localISO } from '../../lib/date';
 
 export function GlobalTimeline() {
   const { tasks, projects, companies, filters } = useAppStore();
 
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = localISO(today);
 
   // Build next 30 days
   const days: string[] = [];
   for (let i = -2; i < 32; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() + i);
-    days.push(d.toISOString().split('T')[0]);
+    days.push(localISO(d));
   }
 
   const filteredTasks = tasks.filter(t => {

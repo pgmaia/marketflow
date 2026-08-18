@@ -4,20 +4,38 @@ import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task,
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
-function calcNextDueDate(from: string, type: RecurrenceType, daysAfter = 7): string {
+export function calcNextDueDate(from: string, type: RecurrenceType, daysAfter = 7): string {
   if (type === 'days_after') {
     const d = new Date();
     d.setDate(d.getDate() + daysAfter);
-    return d.toISOString().split('T')[0];
+    return localISO(d);
   }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const d = new Date(from + 'T00:00:00');
-  if (type === 'daily')   d.setDate(d.getDate() + 1);
-  if (type === 'weekly')  d.setDate(d.getDate() + 7);
-  if (type === 'monthly') d.setMonth(d.getMonth() + 1);
-  if (type === 'yearly')  d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().split('T')[0];
+  const dayOfMonth = d.getDate();
+  let guard = 0;
+  // Keep stepping until the next occurrence is actually in the future. A task
+  // left overdue for weeks used to yield another past-due date, so completing
+  // it once never brought the series up to date - the user had to tick it off
+  // again and again to walk the date forward to today.
+  do {
+    if (type === 'daily')  d.setDate(d.getDate() + 1);
+    if (type === 'weekly') d.setDate(d.getDate() + 7);
+    if (type === 'monthly') {
+      // setMonth() on the 31st overflows into the month after next (Jan 31 ->
+      // Mar 3), skipping February entirely and drifting the series to day 3.
+      // Pin to the 1st, step the month, then clamp to that month's last day.
+      d.setDate(1);
+      d.setMonth(d.getMonth() + 1);
+      d.setDate(Math.min(dayOfMonth, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+    }
+    if (type === 'yearly') d.setFullYear(d.getFullYear() + 1);
+  } while (d <= today && ++guard < 4000);
+  return localISO(d);
 }
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
+import { localISO } from '../lib/date';
 
 // IDs that belong to seed data — used to distinguish user-created records
 const SEED_COMPANY_IDS = new Set(seedCompanies.map(c => c.id));
@@ -176,7 +194,7 @@ const seedFlow: FlowBoard = {
   id: 'flow-1',
   name: 'Funil de Vendas Padrão',
   description: 'Fluxo completo de funil de marketing e vendas',
-  createdAt: new Date().toISOString().split('T')[0],
+  createdAt: localISO(),
   edges: [
     { id: 'e1', fromId: 'fn1', toId: 'fn2' },
     { id: 'e2', fromId: 'fn2', toId: 'fn3' },
@@ -336,7 +354,7 @@ export const useAppStore = create<AppState>()(
           color,
           companyId,
           memberIds: [],
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: localISO(),
         }],
       })),
       updateTeam: (id, data) => set((s) => ({
@@ -365,7 +383,7 @@ export const useAppStore = create<AppState>()(
       addPersonalTask: (taskData) => set((s) => ({
         personalTasks: [...s.personalTasks, {
           id: `pt-${Date.now()}`,
-          createdAt: new Date().toISOString().split('T')[0],
+          createdAt: localISO(),
           ...taskData,
         }],
       })),
@@ -469,23 +487,40 @@ export const useAppStore = create<AppState>()(
           const rec = existing?.recurrence;
 
           // ── Recurrence trigger (fires when task is marked Concluído) ──────
-          if (rec && newStatus === 'Concluído') {
+          // Guard on the TRANSITION, not the state: re-applying 'Concluído' to a
+          // task that is already done (bulk status change, restore then re-tick)
+          // used to spawn a second occurrence and bin the task again.
+          if (rec && newStatus === 'Concluído' && existing!.status !== 'Concluído') {
             const nextDue = calcNextDueDate(existing!.dueDate, rec.type, rec.daysAfter);
 
             if (rec.createNewTask) {
-              // Spawn the next occurrence
+              const newId = `t${Date.now()}`;
+              const subtasks = s.tasks.filter(t => t.parentTaskId === id);
+              // The checklist is part of the routine — carry it into the next
+              // occurrence instead of leaving it behind in the trash, which made
+              // the user rebuild the same subtasks by hand every single cycle.
+              const newSubtasks: Task[] = subtasks.map((st, i) => ({
+                ...st,
+                id: `${newId}-s${i}`,
+                parentTaskId: newId,
+                status: 'Backlog' as TaskStatus,
+                dueDate: nextDue,
+                createdAt: localISO(),
+              }));
+              // Spawn the next occurrence (…updates first so the explicit
+              // status/dueDate below still win, but other edits aren't dropped)
               const newTask: Task = {
                 ...existing!,
-                id: `t${Date.now()}`,
+                ...updates,
+                id: newId,
                 status: 'Backlog',
                 dueDate: nextDue,
                 phase: rec.targetPhase ?? existing!.phase,
-                createdAt: new Date().toISOString().split('T')[0],
+                createdAt: localISO(),
                 recurrence: rec.repeatForever ? rec : undefined,
               };
 
               // Old task (now Done) moves to trash — keeps history without cluttering the list
-              const subtasks = s.tasks.filter(t => t.parentTaskId === id);
               const trashEntry: TrashItem = {
                 id: trashId(),
                 deletedAt: now(),
@@ -498,6 +533,7 @@ export const useAppStore = create<AppState>()(
                 tasks: [
                   ...s.tasks.filter(t => t.id !== id && t.parentTaskId !== id),
                   newTask,
+                  ...newSubtasks,
                 ],
                 trash: [...s.trash, trashEntry],
               };
@@ -544,7 +580,7 @@ export const useAppStore = create<AppState>()(
         set((s) => {
           const template = s.templates.find((t) => t.id === templateId);
           if (!template) return s;
-          const today = new Date().toISOString().split('T')[0];
+          const today = localISO();
           const ts = Date.now();
           const newTasks: Task[] = [];
 
@@ -1094,7 +1130,7 @@ export const selectCompanyHealth = (companyId: string) => (state: AppState) => {
 export const selectNextDeadline = (companyId: string) => (state: AppState) => {
   const projects = state.projects.filter((p) => p.companyId === companyId);
   const projectIds = projects.map((p) => p.id);
-  const today = new Date().toISOString().split('T')[0];
+  const today = localISO();
   const upcoming = state.tasks
     .filter((t) => projectIds.includes(t.projectId) && t.dueDate >= today && t.status !== 'Concluído')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));

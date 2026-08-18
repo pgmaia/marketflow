@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, Project, Task, ProjectPhase } from '../../types';
+import { localISO } from '../../lib/date';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -389,12 +390,23 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 
   const handleSave = () => {
     if (!canSave) return;
-    const now = new Date().toISOString().split('T')[0];
+    const now = localISO();
     const ts = Date.now();
     const projectId = `proj-${ts}`;
 
+    // Two steps can carry the same title (the default is 'Nova Etapa') and every
+    // view groups tasks by phase NAME — duplicate names made each node's tasks
+    // appear under BOTH groups, so the list showed every task twice. Suffix the
+    // repeats so each node maps to exactly one phase.
+    const seenNames = new Map<string, number>();
+    const nodePhaseName = board.nodes.map(n => {
+      const nth = (seenNames.get(n.title) ?? 0) + 1;
+      seenNames.set(n.title, nth);
+      return nth === 1 ? n.title : `${n.title} (${nth})`;
+    });
+
     const phases: ProjectPhase[] = board.nodes.length
-      ? board.nodes.map((n, i) => ({ id: `ph-${ts}-${i}`, name: n.title }))
+      ? board.nodes.map((_, i) => ({ id: `ph-${ts}-${i}`, name: nodePhaseName[i] }))
       : [{ id: `ph-${ts}`, name: 'Tarefas' }];
 
     const teamMemberIds = [...new Set(
@@ -409,18 +421,18 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
       name: projectName.trim(),
       description: board.description ?? '',
       startDate: now,
-      endDate: new Date(ts + 90 * 86400000).toISOString().split('T')[0],
+      endDate: localISO(new Date(ts + 90 * 86400000)),
       teamMemberIds,
       color: board.nodes[0]?.color ?? '#1f6feb',
       phases,
     };
 
-    const taskDue = new Date(ts + 30 * 86400000).toISOString().split('T')[0];
+    const taskDue = localISO(new Date(ts + 30 * 86400000));
     const tasks: Task[] = board.nodes.flatMap((n, ni) =>
       n.tasks.map((ft, ti) => ({
         id: `t-${ts}-${ni}-${ti}`,
         projectId,
-        phase: n.title,
+        phase: nodePhaseName[ni],
         title: ft.title,
         type: ft.type ?? 'Copy',
         status: 'Backlog' as const,
@@ -713,7 +725,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
         phase: node.title,
         priority: 'Medium' as const,
       })),
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localISO(),
     });
     // Visual feedback — brief flash on the node (handled via toast or just let it save silently)
     if (already) {

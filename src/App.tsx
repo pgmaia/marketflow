@@ -15,6 +15,7 @@ import { TrashView } from './components/trash/TrashView';
 import { LoginView } from './components/auth/LoginView';
 import { ScheduleView } from './components/schedule/ScheduleView';
 import { BackupView } from './components/backup/BackupView';
+import { localISO } from './lib/date';
 
 export default function App() {
   const { view, activeTaskId, addTask, activeProjectId, projects, isAuthenticated, darkMode, teamMembers, currentUserId, logout } = useAppStore();
@@ -92,8 +93,8 @@ export default function App() {
       type: 'Copy' as const,
       status: 'Backlog' as const,
       priority: 'Medium' as const,
-      dueDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-      createdAt: new Date().toISOString().split('T')[0],
+      dueDate: localISO(new Date(Date.now() + 7 * 86400000)),
+      createdAt: localISO(),
     };
     addTask(newTask);
     setTimeout(() => useAppStore.getState().setActiveTask(newTask.id), 50);

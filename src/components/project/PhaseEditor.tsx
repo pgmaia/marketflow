@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { X, Plus, Trash2, GripVertical, Layers, ChevronDown, ChevronRight, Check } from 'lucide-react';
 import type { ProjectPhase, PhaseTemplate } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
+import { localISO } from '../../lib/date';
 
 interface Props {
   projectId: string;
@@ -58,7 +59,7 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
       id: `ptpl-${Date.now()}`,
       name,
       phases: phases.map(p => p.name),
-      createdAt: new Date().toISOString().split('T')[0],
+      createdAt: localISO(),
     };
     addPhaseTemplate(template);
     setTemplateName('');
@@ -66,18 +67,29 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
   };
 
   // Drag-to-reorder
-  const handleDragStart = (id: string) => { dragRef.current = id; };
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    dragRef.current = id;
+    // Firefox won't start a drag unless the event carries data.
+    e.dataTransfer.setData('text/plain', id);
+    e.dataTransfer.effectAllowed = 'move';
+  };
   const handleDragOver = (e: React.DragEvent, id: string) => {
     e.preventDefault();
     setDragOver(id);
   };
-  const handleDrop = (targetId: string) => {
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
     const srcId = dragRef.current;
     if (!srcId || srcId === targetId) { setDragOver(null); return; }
     const arr = [...phases];
     const from = arr.findIndex(p => p.id === srcId);
-    const to   = arr.findIndex(p => p.id === targetId);
+    if (from < 0) { setDragOver(null); return; }
     const [item] = arr.splice(from, 1);
+    // Recompute the target AFTER the removal: taking the index beforehand made
+    // dragging a phase downwards land it one slot past where it was dropped,
+    // while dragging upwards behaved correctly.
+    const to = arr.findIndex(p => p.id === targetId);
+    if (to < 0) { setDragOver(null); return; }
     arr.splice(to, 0, item);
     reorderPhases(projectId, arr);
     setDragOver(null);
@@ -108,9 +120,9 @@ export function PhaseEditor({ projectId, phases: initialPhases, onClose }: Props
                 <div
                   key={ph.id}
                   draggable
-                  onDragStart={() => handleDragStart(ph.id)}
+                  onDragStart={(e) => handleDragStart(e, ph.id)}
                   onDragOver={(e) => handleDragOver(e, ph.id)}
-                  onDrop={() => handleDrop(ph.id)}
+                  onDrop={(e) => handleDrop(e, ph.id)}
                   onDragLeave={() => setDragOver(null)}
                   className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-colors group ${
                     dragOver === ph.id ? 'border-[#1f6feb]/40 bg-orange-50/40' : 'border-gray-100 hover:border-gray-200 bg-white'

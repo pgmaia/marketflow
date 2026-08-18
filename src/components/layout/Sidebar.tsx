@@ -172,15 +172,19 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const isAdmin = currentMember?.permission === 'Admin';
   const uid = currentUserId ?? '';
 
-  // A project is visible if it's in the explicit memberAccess list OR if the user
-  // is in project.teamMemberIds (covers projects created after they joined a team).
+  // A project is visible if it's in the explicit memberAccess list.
+  // The teamMemberIds fallback that used to sit here made revoking access a
+  // no-op in the sidebar: the admin unticked the project, the permissions screen
+  // showed it revoked, the dashboard hid it — and the member still saw and opened
+  // it here. addProject already grants explicit access to everyone on the team,
+  // so the fallback covered nothing except undoing the admin's revocation.
   const visibleProjectIds = isAdmin
     ? projects.map(p => p.id)
     : projects
         .filter(p => {
           const explicit = memberAccess[uid];
           if (!explicit) return true; // no explicit list → see all
-          return explicit.includes(p.id) || (p.teamMemberIds ?? []).includes(uid);
+          return explicit.includes(p.id);
         })
         .map(p => p.id);
 
