@@ -636,7 +636,7 @@ function ChartsSection({
 // ─── Dashboard ────────────────────────────────────────────────────────────────
 
 export function DashboardView() {
-  const { tasks, projects, companies, teams, teamMembers, currentUserId, memberCompanyAccess, memberAccess } = useAppStore();
+  const { tasks, projects, companies, teams, teamMembers, currentUserId, memberCompanyAccess, memberAccess, filters } = useAppStore();
   const currentUser = teamMembers.find(m => m.id === currentUserId);
   const isAdmin = currentUser?.permission === 'Admin';
   const isAdminOrManager = currentUser?.permission === 'Admin' || currentUser?.permission === 'Gerente';
@@ -693,14 +693,33 @@ export function DashboardView() {
         ? teamMemberIdsFromFilter
         : selectedUserIds;
 
-  const filteredTasks = effectiveUserIds.length > 0
+  const userFilteredTasks = effectiveUserIds.length > 0
     ? tasksInScope.filter(t => getAssigneeIds(t).some(id => effectiveUserIds.includes(id)))
     : tasksInScope;
 
+  // Status and due-date pickers from the top bar. Nothing in the app read these
+  // before, so changing them looked like the screen had frozen.
+  const todayStr = localISO();
+  const inDueRange = (due: string) => {
+    if (filters.dueDateRange === 'all')     return true;
+    if (filters.dueDateRange === 'overdue') return due < todayStr;
+    const end = new Date();
+    end.setDate(end.getDate() + (filters.dueDateRange === 'this-week' ? 7 : 30));
+    return due >= todayStr && due <= localISO(end);
+  };
+  const filteredTasks = userFilteredTasks.filter(t =>
+    (!filters.status || t.status === filters.status) && inDueRange(t.dueDate)
+  );
+
+  const anyFilterActive =
+    effectiveUserIds.length > 0 || !!filters.status || filters.dueDateRange !== 'all';
+
   // Projects that have at least one task in the filtered set (for project table)
   const visibleProjectIds = new Set(filteredTasks.map(t => t.projectId));
-  // Fallback: if user filter gives 0 visible projects, still show all in-scope projects
-  const tableProjectIds = visibleProjectIds.size > 0 ? visibleProjectIds : filteredProjectIds;
+  // Only fall back to every in-scope project when nothing is being filtered. The
+  // old unconditional fallback meant a filter matching nothing rendered every
+  // project at zero progress, which read as the data having vanished.
+  const tableProjectIds = anyFilterActive ? visibleProjectIds : filteredProjectIds;
   const visibleCompanies = accessibleCompanies.filter(c =>
     [...tableProjectIds].some(pid => {
       const p = accessibleProjects.find(pp => pp.id === pid);
@@ -822,6 +841,11 @@ export function DashboardView() {
                   {[...tableProjectIds].length} projetos em {visibleCompanies.length} empresas
                 </span>
               </div>
+              {visibleCompanies.length === 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 py-12 text-center text-[13px] text-gray-400">
+                  Nenhuma tarefa para os filtros selecionados
+                </div>
+              )}
               {visibleCompanies.map(c => (
                 <ProjectGroupTable
                   key={c.id}

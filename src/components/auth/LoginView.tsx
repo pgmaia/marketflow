@@ -198,7 +198,12 @@ export function LoginView() {
             </button>
           </form>
 
-          {/* Demo credentials */}
+          {/* Demo credentials — DEV ONLY.
+              This listed every seed member and filled in their real password on
+              click, including the Admin's, on a publicly reachable URL. It also
+              went stale the moment an admin changed a password, filling in the
+              old one and reporting "senha incorreta". */}
+          {import.meta.env.DEV && (
           <div style={{ marginTop: 28, borderTop: '1px solid #eef1f6', paddingTop: 20 }}>
             <button
               onClick={() => setShowDemo(v => !v)}
@@ -243,6 +248,7 @@ export function LoginView() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 

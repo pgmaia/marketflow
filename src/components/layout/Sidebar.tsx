@@ -463,6 +463,10 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             <GitBranch size={15} />
             Fluxos
           </button>
+          {/* Backup and Lixeira act on EVERYONE's data — restoring a backup or
+              emptying the trash replaces/destroys the shared state for the whole
+              team, so they are admin-only. */}
+          {isAdmin && (
           <button
             onClick={nav(() => setView('backup' as AppView))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
@@ -477,6 +481,8 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             <Shield size={15} />
             Backup
           </button>
+          )}
+          {isAdmin && (
           <button
             onClick={nav(() => setView('trash'))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
@@ -499,6 +505,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
               </span>
             )}
           </button>
+          )}
         </nav>
 
         {/* ── Companies label + add button ── */}

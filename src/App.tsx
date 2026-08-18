@@ -80,6 +80,15 @@ export default function App() {
     }
   }, [isAuthenticated, currentUserId, currentMember, logout]);
 
+  // Admin-only routes render nothing for everyone else, so a user who lands on
+  // one (switching account from the sidebar picker, or losing the permission
+  // while the tab is open) would stare at an empty content area. Send them home.
+  useEffect(() => {
+    if (!isAdmin && (view === 'users' || view === 'trash' || view === 'backup')) {
+      useAppStore.getState().setView('dashboard');
+    }
+  }, [isAdmin, view]);
+
   if (!isAuthenticated) return <LoginView />;
 
   // activeProjectId survives navigation to Trash/Backup/Schedule, so the button
@@ -129,9 +138,9 @@ export default function App() {
           {view === 'project' && <KanbanBoard />}
           {view === 'users' && isAdmin && <UserManagementView />}
           {view === 'flow' && <FlowView />}
-          {view === 'trash' && <TrashView />}
+          {view === 'trash' && isAdmin && <TrashView />}
           {view === 'schedule' && <ScheduleView />}
-          {view === 'backup'   && <BackupView />}
+          {view === 'backup'   && isAdmin && <BackupView />}
         </main>
       </div>
 

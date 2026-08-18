@@ -44,7 +44,10 @@ export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
 
         {/* Right: filters (hidden on small screens) + actions */}
         <div className="flex items-center gap-2">
-          {/* Filters — hidden on mobile */}
+          {/* Filters — hidden on mobile, and only on the view that reads them.
+              They used to sit on every screen while nothing consumed the values,
+              so picking a status or date range appeared to do nothing at all. */}
+          {view === 'dashboard' && (
           <div className="hidden sm:flex items-center gap-2">
             <SlidersHorizontal size={12} className="text-gray-400" />
             <select
@@ -65,8 +68,9 @@ export function TopBar({ onNewTask, onMenuToggle }: TopBarProps) {
               <option value="this-month">Este mês</option>
             </select>
           </div>
+          )}
 
-          <div className="hidden sm:block w-px h-4 bg-gray-200 mx-1" />
+          {view === 'dashboard' && <div className="hidden sm:block w-px h-4 bg-gray-200 mx-1" />}
 
           {onNewTask && (
             <button
