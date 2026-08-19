@@ -15,7 +15,7 @@ import { ProjectDocsView } from './ProjectDocsView';
 import { localISO } from '../../lib/date';
 
 type ViewMode = 'board' | 'list' | 'calendar' | 'document' | 'docs';
-const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Documento', docs: 'Documentação' };
+const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Anotações', docs: 'Documentação' };
 
 type SortBy = 'manual' | 'dueDate' | 'priority' | 'assignee' | 'title' | 'status';
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
@@ -452,7 +452,7 @@ export function KanbanBoard() {
         </div>
 
         {/* Member filter bar — only on the views that actually filter tasks.
-            Documento and Documentação show no task list, so it sat there as
+            Anotações and Documentação show no task list, so it sat there as
             another control that changes nothing when you click it. */}
         {viewMode !== 'document' && viewMode !== 'docs' && (projectMembers.length > 0 || currentUserId) && (
           <div className="px-4 md:px-12 py-2.5 flex items-center gap-2.5 border-t border-[#E5E7EB] flex-wrap">
