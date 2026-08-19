@@ -50,7 +50,7 @@ const SYNC_FIELDS = [
   'tasks', 'personalTasks', 'companies', 'projects',
   'teamMembers', 'teams', 'templates', 'phaseTemplates',
   'memberAccess', 'memberCompanyAccess', 'flows', 'trash',
-  'memberPasswords', 'deletedMemberIds', 'taskTypes',
+  'memberPasswords', 'deletedMemberIds', 'taskTypes', 'docEntries',
 ] as const;
 
 type SyncState = Record<typeof SYNC_FIELDS[number], unknown>;
@@ -71,7 +71,7 @@ function extractSyncState(state: ReturnType<typeof useAppStore.getState>): SyncS
 const ENTITY_KEY: Record<string, string> = {
   tasks: 'id', personalTasks: 'id', companies: 'id', projects: 'id',
   teamMembers: 'id', teams: 'id', templates: 'id', phaseTemplates: 'id',
-  flows: 'id', trash: 'id', taskTypes: 'value',
+  flows: 'id', trash: 'id', taskTypes: 'value', docEntries: 'id',
 };
 // Plain objects keyed by member id — merged key by key.
 const OBJECT_MAPS = new Set(['memberAccess', 'memberCompanyAccess', 'memberPasswords']);

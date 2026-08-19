@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download, MessagesSquare } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower, getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -11,10 +11,11 @@ import { ApplyTemplateModal } from '../templates/ApplyTemplateModal';
 import { PhaseEditor } from './PhaseEditor';
 import { EditProjectModal } from './EditProjectModal';
 import { ProjectDocumentView } from './ProjectDocumentView';
+import { ProjectDocsView } from './ProjectDocsView';
 import { localISO } from '../../lib/date';
 
-type ViewMode = 'board' | 'list' | 'calendar' | 'document';
-const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Documento' };
+type ViewMode = 'board' | 'list' | 'calendar' | 'document' | 'docs';
+const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Documento', docs: 'Documentação' };
 
 type SortBy = 'manual' | 'dueDate' | 'priority' | 'assignee' | 'title' | 'status';
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
@@ -343,13 +344,13 @@ export function KanbanBoard() {
         <div className="px-4 md:px-12 flex items-center justify-between gap-2 flex-wrap">
           {/* View tabs */}
           <div className="flex items-center">
-            {(['board', 'list', 'calendar', 'document'] as ViewMode[]).map(v => (
+            {(['board', 'list', 'calendar', 'document', 'docs'] as ViewMode[]).map(v => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors ${viewMode === v ? 'border-[#1f6feb] text-[#1f6feb]' : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'}`}
               >
-                {v === 'board' ? <LayoutGrid size={13} /> : v === 'list' ? <List size={13} /> : v === 'calendar' ? <CalendarDays size={13} /> : <FileText size={13} />}
+                {v === 'board' ? <LayoutGrid size={13} /> : v === 'list' ? <List size={13} /> : v === 'calendar' ? <CalendarDays size={13} /> : v === 'document' ? <FileText size={13} /> : <MessagesSquare size={13} />}
                 {viewLabel[v]}
               </button>
             ))}
@@ -450,8 +451,10 @@ export function KanbanBoard() {
           </div>
         </div>
 
-        {/* Member filter bar */}
-        {(projectMembers.length > 0 || currentUserId) && (
+        {/* Member filter bar — only on the views that actually filter tasks.
+            Documento and Documentação show no task list, so it sat there as
+            another control that changes nothing when you click it. */}
+        {viewMode !== 'document' && viewMode !== 'docs' && (projectMembers.length > 0 || currentUserId) && (
           <div className="px-4 md:px-12 py-2.5 flex items-center gap-2.5 border-t border-[#E5E7EB] flex-wrap">
             <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider shrink-0">Responsável</span>
 
@@ -529,6 +532,15 @@ export function KanbanBoard() {
 
       {/* Content area */}
       <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white">
+
+        {/* Documentation — full width log, no member filter/team panel */}
+        {viewMode === 'docs' && (
+          <ProjectDocsView
+            key={project.id}
+            projectId={project.id}
+            projectColor={project.color}
+          />
+        )}
 
         {/* Document view — full width, no member filter/team panel */}
         {viewMode === 'document' && (

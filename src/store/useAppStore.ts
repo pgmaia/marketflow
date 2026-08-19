@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection } from '../types';
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
@@ -61,6 +61,7 @@ interface AppState {
   memberPasswords: Record<string, string>;
   deletedMemberIds: string[];
   taskTypes: TaskTypeConfig[];
+  docEntries: DocEntry[];
 
   teams: Team[];
 
@@ -159,6 +160,9 @@ interface AppState {
   permanentlyDeleteFromTrash: (trashId: string) => void;
   clearTrash: () => void;
   purgeExpiredTrash: () => void;
+
+  // Project documentation (append-only log)
+  addDocEntry: (projectId: string, section: DocSection, text: string) => void;
 
   // Task Types CRUD
   addTaskType: (type: TaskTypeConfig) => void;
@@ -282,6 +286,7 @@ export const useAppStore = create<AppState>()(
       memberPasswords: {},
       deletedMemberIds: [],
       taskTypes: DEFAULT_TASK_TYPES,
+      docEntries: [],
 
       setActiveCompany: (id) => set({ activeCompanyId: id, activeProjectId: null, view: id ? 'company' : 'dashboard' }),
       setActiveProject: (id) => set({ activeProjectId: id, view: id ? 'project' : 'company' }),
@@ -379,6 +384,22 @@ export const useAppStore = create<AppState>()(
       })),
 
       setFilters: (filters) => set((s) => ({ filters: { ...s.filters, ...filters } })),
+
+      // Append-only. The entry is never edited or replaced afterwards, so a post
+      // cannot be clobbered by a later write to the same record.
+      addDocEntry: (projectId, section, text) => set((s) => ({
+        docEntries: [
+          ...s.docEntries,
+          {
+            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            projectId,
+            section,
+            text,
+            authorId: s.currentUserId,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      })),
 
       addPersonalTask: (taskData) => set((s) => ({
         personalTasks: [...s.personalTasks, {
@@ -1035,6 +1056,7 @@ export const useAppStore = create<AppState>()(
         memberPasswords: state.memberPasswords,
         deletedMemberIds: state.deletedMemberIds,
         taskTypes: state.taskTypes,
+        docEntries: state.docEntries,
       }),
       merge: (persisted: any, current) => {
         const merged = { ...current, ...persisted };
@@ -1052,6 +1074,7 @@ export const useAppStore = create<AppState>()(
         if (!merged.memberCompanyAccess) merged.memberCompanyAccess = {};
         if (!merged.taskTypes) merged.taskTypes = DEFAULT_TASK_TYPES;
         if (!merged.teams) merged.teams = [];
+        if (!merged.docEntries) merged.docEntries = [];
         // Seed companies are only planted on a FRESH install (no persisted array).
         // Re-adding them on every hydration resurrected companies the user had
         // deleted — they reappeared on every reload and could never be removed.

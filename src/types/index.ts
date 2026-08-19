@@ -225,3 +225,30 @@ export function getAssigneeIds(task: Pick<Task, 'assigneeId' | 'assigneeIds'>): 
   if (task.assigneeId !== undefined) return [task.assigneeId];
   return [];
 }
+
+// ── Project documentation ────────────────────────────────────────────────────
+// Each post is its own top-level record rather than a field on the project.
+// That matters for sync: the three-way merge reconciles entity by entity, so two
+// people writing in the same project at the same time both keep their posts.
+// Entries are append-only — nothing here is ever rewritten in place.
+
+export type DocSection =
+  | 'visaoGeral' | 'reunioes' | 'objetivos' | 'rotina' | 'cronograma' | 'aFazer';
+
+export const DOC_SECTIONS: { id: DocSection; label: string; hint: string }[] = [
+  { id: 'visaoGeral', label: 'Visão geral', hint: 'O que é este projeto, contexto e decisões de fundo' },
+  { id: 'reunioes',   label: 'Reuniões',    hint: 'Registro do que foi conversado e combinado'          },
+  { id: 'objetivos',  label: 'Objetivos',   hint: 'Onde queremos chegar e como medimos'                 },
+  { id: 'rotina',     label: 'Rotina',      hint: 'Como o trabalho acontece no dia a dia'               },
+  { id: 'cronograma', label: 'Cronograma',  hint: 'Prazos, marcos e mudanças de data'                   },
+  { id: 'aFazer',     label: 'A Fazer',     hint: 'Pendências anotadas conforme aparecem'               },
+];
+
+export interface DocEntry {
+  id: string;
+  projectId: string;
+  section: DocSection;
+  text: string;
+  authorId: string | null;
+  createdAt: string; // full ISO timestamp — entries are ordered newest first
+}
