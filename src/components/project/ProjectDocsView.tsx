@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Send } from 'lucide-react';
+import { Send, Trash2 } from 'lucide-react';
 import type { DocSection } from '../../types';
 import { DOC_SECTIONS } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -87,8 +87,11 @@ function Composer({
 }
 
 export function ProjectDocsView({ projectId, projectColor }: Props) {
-  const { docEntries, teamMembers, currentUserId, addDocEntry } = useAppStore();
+  const { docEntries, teamMembers, currentUserId, addDocEntry, deleteDocEntry } = useAppStore();
   const [section, setSection] = useState<DocSection>('visaoGeral');
+  // Two-step delete: the first click arms the row, the second confirms. Avoids a
+  // browser confirm() dialog and makes an accidental click harmless.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   const memberById = useMemo(
     () => Object.fromEntries(teamMembers.map(m => [m.id, m])),
@@ -177,7 +180,7 @@ export function ProjectDocsView({ projectId, projectColor }: Props) {
                 return (
                   <div
                     key={entry.id}
-                    className="flex gap-3 rounded-xl border border-gray-100 px-4 py-3 hover:border-gray-200 transition-colors"
+                    className="group/entry flex gap-3 rounded-xl border border-gray-100 px-4 py-3 hover:border-gray-200 transition-colors"
                   >
                     <div
                       className="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white mt-0.5"
@@ -197,6 +200,38 @@ export function ProjectDocsView({ projectId, projectColor }: Props) {
                         <span className="text-[11px] text-gray-400" title={fullStamp(entry.createdAt)}>
                           {timeLabel(entry.createdAt)}
                         </span>
+
+                        {/* Only the author can remove their own post. Removal
+                            sends it to the Lixeira, so it can still be restored. */}
+                        {mine && (
+                          <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                            {confirmingId === entry.id ? (
+                              <>
+                                <span className="text-[11px] text-gray-400">Mover para a lixeira?</span>
+                                <button
+                                  onClick={() => { deleteDocEntry(entry.id); setConfirmingId(null); }}
+                                  className="text-[11px] font-semibold text-red-500 hover:text-red-600 transition-colors"
+                                >
+                                  Confirmar
+                                </button>
+                                <button
+                                  onClick={() => setConfirmingId(null)}
+                                  className="text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setConfirmingId(entry.id)}
+                                title="Mover para a lixeira"
+                                className="opacity-100 md:opacity-0 md:group-hover/entry:opacity-100 focus-visible:opacity-100 text-gray-300 hover:text-red-400 transition-all"
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </span>
+                        )}
                       </div>
                       {/* whitespace-pre-wrap keeps the line breaks the author typed */}
                       <p className="text-[13px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words mt-1">

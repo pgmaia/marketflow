@@ -179,7 +179,8 @@ export type TrashItem =
   | { id: string; deletedAt: string; type: 'taskTemplate';   data: TaskTemplate }
   | { id: string; deletedAt: string; type: 'phaseTemplate';  data: PhaseTemplate }
   | { id: string; deletedAt: string; type: 'phase';          data: ProjectPhase;  projectId: string }
-  | { id: string; deletedAt: string; type: 'customColumn';   data: CustomColumn;  projectId: string };
+  | { id: string; deletedAt: string; type: 'customColumn';   data: CustomColumn;  projectId: string }
+  | { id: string; deletedAt: string; type: 'docEntry';       data: DocEntry };
 
 // ── Flow Builder ──
 

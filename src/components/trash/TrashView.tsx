@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import {
   Trash2, RotateCcw, Building2, FolderKanban, CheckSquare,
   GitBranch, Layers, FileText, LayoutGrid, AlignLeft, Columns, X, AlertTriangle,
+  MessagesSquare,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { TrashItem } from '../../types';
@@ -30,6 +31,7 @@ const TYPE_META: Record<TrashItem['type'], { label: string; icon: React.ReactNod
   phaseTemplate: { label: 'Template de fases',    icon: <LayoutGrid size={14} />,   color: 'text-teal-600',    bg: 'bg-teal-50' },
   phase:         { label: 'Fase',                 icon: <AlignLeft size={14} />,    color: 'text-slate-600',   bg: 'bg-slate-50' },
   customColumn:  { label: 'Coluna personalizada', icon: <Columns size={14} />,      color: 'text-gray-600',    bg: 'bg-gray-100' },
+  docEntry:      { label: 'Registro',             icon: <MessagesSquare size={14} />, color: 'text-indigo-600', bg: 'bg-indigo-50' },
 };
 
 function itemName(item: TrashItem): string {
@@ -43,6 +45,11 @@ function itemName(item: TrashItem): string {
     case 'phaseTemplate': return item.data.name;
     case 'phase':         return item.data.name;
     case 'customColumn':  return item.data.name;
+    // The post itself is the name — trimmed, since it can be a long paragraph.
+    case 'docEntry': {
+      const firstLine = item.data.text.split('\n')[0].trim();
+      return firstLine.length > 80 ? `${firstLine.slice(0, 80)}…` : (firstLine || 'Registro vazio');
+    }
   }
 }
 
@@ -68,6 +75,13 @@ function itemSubline(item: TrashItem): string | null {
     case 'flowNode': {
       const t = item.data.tasks.length;
       return t > 0 ? `${t} ${t === 1 ? 'tarefa' : 'tarefas'}` : null;
+    }
+    case 'docEntry': {
+      const labels: Record<string, string> = {
+        visaoGeral: 'Visão geral', reunioes: 'Reuniões', objetivos: 'Objetivos',
+        rotina: 'Rotina', cronograma: 'Cronograma', aFazer: 'A Fazer',
+      };
+      return `Documentação · ${labels[item.data.section] ?? item.data.section}`;
     }
     default:
       return null;

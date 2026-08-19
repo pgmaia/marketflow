@@ -163,6 +163,7 @@ interface AppState {
 
   // Project documentation (append-only log)
   addDocEntry: (projectId: string, section: DocSection, text: string) => void;
+  deleteDocEntry: (id: string) => void;
 
   // Task Types CRUD
   addTaskType: (type: TaskTypeConfig) => void;
@@ -400,6 +401,18 @@ export const useAppStore = create<AppState>()(
           },
         ],
       })),
+
+      // Removing a post moves it to the trash rather than dropping it, so the
+      // record still exists and can be restored — the log stays a log.
+      deleteDocEntry: (id) => set((s) => {
+        const entry = s.docEntries.find(e => e.id === id);
+        if (!entry) return s;
+        const trashEntry: TrashItem = { id: trashId(), deletedAt: now(), type: 'docEntry', data: entry };
+        return {
+          docEntries: s.docEntries.filter(e => e.id !== id),
+          trash: [...s.trash, trashEntry],
+        };
+      }),
 
       addPersonalTask: (taskData) => set((s) => ({
         personalTasks: [...s.personalTasks, {
@@ -882,6 +895,13 @@ export const useAppStore = create<AppState>()(
             return { ...remaining, projects: s.projects.map(p => p.id !== item.projectId ? p : { ...p, phases: [...p.phases, item.data] }) };
           case 'customColumn':
             return { ...remaining, projects: s.projects.map(p => p.id !== item.projectId ? p : { ...p, customColumns: [...(p.customColumns ?? []), item.data] }) };
+          case 'docEntry': {
+            // Guard against a duplicate: another device may have restored it
+            // already, and two records with the same id break React keys and
+            // the per-entity sync merge.
+            if (s.docEntries.some(e => e.id === item.data.id)) return remaining;
+            return { ...remaining, docEntries: [...s.docEntries, item.data] };
+          }
           default:
             return remaining;
         }
