@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil, CheckSquare } from 'lucide-react';
+import { AlertCircle, Calendar, ArrowRight, Plus, X, FolderKanban, Trash2, AlertTriangle, Pencil, CheckSquare, MessagesSquare } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
+import { ProjectDocsView } from '../project/ProjectDocsView';
 import { ProgressBar } from '../shared/ProgressBar';
 import { Avatar, AvatarGroup } from '../shared/Avatar';
 import { DEFAULT_PHASES } from '../../data/seed';
@@ -261,11 +262,14 @@ function NewProjectModal({ companyId, onClose }: { companyId: string; onClose: (
 // ─── Company view ─────────────────────────────────────────────────────────────
 
 export function CompanyView() {
-  const { companies, activeCompanyId, projects, tasks, teamMembers, teams, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany, setActiveTask, memberAccess } = useAppStore();
+  const { companies, activeCompanyId, projects, tasks, teamMembers, teams, currentUserId, setActiveProject, deleteCompany, deleteProject, setActiveCompany, setActiveTask, memberAccess, docEntries } = useAppStore();
   const [showNewProject, setShowNewProject] = useState(false);
   const [editProjectId, setEditProjectId] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { type: 'company' } | { type: 'project'; id: string; name: string }>(null);
   const [taskStatusFilter, setTaskStatusFilter] = useState<TaskStatus | 'all'>('all');
+  // Opened from the Documentação column. Reuses the project's own documentation
+  // component in a dialog, so the log is reachable without leaving this screen.
+  const [docsProjectId, setDocsProjectId] = useState<string | null>(null);
 
   // The sidebar's "+ Novo projeto" fires this event and nothing was listening,
   // so the button navigated here and then did nothing at all.
@@ -361,8 +365,9 @@ export function CompanyView() {
               <div className="overflow-x-auto">
 
                 {/* Column headers */}
-                <div className="grid text-[11px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 px-8 py-4 bg-gray-50/70 whitespace-nowrap" style={{ gridTemplateColumns: '240px 170px 180px 80px 140px 110px 36px', minWidth: '960px' }}>
+                <div className="grid text-[11px] font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 px-8 py-4 bg-gray-50/70 whitespace-nowrap" style={{ gridTemplateColumns: '240px 130px 170px 180px 80px 140px 110px 36px', minWidth: '1090px' }}>
                   <span>Projeto</span>
+                  <span>Documentação</span>
                   <span>Progresso</span>
                   <span>Tarefas</span>
                   <span>Saúde</span>
@@ -381,13 +386,14 @@ export function CompanyView() {
                   const healthColor = projHealth >= 70 ? '#22c55e' : projHealth >= 40 ? '#f59e0b' : '#ef4444';
                   const members = project.teamMemberIds.map(id => teamMembers.find(m => m.id === id)!).filter(Boolean);
                   const nextTask = projTasks.filter(t => t.dueDate >= today && t.status !== 'Concluído').sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
+                  const docCount = docEntries.filter(e => e.projectId === project.id).length;
 
                   return (
                     <div
                       key={project.id}
                       onClick={() => setActiveProject(project.id)}
                       className={`grid items-center px-8 py-5 cursor-pointer hover:bg-gray-50/70 transition-colors group ${i > 0 ? 'border-t border-gray-100' : ''}`}
-                      style={{ gridTemplateColumns: '240px 170px 180px 80px 140px 110px 36px', minWidth: '960px' }}
+                      style={{ gridTemplateColumns: '240px 130px 170px 180px 80px 140px 110px 36px', minWidth: '1090px' }}
                     >
                       <div className="flex items-center gap-3 min-w-0 pr-4">
                         <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: project.color }} />
@@ -395,6 +401,24 @@ export function CompanyView() {
                           <p className="text-[13px] font-semibold text-gray-800 truncate group-hover:text-[#1f6feb] transition-colors">{project.name}</p>
                           <p className="text-[11px] text-gray-400 truncate mt-0.5">{project.description || '—'}</p>
                         </div>
+                      </div>
+
+                      {/* Documentação — opens the project's log in a dialog. The click
+                          must not bubble: the row itself navigates into the project. */}
+                      <div className="pr-4" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setDocsProjectId(project.id)}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium border transition-colors ${
+                            docCount > 0
+                              ? 'border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                              : 'border-gray-150 text-gray-400 hover:text-gray-600 hover:border-gray-300'
+                          }`}
+                        >
+                          <MessagesSquare size={11} className="shrink-0" />
+                          {docCount > 0
+                            ? `${docCount} ${docCount === 1 ? 'registro' : 'registros'}`
+                            : 'Abrir'}
+                        </button>
                       </div>
 
                       <div className="pr-6">
@@ -600,6 +624,48 @@ export function CompanyView() {
         return proj ? (
           <EditProjectModal project={proj} onClose={() => setEditProjectId(null)} />
         ) : null;
+      })()}
+
+      {/* Documentação of one project, opened from the table. ProjectDocsView is
+          reused as-is, so posting, deleting and the six sections behave exactly
+          as they do inside the project. */}
+      {(() => {
+        const docsProject = companyProjects.find(p => p.id === docsProjectId);
+        if (!docsProject) return null;
+        return (
+          <>
+            <div className="fixed inset-0 bg-black/40 z-50" />
+            {/* Click handler goes on the layer that actually receives the click —
+                the tinted div above is covered by this one. */}
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              onClick={() => setDocsProjectId(null)}
+            >
+              <div
+                className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col overflow-hidden"
+                style={{ height: '85vh' }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-100 shrink-0">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: docsProject.color }} />
+                    <div className="min-w-0">
+                      <p className="text-[14px] font-bold text-gray-900 truncate">{docsProject.name}</p>
+                      <p className="text-[11px] text-gray-400">Documentação</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setDocsProjectId(null)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors shrink-0"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
+                <ProjectDocsView projectId={docsProject.id} projectColor={docsProject.color} />
+              </div>
+            </div>
+          </>
+        );
       })()}
 
       {confirmDelete?.type === 'company' && (
