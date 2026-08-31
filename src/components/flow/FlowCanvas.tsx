@@ -169,7 +169,7 @@ function FlowNodeCard({
   onSaveAsTemplate: () => void;
   onDeleteRequest: () => void;
 }) {
-  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, renameFlowNodeTask, flows, projects, tasks: projectTasks } = useAppStore();
+  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, renameFlowNodeTask, moveFlowNodeTask, flows, projects, tasks: projectTasks } = useAppStore();
 
   // On a linked board, every flow task/subtask has a project twin (flowTaskId
   // points back at it). A twin that no longer exists means it was deleted on
@@ -194,6 +194,19 @@ function FlowNodeCard({
   // Inline rename of a task/subtask row (taskId may be either kind of id).
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingTaskVal, setEditingTaskVal] = useState('');
+  // Row drag-to-reorder inside this block.
+  const dragTaskRef = useRef<string | null>(null);
+  const [dragOverTaskId, setDragOverTaskId] = useState<string | null>(null);
+  const [dragOverEnd, setDragOverEnd] = useState(false);
+
+  const handleRowDrop = (targetId: string | null) => {
+    const src = dragTaskRef.current;
+    dragTaskRef.current = null;
+    setDragOverTaskId(null);
+    setDragOverEnd(false);
+    if (!src || src === targetId) return;
+    moveFlowNodeTask(flowId, node.id, src, targetId);
+  };
 
   const commitTaskRename = (taskId: string) => {
     const v = editingTaskVal.trim();
@@ -343,7 +356,21 @@ function FlowNodeCard({
         <div className="bg-white">
           {node.tasks.map(task => (
             <div key={task.id}>
-              <div className={`flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors ${isGhost(task.id) ? 'opacity-60 grayscale' : ''}`}>
+              <div
+                draggable={editingTaskId !== task.id}
+                onDragStart={e => {
+                  e.stopPropagation();
+                  // Firefox won't start a drag without a payload.
+                  e.dataTransfer.setData('text/plain', task.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  dragTaskRef.current = task.id;
+                }}
+                onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverTaskId(task.id); }}
+                onDragLeave={() => setDragOverTaskId(id => (id === task.id ? null : id))}
+                onDrop={e => { e.preventDefault(); e.stopPropagation(); handleRowDrop(task.id); }}
+                onDragEnd={() => { dragTaskRef.current = null; setDragOverTaskId(null); setDragOverEnd(false); }}
+                className={`flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors cursor-grab active:cursor-grabbing ${isGhost(task.id) ? 'opacity-60 grayscale' : ''} ${dragOverTaskId === task.id ? 'border-t-2 border-t-[#1f6feb]' : ''}`}
+              >
                 <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
                 {task.fromProject && !isGhost(task.id) && (
                   <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#1f6feb]" title="Adicionada no projeto" />
@@ -470,8 +497,13 @@ function FlowNodeCard({
             </div>
           ))}
 
-          {/* Add task */}
-          <div className="px-3 py-2">
+          {/* Add task — dropping a row here sends it to the end of the list */}
+          <div
+            className={`px-3 py-2 ${dragOverEnd ? 'border-t-2 border-t-[#1f6feb]' : ''}`}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDragOverEnd(true); }}
+            onDragLeave={() => setDragOverEnd(false)}
+            onDrop={e => { e.preventDefault(); e.stopPropagation(); handleRowDrop(null); }}
+          >
             {addingTask ? (
               <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                 <input

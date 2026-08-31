@@ -120,6 +120,7 @@ interface AppState {
   deleteFlowNodeTask: (flowId: string, nodeId: string, taskId: string) => void;
   addFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtask: FlowNodeSubtask) => void;
   renameFlowNodeTask: (flowId: string, nodeId: string, taskId: string, title: string) => void;
+  moveFlowNodeTask: (flowId: string, nodeId: string, sourceId: string, targetId: string | null) => void;
   deleteFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtaskId: string) => void;
 
   // Company CRUD
@@ -585,7 +586,29 @@ export const useAppStore = create<AppState>()(
         };
         return { flows, tasks: [...s.tasks, twin] };
       }),
-      // Renames a task OR subtask on the card (taskId may be either id). On a
+      // Reorders a task inside its block: drops it right before targetId, or at
+      // the end when targetId is null. The target index is recomputed AFTER the
+      // source is spliced out — reading it beforehand lands the row one slot
+      // past the drop point when dragging downwards (the PhaseEditor bug).
+      moveFlowNodeTask: (flowId, nodeId, sourceId, targetId) => set((s) => ({
+        flows: s.flows.map(f => f.id !== flowId ? f : ({
+          ...f,
+          nodes: f.nodes.map(n => {
+            if (n.id !== nodeId) return n;
+            const arr = [...n.tasks];
+            const from = arr.findIndex(t => t.id === sourceId);
+            if (from < 0) return n;
+            const [item] = arr.splice(from, 1);
+            if (targetId === null) { arr.push(item); return { ...n, tasks: arr }; }
+            const to = arr.findIndex(t => t.id === targetId);
+            if (to < 0) return n;
+            arr.splice(to, 0, item);
+            return { ...n, tasks: arr };
+          }),
+        })),
+      })),
+
+            // Renames a task OR subtask on the card (taskId may be either id). On a
       // linked board the project twin is renamed too, so the two views never
       // drift apart on what a task is called.
       renameFlowNodeTask: (flowId, nodeId, taskId, title) => set((s) => {
