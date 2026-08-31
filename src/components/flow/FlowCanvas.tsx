@@ -76,12 +76,18 @@ const NODE_DEFAULTS: Record<FlowNodeType, { width: number; title: string; color:
 
 // ─── Edge renderer ────────────────────────────────────────────────────────────
 
-function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]; onDelete: () => void }) {
-  // Hooks must run before any early return — otherwise React sees a different
-  // hook count between renders (e.g. when a node is deleted and this edge is
-  // briefly orphaned) and tears down the whole tree with a white screen.
-  const [hovered, setHovered] = useState(false);
-
+function EdgeLine({ edge, nodes, onDelete, hovered, emphasized, onHoverStart, onHoverEnd }: {
+  edge: FlowEdge;
+  nodes: FlowNode[];
+  onDelete: () => void;
+  /** Pointer is on this edge — canvas lifts it above the cards. */
+  hovered: boolean;
+  /** One of its endpoint blocks is selected — lifted too, with the delete
+   *  button already showing, so even a fully covered arrow can be removed. */
+  emphasized: boolean;
+  onHoverStart: () => void;
+  onHoverEnd: () => void;
+}) {
   const from = nodes.find(n => n.id === edge.fromId);
   const to   = nodes.find(n => n.id === edge.toId);
   if (!from || !to) return null;
@@ -90,6 +96,7 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
   const d = edgePath(a, b);
   const midX = (a.x + b.x) / 2;
   const midY = (a.y + b.y) / 2;
+  const showDelete = hovered || emphasized;
 
   return (
     <g>
@@ -99,24 +106,23 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
         fill="none" stroke="transparent" strokeWidth={12}
         className="cursor-pointer"
         style={{ pointerEvents: 'stroke' }}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={onHoverStart}
+        onMouseLeave={onHoverEnd}
       />
       {/* Visible edge */}
       <path
         d={d}
         fill="none"
-        stroke={hovered ? '#1f6feb' : '#9ca3af'}
-        strokeWidth={hovered ? 2.5 : 2}
+        stroke={hovered ? '#1f6feb' : emphasized ? '#6b7280' : '#9ca3af'}
+        strokeWidth={hovered || emphasized ? 2.5 : 2}
         markerEnd={hovered ? 'url(#arrowhead-hover)' : 'url(#arrowhead)'}
         style={{ pointerEvents: 'none', transition: 'stroke 0.15s, stroke-width 0.15s' }}
       />
-      {/* Delete button on hover */}
-      {hovered && (
+      {showDelete && (
         <g
           transform={`translate(${midX - 10}, ${midY - 10})`}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
+          onMouseEnter={onHoverStart}
+          onMouseLeave={onHoverEnd}
           className="cursor-pointer"
           onMouseDown={e => e.stopPropagation()}
           onClick={onDelete}
@@ -835,6 +841,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
   const [showSaveAsProject, setShowSaveAsProject] = useState(false);
   const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<string | null>(null);
   const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [pendingDeleteLaneId, setPendingDeleteLaneId] = useState<string | null>(null);
   // Dragging a phase band: 'move' shifts x, 'resize' adjusts width. Values are
   // captured at mousedown; deltas are divided by zoom to stay in canvas units.
@@ -1062,6 +1069,12 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
 
   if (!board) return null;
 
+  // An edge is lifted above the cards while the user interacts with it:
+  // hovering it, or selecting either block it connects.
+  const isEdgeElevated = (e: FlowEdge) =>
+    e.id === hoveredEdgeId ||
+    (!!selectedId && (e.fromId === selectedId || e.toId === selectedId));
+
   // Canvas size for SVG (large enough)
   const svgW = 8000;
   const svgH = 6000;
@@ -1241,11 +1254,12 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
               />
             ))}
 
-            {/* Edges — BELOW the cards. Long connections used to be drawn on a
-                zIndex-10 layer above everything and sliced straight through the
-                card bodies; under the cards they read as background wiring, and
-                the endpoints stay visible because anchors sit on card borders.
-                Hover-to-delete still works on any exposed stretch of a line. */}
+            {/* Edges — wiring lives BELOW the cards so long connections don't
+                slice through card bodies. But an edge the user is interacting
+                with is LIFTED above them (see the overlay further down): hover
+                any exposed stretch, or select either endpoint block, and the
+                arrow pops to the front with its delete button — so even a fully
+                covered connection stays visible and removable. */}
             <svg
               className="absolute inset-0 overflow-visible"
               width={svgW}
@@ -1261,12 +1275,16 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
                 </marker>
               </defs>
               <g style={{ pointerEvents: 'all' }}>
-                {board.edges.map(edge => (
+                {board.edges.filter(e => !isEdgeElevated(e)).map(edge => (
                   <EdgeLine
                     key={edge.id}
                     edge={edge}
                     nodes={board.nodes}
                     onDelete={() => deleteFlowEdge(boardId, edge.id)}
+                    hovered={false}
+                    emphasized={false}
+                    onHoverStart={() => setHoveredEdgeId(edge.id)}
+                    onHoverEnd={() => setHoveredEdgeId(id => (id === edge.id ? null : id))}
                   />
                 ))}
               </g>
@@ -1297,23 +1315,37 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
               />
             ))}
 
-            {/* Connection preview — the one line that must stay on top while a
-                new arrow is being dragged to its target. */}
-            {connectingFrom && (
-              <svg
-                className="absolute inset-0 overflow-visible"
-                width={svgW}
-                height={svgH}
-                style={{ pointerEvents: 'none', zIndex: 10 }}
-              >
-                <defs>
-                  <marker id="arrowhead-preview" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                    <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
-                  </marker>
-                </defs>
+            {/* Elevated edges + connection preview — the lines being interacted
+                with, drawn ABOVE the cards. */}
+            <svg
+              className="absolute inset-0 overflow-visible"
+              width={svgW}
+              height={svgH}
+              style={{ pointerEvents: 'none', zIndex: 10 }}
+            >
+              <defs>
+                <marker id="arrowhead-preview" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
+                </marker>
+              </defs>
+              <g style={{ pointerEvents: 'all' }}>
+                {board.edges.filter(isEdgeElevated).map(edge => (
+                  <EdgeLine
+                    key={edge.id}
+                    edge={edge}
+                    nodes={board.nodes}
+                    onDelete={() => deleteFlowEdge(boardId, edge.id)}
+                    hovered={hoveredEdgeId === edge.id}
+                    emphasized={!!selectedId && (edge.fromId === selectedId || edge.toId === selectedId)}
+                    onHoverStart={() => setHoveredEdgeId(edge.id)}
+                    onHoverEnd={() => setHoveredEdgeId(id => (id === edge.id ? null : id))}
+                  />
+                ))}
+              </g>
+              {connectingFrom && (
                 <PreviewEdge fromId={connectingFrom} toPos={mouseCanvas} nodes={board.nodes} />
-              </svg>
-            )}
+              )}
+            </svg>
           </div>
 
           {/* Phase headers — pinned to the top of the viewport within each band's
