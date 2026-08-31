@@ -211,12 +211,25 @@ export interface FlowEdge {
   label?: string;
 }
 
+// A phase band drawn BEHIND the canvas: a coloured vertical column with a name
+// and an adjustable width. Blocks are placed inside it visually, and when the
+// flow is saved as a project these bands become the project's phases.
+export interface FlowLane {
+  id: string;
+  title: string;
+  color: string;
+  x: number;
+  width: number;
+}
+
 export interface FlowBoard {
   id: string;
   name: string;
   description?: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
+  // Optional so boards saved before lanes existed keep hydrating cleanly.
+  lanes?: FlowLane[];
   createdAt: string;
 }
 

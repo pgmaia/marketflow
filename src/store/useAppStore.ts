@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane } from '../types';
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
@@ -112,6 +112,9 @@ interface AppState {
   addFlowNode: (flowId: string, node: FlowNode) => void;
   deleteFlowNode: (flowId: string, nodeId: string) => void;
   addFlowEdge: (flowId: string, edge: FlowEdge) => void;
+  addFlowLane: (flowId: string, lane: FlowLane) => void;
+  updateFlowLane: (flowId: string, laneId: string, patch: Partial<FlowLane>) => void;
+  deleteFlowLane: (flowId: string, laneId: string) => void;
   deleteFlowEdge: (flowId: string, edgeId: string) => void;
   addFlowNodeTask: (flowId: string, nodeId: string, task: FlowNodeTask) => void;
   deleteFlowNodeTask: (flowId: string, nodeId: string, taskId: string) => void;
@@ -459,6 +462,10 @@ export const useAppStore = create<AppState>()(
       }),
       addFlowEdge: (flowId, edge) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: [...f.edges, edge] }) })),
       deleteFlowEdge: (flowId, edgeId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: f.edges.filter(e => e.id !== edgeId) }) })),
+      // Lanes may be absent on boards created before the feature — always ?? [].
+      addFlowLane: (flowId, lane) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: [...(f.lanes ?? []), lane] }) })),
+      updateFlowLane: (flowId, laneId, patch) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).map(l => l.id === laneId ? { ...l, ...patch } : l) }) })),
+      deleteFlowLane: (flowId, laneId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).filter(l => l.id !== laneId) }) })),
       addFlowNodeTask: (flowId, nodeId, task) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: [...n.tasks, task] }) }) })),
       deleteFlowNodeTask: (flowId, nodeId, taskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.filter(t => t.id !== taskId) }) }) })),
 

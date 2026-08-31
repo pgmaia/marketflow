@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, Project, Task, ProjectPhase } from '../../types';
+import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase } from '../../types';
 import { localISO } from '../../lib/date';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
+
+// Colours cycled through as phase bands are created.
+const LANE_PALETTE = ['#1f6feb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9', '#ec4899'];
+const LANE_MIN_WIDTH = 160;
 
 const NODE_COLORS: Record<string, string> = {
   '#6366f1': 'Índigo',
@@ -381,6 +385,119 @@ function PreviewEdge({ fromId, toPos, nodes }: { fromId: string; toPos: { x: num
 
 // ─── Save as Project modal ────────────────────────────────────────────────────
 
+// ─── Phase band header ────────────────────────────────────────────────────────
+// Rendered OUTSIDE the pan/zoom transform, pinned to the top of the viewport
+// within the band's horizontal range — so the phase name stays readable no
+// matter how far the user pans vertically. Dragging it moves the band; the
+// right-edge handle resizes it.
+function LaneHeader({
+  lane, left, width, selected, blockCount,
+  onSelect, onRename, onRecolor, onDeleteRequest, onDragStart, onResizeStart,
+}: {
+  lane: FlowLane;
+  left: number;
+  width: number;
+  selected: boolean;
+  blockCount: number;
+  onSelect: () => void;
+  onRename: (title: string) => void;
+  onRecolor: (color: string) => void;
+  onDeleteRequest: () => void;
+  onDragStart: (e: React.MouseEvent) => void;
+  onResizeStart: (e: React.MouseEvent) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [titleVal, setTitleVal] = useState(lane.title);
+
+  const commit = () => {
+    if (titleVal.trim()) onRename(titleVal.trim());
+    else setTitleVal(lane.title);
+    setEditing(false);
+  };
+
+  return (
+    <div
+      className="absolute top-2 z-20 select-none"
+      style={{ left, width: Math.max(width, 90) }}
+      onMouseDown={e => e.stopPropagation()}
+    >
+      <div
+        className="mx-1 rounded-lg border bg-white/95 backdrop-blur-sm shadow-sm px-2.5 py-1.5 flex items-center gap-2 cursor-grab active:cursor-grabbing"
+        style={{ borderColor: `${lane.color}55`, boxShadow: selected ? `0 0 0 2px ${lane.color}66` : undefined }}
+        onMouseDown={e => { onSelect(); onDragStart(e); }}
+      >
+        <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: lane.color }} />
+        {editing ? (
+          <input
+            autoFocus
+            value={titleVal}
+            onChange={e => setTitleVal(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commit();
+              if (e.key === 'Escape') { setTitleVal(lane.title); setEditing(false); }
+            }}
+            onBlur={commit}
+            onMouseDown={e => e.stopPropagation()}
+            className="flex-1 min-w-0 text-[12px] font-bold text-gray-800 bg-transparent outline-none border-b"
+            style={{ borderColor: lane.color }}
+          />
+        ) : (
+          <span
+            className="flex-1 min-w-0 text-[12px] font-bold text-gray-800 truncate"
+            onDoubleClick={() => { setTitleVal(lane.title); setEditing(true); }}
+            title="Duplo clique para renomear"
+          >
+            {lane.title}
+          </span>
+        )}
+        <span className="text-[10px] text-gray-400 shrink-0">
+          {blockCount} {blockCount === 1 ? 'bloco' : 'blocos'}
+        </span>
+      </div>
+
+      {/* Selected: colour palette + rename + delete */}
+      {selected && !editing && (
+        <div
+          className="mt-1.5 mx-1 rounded-lg border border-gray-100 bg-white shadow-md px-2.5 py-2 flex items-center gap-1.5"
+          onMouseDown={e => e.stopPropagation()}
+        >
+          {LANE_PALETTE.map(c => (
+            <button
+              key={c}
+              onClick={() => onRecolor(c)}
+              className={`w-[18px] h-[18px] rounded-full border-2 transition-transform hover:scale-110 ${lane.color === c ? 'border-gray-500' : 'border-transparent'}`}
+              style={{ backgroundColor: c }}
+            />
+          ))}
+          <div className="w-px h-4 bg-gray-100 mx-1" />
+          <button
+            onClick={() => { setTitleVal(lane.title); setEditing(true); }}
+            className="text-[11px] text-gray-400 hover:text-gray-700 font-medium transition-colors"
+          >
+            Renomear
+          </button>
+          <button
+            onClick={onDeleteRequest}
+            className="ml-1 text-gray-300 hover:text-red-400 transition-colors"
+            title="Apagar fase"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Width resize handle — sits at the band's right edge */}
+      <div
+        className="absolute -right-1 top-0 h-7 w-2.5 cursor-ew-resize flex items-center justify-center group/handle"
+        onMouseDown={e => { onSelect(); onResizeStart(e); }}
+        title="Arrastar para ajustar a largura"
+      >
+        <div className="w-1 h-4 rounded-full bg-gray-300 group-hover/handle:bg-gray-500 transition-colors" />
+      </div>
+    </div>
+  );
+}
+
 function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () => void }) {
   const { companies, teams, addProject, addTask, setActiveProject } = useAppStore();
   const [projectName, setProjectName] = useState(board.name);
@@ -394,20 +511,50 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
     const ts = Date.now();
     const projectId = `proj-${ts}`;
 
-    // Two steps can carry the same title (the default is 'Nova Etapa') and every
-    // view groups tasks by phase NAME — duplicate names made each node's tasks
-    // appear under BOTH groups, so the list showed every task twice. Suffix the
-    // repeats so each node maps to exactly one phase.
-    const seenNames = new Map<string, number>();
-    const nodePhaseName = board.nodes.map(n => {
-      const nth = (seenNames.get(n.title) ?? 0) + 1;
-      seenNames.set(n.title, nth);
-      return nth === 1 ? n.title : `${n.title} (${nth})`;
-    });
+    // Names must be unique: every view groups tasks by phase NAME, and a
+    // duplicate would show the same tasks under both groups.
+    const dedupe = () => {
+      const seen = new Map<string, number>();
+      return (title: string) => {
+        const nth = (seen.get(title) ?? 0) + 1;
+        seen.set(title, nth);
+        return nth === 1 ? title : `${title} (${nth})`;
+      };
+    };
 
-    const phases: ProjectPhase[] = board.nodes.length
-      ? board.nodes.map((_, i) => ({ id: `ph-${ts}-${i}`, name: nodePhaseName[i] }))
-      : [{ id: `ph-${ts}`, name: 'Tarefas' }];
+    // When the board has phase bands, THEY are the project's phases — left to
+    // right, exactly as drawn. Each block contributes its tasks to the band it
+    // sits in (nearest band when it's outside all of them). Without bands, the
+    // old behaviour stands: each block becomes a phase of its own.
+    const lanes = [...(board.lanes ?? [])].sort((a, b) => a.x - b.x);
+    const usingLanes = lanes.length > 0;
+
+    const uniq = dedupe();
+    const laneNames = lanes.map(l => uniq(l.title));
+    const nodePhaseName = board.nodes.map(n => {
+      if (!usingLanes) return ''; // filled by the per-node dedupe below
+      const cx = n.x + n.width / 2;
+      let idx = lanes.findIndex(l => cx >= l.x && cx <= l.x + l.width);
+      if (idx === -1) {
+        let best = 0, bestD = Infinity;
+        lanes.forEach((l, i) => {
+          const d = Math.abs(cx - (l.x + l.width / 2));
+          if (d < bestD) { bestD = d; best = i; }
+        });
+        idx = best;
+      }
+      return laneNames[idx];
+    });
+    if (!usingLanes) {
+      const uniqNode = dedupe();
+      board.nodes.forEach((n, i) => { nodePhaseName[i] = uniqNode(n.title); });
+    }
+
+    const phases: ProjectPhase[] = usingLanes
+      ? lanes.map((_, i) => ({ id: `ph-${ts}-${i}`, name: laneNames[i] }))
+      : board.nodes.length
+        ? board.nodes.map((_, i) => ({ id: `ph-${ts}-${i}`, name: nodePhaseName[i] }))
+        : [{ id: `ph-${ts}`, name: 'Tarefas' }];
 
     const teamMemberIds = [...new Set(
       teams
@@ -428,19 +575,27 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
     };
 
     const taskDue = localISO(new Date(ts + 30 * 86400000));
-    const tasks: Task[] = board.nodes.flatMap((n, ni) =>
-      n.tasks.map((ft, ti) => ({
-        id: `t-${ts}-${ni}-${ti}`,
+    const tasks: Task[] = board.nodes.flatMap((n, ni) => {
+      const base = {
         projectId,
         phase: nodePhaseName[ni],
-        title: ft.title,
-        type: ft.type ?? 'Copy',
         status: 'Backlog' as const,
         priority: 'Medium' as const,
         dueDate: taskDue,
         createdAt: now,
-      }))
-    );
+      };
+      if (usingLanes && n.tasks.length === 0) {
+        // Block titles stop being phases when bands exist; keep the block's
+        // content by importing it as a task inside its band.
+        return [{ ...base, id: `t-${ts}-${ni}-solo`, title: n.title, type: 'Copy' as const }];
+      }
+      return n.tasks.map((ft, ti) => ({
+        ...base,
+        id: `t-${ts}-${ni}-${ti}`,
+        title: ft.title,
+        type: ft.type ?? 'Copy',
+      }));
+    });
 
     addProject(project);
     tasks.forEach(t => addTask(t));
@@ -464,7 +619,9 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
             <h2 className="text-[15px] font-bold text-[#111]">Salvar como projeto</h2>
           </div>
           <p className="text-[12px] text-gray-400 ml-11">
-            As etapas do fluxo virarão fases e as tarefas serão importadas automaticamente.
+            {(board.lanes ?? []).length > 0
+              ? 'As fases do fundo virarão as fases do projeto, e cada bloco leva suas tarefas para a fase em que está.'
+              : 'As etapas do fluxo virarão fases e as tarefas serão importadas automaticamente.'}
           </p>
         </div>
 
@@ -565,7 +722,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
 export function FlowCanvas({ boardId }: { boardId: string }) {
-  const { flows, templates, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate } = useAppStore();
+  const { flows, templates, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
   const board = flows.find(f => f.id === boardId);
 
   const [pan, setPan] = useState({ x: 60, y: 60 });
@@ -579,6 +736,11 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
   const [spaceHeld, setSpaceHeld] = useState(false);
   const [showSaveAsProject, setShowSaveAsProject] = useState(false);
   const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<string | null>(null);
+  const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
+  const [pendingDeleteLaneId, setPendingDeleteLaneId] = useState<string | null>(null);
+  // Dragging a phase band: 'move' shifts x, 'resize' adjusts width. Values are
+  // captured at mousedown; deltas are divided by zoom to stay in canvas units.
+  const [laneDrag, setLaneDrag] = useState<{ laneId: string; mode: 'move' | 'resize'; startClientX: number; laneX: number; laneWidth: number } | null>(null);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const updateFlowNodePos = useAppStore(s => s.updateFlowNode);
@@ -621,12 +783,23 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     }
     // Click on canvas bg = deselect
     setSelectedId(null);
+    setSelectedLaneId(null);
     setConnectingFrom(null);
   };
 
   const handleWrapperMouseMove = (e: React.MouseEvent) => {
     const pos = toCanvas(e.clientX, e.clientY);
     setMouseCanvas(pos);
+
+    if (laneDrag) {
+      const dx = (e.clientX - laneDrag.startClientX) / zoom;
+      if (laneDrag.mode === 'move') {
+        updateFlowLane(boardId, laneDrag.laneId, { x: laneDrag.laneX + dx });
+      } else {
+        updateFlowLane(boardId, laneDrag.laneId, { width: Math.max(LANE_MIN_WIDTH, laneDrag.laneWidth + dx) });
+      }
+      return;
+    }
 
     if (isPanning) {
       setPan({
@@ -648,6 +821,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
   const handleWrapperMouseUp = () => {
     setIsPanning(false);
     setDragging(null);
+    setLaneDrag(null);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -687,7 +861,27 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     setSelectedId(node.id);
   };
 
-  const handleAddFromTemplate = (tpl: { id: string; name: string; tasks: Array<{ title: string; type?: string }> }) => {
+  const handleAddLane = () => {
+    const lanes = board?.lanes ?? [];
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    // New band goes right after the last one, so building a timeline
+    // left-to-right needs no repositioning; the first one lands at the viewport.
+    const last = lanes.reduce<FlowLane | null>((a, l) => (!a || l.x + l.width > a.x + a.width ? l : a), null);
+    const x = last
+      ? last.x + last.width + 16
+      : rect ? (rect.width / 2 - pan.x) / zoom - 170 : 60;
+    const lane: FlowLane = {
+      id: `fl${Date.now()}`,
+      title: 'Nova fase',
+      color: LANE_PALETTE[lanes.length % LANE_PALETTE.length],
+      x,
+      width: 340,
+    };
+    addFlowLane(boardId, lane);
+    setSelectedLaneId(lane.id);
+  };
+
+    const handleAddFromTemplate = (tpl: { id: string; name: string; tasks: Array<{ title: string; type?: string }> }) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
     const w = 220;
     // Offset each new node slightly so they don't stack
@@ -818,8 +1012,25 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left toolbar */}
         <div className="w-52 shrink-0 border-r border-[#E5E7EB] flex flex-col bg-white overflow-hidden">
-          {/* Block types */}
+          {/* Phase bands */}
           <div className="px-3 pt-4 pb-3">
+            <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2 px-1">Fases</p>
+            <button
+              onClick={handleAddLane}
+              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors text-left group"
+            >
+              <span className="text-[14px] leading-none shrink-0">🏁</span>
+              <span className="text-[11px] text-gray-500 group-hover:text-gray-700 font-medium leading-none">Nova fase</span>
+            </button>
+            <p className="text-[10px] text-gray-300 px-1 mt-1.5 leading-relaxed">
+              Colunas de fundo com nome, cor e largura. Ao salvar como projeto, viram as fases dele.
+            </p>
+          </div>
+
+          <div className="mx-3 border-t border-gray-100" />
+
+          {/* Block types */}
+          <div className="px-3 pt-3 pb-3">
             <p className="text-[10px] font-bold text-gray-300 uppercase tracking-widest mb-2 px-1">Blocos</p>
             <div className="grid grid-cols-2 gap-1">
               {([
@@ -907,6 +1118,24 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
               height: svgH,
             }}
           >
+            {/* Phase bands — pure background, behind everything and inert to the
+                mouse so panning, selecting and dragging blocks work through them. */}
+            {(board.lanes ?? []).map(lane => (
+              <div
+                key={lane.id}
+                className="absolute pointer-events-none"
+                style={{
+                  left: lane.x,
+                  top: -2000,
+                  width: lane.width,
+                  height: svgH + 4000,
+                  backgroundColor: `${lane.color}0d`,
+                  borderLeft: `2px solid ${lane.color}${selectedLaneId === lane.id ? '88' : '33'}`,
+                  borderRight: `2px solid ${lane.color}${selectedLaneId === lane.id ? '88' : '33'}`,
+                }}
+              />
+            ))}
+
             {/* Nodes */}
             {board.nodes.map(node => (
               <FlowNodeCard
@@ -966,6 +1195,28 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
             </svg>
           </div>
 
+          {/* Phase headers — pinned to the top of the viewport within each band's
+              horizontal range, so names stay readable at any vertical pan. */}
+          {(board.lanes ?? []).map(lane => (
+            <LaneHeader
+              key={lane.id}
+              lane={lane}
+              left={pan.x + lane.x * zoom}
+              width={lane.width * zoom}
+              selected={selectedLaneId === lane.id}
+              blockCount={board.nodes.filter(n => {
+                const cx = n.x + n.width / 2;
+                return cx >= lane.x && cx <= lane.x + lane.width;
+              }).length}
+              onSelect={() => { setSelectedLaneId(lane.id); setSelectedId(null); }}
+              onRename={title => updateFlowLane(boardId, lane.id, { title })}
+              onRecolor={color => updateFlowLane(boardId, lane.id, { color })}
+              onDeleteRequest={() => setPendingDeleteLaneId(lane.id)}
+              onDragStart={e => setLaneDrag({ laneId: lane.id, mode: 'move', startClientX: e.clientX, laneX: lane.x, laneWidth: lane.width })}
+              onResizeStart={e => setLaneDrag({ laneId: lane.id, mode: 'resize', startClientX: e.clientX, laneX: lane.x, laneWidth: lane.width })}
+            />
+          ))}
+
           {/* Zoom hint */}
           <div className="absolute bottom-4 right-4 text-[11px] text-gray-300 select-none pointer-events-none">
             Scroll para zoom · Espaço+drag para mover
@@ -980,7 +1231,40 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
         />
       )}
 
-      {pendingDeleteNodeId && (() => {
+      {pendingDeleteLaneId && (() => {
+        const lane = (board.lanes ?? []).find(l => l.id === pendingDeleteLaneId);
+        if (!lane) return null;
+        return (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPendingDeleteLaneId(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 360 }} onClick={e => e.stopPropagation()}>
+              <div className="px-6 pt-6 pb-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center shrink-0">
+                    <Trash2 size={16} className="text-red-500" />
+                  </div>
+                  <h2 className="text-[15px] font-bold text-gray-900">Apagar a fase "{lane.title}"?</h2>
+                </div>
+                <p className="text-[13px] text-gray-500 leading-relaxed">
+                  Só o fundo colorido é removido — os blocos dentro dele continuam no fluxo.
+                </p>
+              </div>
+              <div className="px-6 py-4 border-t border-gray-100 flex gap-2">
+                <button
+                  onClick={() => { deleteFlowLane(boardId, lane.id); setSelectedLaneId(null); setPendingDeleteLaneId(null); }}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors"
+                >
+                  Sim, apagar
+                </button>
+                <button onClick={() => setPendingDeleteLaneId(null)} className="px-4 py-2.5 rounded-xl text-[13px] text-gray-500 hover:bg-gray-100 transition-colors">
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+            {pendingDeleteNodeId && (() => {
         const node = board.nodes.find(n => n.id === pendingDeleteNodeId);
         if (!node) return null;
         return (
