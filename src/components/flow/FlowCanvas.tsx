@@ -1058,21 +1058,28 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     setLaneDrag(null);
   };
 
+  /** Zooms keeping one screen point fixed: the given anchor, or the centre of
+   *  the viewport when none is passed. Without the pan compensation the content
+   *  drifts towards the canvas origin and the view appears to jump. */
+  const zoomTo = (target: number, anchorX?: number, anchorY?: number) => {
+    const rect = wrapperRef.current?.getBoundingClientRect();
+    const clamped = Math.min(3, Math.max(0.2, target));
+    if (!rect) { setZoom(clamped); return; }
+    const ax = anchorX ?? rect.width / 2;
+    const ay = anchorY ?? rect.height / 2;
+    const canvasX = (ax - pan.x) / zoom;
+    const canvasY = (ay - pan.y) / zoom;
+    setPan({ x: ax - canvasX * clamped, y: ay - canvasY * clamped });
+    setZoom(clamped);
+  };
+
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newZoom = Math.min(3, Math.max(0.2, zoom * factor));
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const canvasX = (mouseX - pan.x) / zoom;
-    const canvasY = (mouseY - pan.y) / zoom;
-    setPan({
-      x: mouseX - canvasX * newZoom,
-      y: mouseY - canvasY * newZoom,
-    });
-    setZoom(newZoom);
+    // Wheel zoom anchors at the cursor, the canvas convention — pointing at an
+    // area and scrolling zooms into exactly that area.
+    zoomTo(zoom * (e.deltaY > 0 ? 0.9 : 1.1), e.clientX - rect.left, e.clientY - rect.top);
   };
 
   const handleAddNode = (type: FlowNodeType) => {
@@ -1268,11 +1275,11 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
 
         {/* Zoom controls */}
         <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
-          <button onClick={() => setZoom(z => Math.max(0.2, z * 0.85))} className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
+          <button onClick={() => zoomTo(zoom * 0.85)} className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
             <ZoomOut size={13} />
           </button>
           <span className="text-[11px] font-medium text-gray-500 w-10 text-center">{Math.round(zoom * 100)}%</span>
-          <button onClick={() => setZoom(z => Math.min(3, z * 1.15))} className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
+          <button onClick={() => zoomTo(zoom * 1.15)} className="w-7 h-7 flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
             <ZoomIn size={13} />
           </button>
         </div>
