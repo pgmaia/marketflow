@@ -1241,6 +1241,37 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
               />
             ))}
 
+            {/* Edges — BELOW the cards. Long connections used to be drawn on a
+                zIndex-10 layer above everything and sliced straight through the
+                card bodies; under the cards they read as background wiring, and
+                the endpoints stay visible because anchors sit on card borders.
+                Hover-to-delete still works on any exposed stretch of a line. */}
+            <svg
+              className="absolute inset-0 overflow-visible"
+              width={svgW}
+              height={svgH}
+              style={{ pointerEvents: 'none' }}
+            >
+              <defs>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#9ca3af" />
+                </marker>
+                <marker id="arrowhead-hover" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
+                </marker>
+              </defs>
+              <g style={{ pointerEvents: 'all' }}>
+                {board.edges.map(edge => (
+                  <EdgeLine
+                    key={edge.id}
+                    edge={edge}
+                    nodes={board.nodes}
+                    onDelete={() => deleteFlowEdge(boardId, edge.id)}
+                  />
+                ))}
+              </g>
+            </svg>
+
             {/* Nodes */}
             {board.nodes.map(node => (
               <FlowNodeCard
@@ -1266,38 +1297,23 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
               />
             ))}
 
-            {/* SVG edges layer — rendered after nodes so arrows appear on top */}
-            <svg
-              className="absolute inset-0 overflow-visible"
-              width={svgW}
-              height={svgH}
-              style={{ pointerEvents: 'none', zIndex: 10 }}
-            >
-              <defs>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#9ca3af" />
-                </marker>
-                <marker id="arrowhead-hover" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
-                </marker>
-                <marker id="arrowhead-preview" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
-                </marker>
-              </defs>
-              <g style={{ pointerEvents: 'all' }}>
-                {board.edges.map(edge => (
-                  <EdgeLine
-                    key={edge.id}
-                    edge={edge}
-                    nodes={board.nodes}
-                    onDelete={() => deleteFlowEdge(boardId, edge.id)}
-                  />
-                ))}
-              </g>
-              {connectingFrom && (
+            {/* Connection preview — the one line that must stay on top while a
+                new arrow is being dragged to its target. */}
+            {connectingFrom && (
+              <svg
+                className="absolute inset-0 overflow-visible"
+                width={svgW}
+                height={svgH}
+                style={{ pointerEvents: 'none', zIndex: 10 }}
+              >
+                <defs>
+                  <marker id="arrowhead-preview" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                    <polygon points="0 0, 10 3.5, 0 7" fill="#1f6feb" />
+                  </marker>
+                </defs>
                 <PreviewEdge fromId={connectingFrom} toPos={mouseCanvas} nodes={board.nodes} />
-              )}
-            </svg>
+              </svg>
+            )}
           </div>
 
           {/* Phase headers — pinned to the top of the viewport within each band's
