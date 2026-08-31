@@ -132,6 +132,57 @@ function mergeMaps(base: unknown, local: unknown, remote: unknown): Record<strin
   return out;
 }
 
+// ── Flow boards: merged FIELD BY FIELD, not board-winner-takes-all ───────────
+// A board used to be one merge unit: user A dragging a node while user B added
+// a task to the SAME board meant one side's whole board won and the other's
+// flow work vanished — while B's mirrored project task survived, leaving an
+// orphan twin that rendered as a false "removida no fluxo" ghost. Boards are
+// now merged per node / task / subtask / lane / edge, so concurrent edits to
+// different parts of one board all survive.
+function mapById(arr: unknown): Map<unknown, Entity> {
+  const m = new Map<unknown, Entity>();
+  if (Array.isArray(arr)) for (const e of arr) if (e && typeof e === 'object') m.set((e as Entity).id, e as Entity);
+  return m;
+}
+
+function mergeBoardNodes(base: unknown, local: unknown, remote: unknown): unknown[] {
+  const merged = mergeEntityArrays(base, local, remote, 'id') as Entity[];
+  const B = mapById(base), L = mapById(local), R = mapById(remote);
+  return merged.map(node => {
+    const b = B.get(node.id), l = L.get(node.id), r = R.get(node.id);
+    // Node alive on both sides: the winner supplied position/title/etc., but
+    // its TASK LIST must still be a per-task merge so an add on the loser side
+    // survives — and inside a task shared by both, subtasks merge per id too.
+    if (!l || !r) return node;
+    const tasks = (mergeEntityArrays(b?.tasks, l.tasks, r.tasks, 'id') as Entity[]).map(t => {
+      const bt = mapById(b?.tasks).get(t.id), lt = mapById(l.tasks).get(t.id), rt = mapById(r.tasks).get(t.id);
+      if (!lt || !rt) return t;
+      return { ...t, subtasks: mergeEntityArrays(bt?.subtasks, lt.subtasks, rt.subtasks, 'id') };
+    });
+    return { ...node, tasks };
+  });
+}
+
+function mergeBoard(base: Entity | undefined, local: Entity, remote: Entity): Entity {
+  const out: Entity = {};
+  for (const k of new Set([...Object.keys(local), ...Object.keys(remote)])) {
+    if (k === 'nodes')      out[k] = mergeBoardNodes(base?.[k], local[k], remote[k]);
+    else if (k === 'edges' || k === 'lanes') out[k] = mergeEntityArrays(base?.[k], local[k], remote[k], 'id');
+    else out[k] = canon(local[k]) !== canon(base?.[k]) ? local[k] : remote[k];
+  }
+  return out;
+}
+
+function mergeFlows(base: unknown, local: unknown, remote: unknown): unknown[] {
+  const merged = mergeEntityArrays(base, local, remote, 'id') as Entity[];
+  const B = mapById(base), L = mapById(local), R = mapById(remote);
+  return merged.map(board => {
+    const l = L.get(board.id), r = R.get(board.id);
+    if (!l || !r) return board;
+    return mergeBoard(B.get(board.id), l, r);
+  });
+}
+
 /** Merge a remote snapshot into local state relative to `base` (the last state
  *  both sides agreed on). With no base there is nothing to reason about, so the
  *  remote snapshot wins — same as the behaviour before merging existed. */
@@ -142,7 +193,8 @@ export function merge3(base: SyncState | null, local: SyncState, remote: SyncSta
     const b = base[f], l = local[f], r = remote[f];
     // Field the remote snapshot doesn't carry (written by an older app version).
     if (r === undefined) { out[f] = l; continue; }
-    if (ENTITY_KEY[f])        out[f] = mergeEntityArrays(b, l, r, ENTITY_KEY[f]);
+    if (f === 'flows')        out[f] = mergeFlows(b, l, r);
+    else if (ENTITY_KEY[f])   out[f] = mergeEntityArrays(b, l, r, ENTITY_KEY[f]);
     else if (OBJECT_MAPS.has(f)) out[f] = mergeMaps(b, l, r);
     else if (ID_UNIONS.has(f))   out[f] = [...new Set([...(Array.isArray(l) ? l : []), ...(Array.isArray(r) ? r : [])])];
     else                          out[f] = canon(l) !== canon(b) ? l : r;

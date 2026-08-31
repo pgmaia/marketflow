@@ -112,7 +112,7 @@ function EdgeLine({ edge, nodes, onDelete, hovered, emphasized, onHoverStart, on
         d={d}
         fill="none" stroke="transparent" strokeWidth={12}
         className="cursor-pointer"
-        style={{ pointerEvents: 'stroke' }}
+        style={{ pointerEvents: emphasized && !hovered ? 'none' : 'stroke' }}
         onMouseEnter={onHoverStart}
         onMouseLeave={onHoverEnd}
       />
@@ -216,7 +216,6 @@ function FlowNodeCard({
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hovered, setHovered] = useState(false);
 
-  const descHeight = node.description ? 52 : 32;
   const nodeHeight = nodeEstHeight(node);
 
   const handleDescSave = () => {
@@ -248,6 +247,7 @@ function FlowNodeCard({
 
   return (
     <div
+      data-node-card
       className="absolute select-none"
       style={{ left: node.x, top: node.y, width: node.width }}
       onMouseEnter={() => setHovered(true)}
@@ -344,7 +344,7 @@ function FlowNodeCard({
               onClick={() => setEditingDesc(true)}
             >
               {node.description ? (
-                <p className="text-[11px] text-gray-500 break-words leading-snug">{node.description}</p>
+                <p className="text-[11px] text-gray-500 break-words leading-snug line-clamp-2" title={node.description}>{node.description}</p>
               ) : (
                 <p className="text-[11px] text-gray-300 italic">Adicionar descrição...</p>
               )}
@@ -410,6 +410,7 @@ function FlowNodeCard({
                 {(task.subtasks?.length ?? 0) > 0 && (
                   <span className="text-[10px] text-gray-300 shrink-0">{task.subtasks!.length}</span>
                 )}
+                {!isGhost(task.id) && (
                 <button
                   onClick={e => { e.stopPropagation(); setAddingSubtaskFor(addingSubtaskFor === task.id ? null : task.id); setNewSubtaskTitle(''); }}
                   className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-[#1f6feb] transition-all"
@@ -417,6 +418,7 @@ function FlowNodeCard({
                 >
                   <Plus size={11} />
                 </button>
+                )}
                 <button
                   onClick={e => { e.stopPropagation(); deleteFlowNodeTask(flowId, node.id, task.id); }}
                   className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-red-400 transition-all"
@@ -718,7 +720,7 @@ function LaneHeader({
 }
 
 function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () => void }) {
-  const { companies, teams, addProject, addTask, setActiveProject, updateFlow } = useAppStore();
+  const { companies, teams, addProject, addTask, setActiveProject, setActiveCompany, updateFlow } = useAppStore();
   const [projectName, setProjectName] = useState(board.name);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
@@ -794,7 +796,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
     };
 
     const taskDue = localISO(new Date(ts + 30 * 86400000));
-    const tasks: Task[] = board.nodes.flatMap((n, ni) => {
+    const tasks: Task[] = board.nodes.flatMap((n, ni): Task[] => {
       const base = {
         projectId,
         phase: nodePhaseName[ni],
@@ -832,6 +834,9 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
     // Wire the board to the project it just generated: from here on, lanes
     // drive the phases and task changes mirror across the two views.
     updateFlow(board.id, { linkedProjectId: projectId });
+    // Without this, "back" from the new project lands on whichever company
+    // happened to be active before — not the one that owns it.
+    setActiveCompany(selectedCompanyId);
     setActiveProject(projectId);
     onClose();
   };
@@ -955,7 +960,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
 export function FlowCanvas({ boardId, embedded = false }: { boardId: string; embedded?: boolean }) {
-  const { flows, templates, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
+  const { flows, templates, projects, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
   const board = flows.find(f => f.id === boardId);
 
   const [pan, setPan] = useState({ x: 60, y: 60 });
@@ -995,7 +1000,7 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
         e.preventDefault();
         setSpaceHeld(true);
       }
-      if (e.code === 'Escape') {
+      if (e.code === 'Escape' && !(e.target as HTMLElement).matches('input,textarea')) {
         setConnectingFrom(null);
         setSelectedId(null);
       }
@@ -1003,9 +1008,13 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') setSpaceHeld(false);
     };
+    // Cmd+Tab with the space bar held never delivers the keyup — every click
+    // would then start panning until space was tapped again.
+    const onBlur = () => { setSpaceHeld(false); setIsPanning(false); };
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); };
+    window.addEventListener('blur', onBlur);
+    return () => { window.removeEventListener('keydown', onKeyDown); window.removeEventListener('keyup', onKeyUp); window.removeEventListener('blur', onBlur); };
   }, []);
 
   const handleWrapperMouseDown = (e: React.MouseEvent) => {
@@ -1015,6 +1024,11 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
       setPanStart({ x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y });
       return;
     }
+    // A mousedown INSIDE a card must not clear state here: only the coloured
+    // header stops propagation, so pressing a card's body bubbled up, wiped
+    // connectingFrom before the click fired — finishing a connection only
+    // worked on the header — and deselected the block when renaming a task.
+    if ((e.target as HTMLElement).closest?.('[data-node-card]')) return;
     // Click on canvas bg = deselect
     setSelectedId(null);
     setSelectedLaneId(null);
@@ -1024,6 +1038,22 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
   const handleWrapperMouseMove = (e: React.MouseEvent) => {
     const pos = toCanvas(e.clientX, e.clientY);
     setMouseCanvas(pos);
+
+    // Dead-man switch: an HTML5 row-drag started mid-gesture (or a mouseup
+    // outside the window) swallows the mouseup and pan/drag state sticks — the
+    // canvas then pans with no button pressed. No buttons ⇒ no drag.
+    if (e.buttons === 0 && (isPanning || dragging || laneDrag)) {
+      setIsPanning(false);
+      setDragging(null);
+      setLaneDrag(null);
+    }
+
+    // The hovered edge remounts between the two SVG layers and the fresh copy
+    // can miss its mouseenter — the blue highlight and its X then stick
+    // forever. Pointer not over any SVG element ⇒ no edge hover.
+    if (hoveredEdgeId && !(e.target as Element).closest?.('svg')) {
+      setHoveredEdgeId(null);
+    }
 
     if (laneDrag) {
       const dx = (e.clientX - laneDrag.startClientX) / zoom;
@@ -1073,14 +1103,30 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     setZoom(clamped);
   };
 
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const rect = wrapperRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    // Wheel zoom anchors at the cursor, the canvas convention — pointing at an
-    // area and scrolling zooms into exactly that area.
-    zoomTo(zoom * (e.deltaY > 0 ? 0.9 : 1.1), e.clientX - rect.left, e.clientY - rect.top);
-  };
+  // React registers wheel on the root as PASSIVE, so preventDefault in an
+  // onWheel prop is a no-op: embedded in the project page, scrolling over the
+  // canvas zoomed AND scrolled the page (and logged an error per tick). Only a
+  // native non-passive listener can actually swallow the event. Wheel zoom
+  // anchors at the cursor — the canvas convention.
+  const zoomToRef = useRef(zoomTo);
+  zoomToRef.current = zoomTo;
+  const zoomStateRef = useRef(zoom);
+  zoomStateRef.current = zoom;
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const h = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      zoomToRef.current(
+        zoomStateRef.current * (e.deltaY > 0 ? 0.9 : 1.1),
+        e.clientX - rect.left,
+        e.clientY - rect.top,
+      );
+    };
+    el.addEventListener('wheel', h, { passive: false });
+    return () => el.removeEventListener('wheel', h);
+  }, []);
 
   const handleAddNode = (type: FlowNodeType) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
@@ -1245,7 +1291,7 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
         {/* Linked project chip / save button */}
         {(() => {
           if (embedded) return null;
-          const linked = board.linkedProjectId ? useAppStore.getState().projects.find(p => p.id === board.linkedProjectId) : undefined;
+          const linked = board.linkedProjectId ? projects.find(p => p.id === board.linkedProjectId) : undefined;
           if (!linked) return null;
           return (
             <button
@@ -1262,7 +1308,7 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
             </button>
           );
         })()}
-        {!(board.linkedProjectId && useAppStore.getState().projects.some(p => p.id === board.linkedProjectId)) && (
+        {!(board.linkedProjectId && projects.some(p => p.id === board.linkedProjectId)) && (
         <button
           onClick={() => setShowSaveAsProject(true)}
           className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold text-white hover:opacity-90 transition-opacity"
@@ -1374,7 +1420,6 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
           onMouseMove={handleWrapperMouseMove}
           onMouseUp={handleWrapperMouseUp}
           onMouseLeave={handleWrapperMouseUp}
-          onWheel={handleWheel}
           style={{ backgroundColor: '#F8F9FB' }}
         >
           {/* Dot grid background */}
@@ -1462,7 +1507,10 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
                 onSelect={() => setSelectedId(node.id)}
                 onDragStart={(e, ox, oy) => {
                   e.stopPropagation();
-                  setDragging({ nodeId: node.id, offsetX: ox, offsetY: oy });
+                  // The card reports the grab offset in SCREEN pixels; positions
+                  // are in canvas units — without dividing by zoom the block
+                  // jumps on the first mousemove whenever zoom ≠ 1.
+                  setDragging({ nodeId: node.id, offsetX: ox / zoom, offsetY: oy / zoom });
                   setSelectedId(node.id);
                 }}
                 onConnectFrom={e => {

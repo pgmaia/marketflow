@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane, FlowNodeSubtask } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskType, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane, FlowNodeSubtask } from '../types';
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
@@ -507,17 +507,26 @@ export const useAppStore = create<AppState>()(
         if (!board?.linkedProjectId || !before) return { flows };
         let projects = s.projects;
         let tasks = s.tasks;
-        // Renaming a lane renames the matching phase (and migrates its tasks,
-        // same as renamePhase); if the project had no such phase, create it.
+        // Renaming a lane renames the matching phase and migrates its tasks.
+        // Renaming ONTO a name that already exists is a MERGE: tasks move to
+        // the surviving phase and the old one is removed — leaving a homonym
+        // pair behind would corrupt the by-name grouping everywhere.
         if (patch.title && patch.title !== before.title) {
           const proj = projects.find(p => p.id === board.linkedProjectId);
           if (proj) {
-            if (proj.phases.some(ph => ph.name === before.title)) {
+            const hasOld = proj.phases.some(ph => ph.name === before.title);
+            const hasNew = proj.phases.some(ph => ph.name === patch.title);
+            if (hasOld && hasNew) {
+              projects = projects.map(p => p.id !== proj.id ? p : {
+                ...p, phases: p.phases.filter(ph => ph.name !== before.title),
+              });
+              tasks = tasks.map(t => t.projectId === proj.id && t.phase === before.title ? { ...t, phase: patch.title! } : t);
+            } else if (hasOld) {
               projects = projects.map(p => p.id !== proj.id ? p : {
                 ...p, phases: p.phases.map(ph => ph.name === before.title ? { ...ph, name: patch.title! } : ph),
               });
               tasks = tasks.map(t => t.projectId === proj.id && t.phase === before.title ? { ...t, phase: patch.title! } : t);
-            } else if (!proj.phases.some(ph => ph.name === patch.title)) {
+            } else if (!hasNew) {
               projects = projects.map(p => p.id !== proj.id ? p : {
                 ...p, phases: [...p.phases, { id: `ph-${Date.now()}`, name: patch.title! }],
               });
@@ -525,16 +534,22 @@ export const useAppStore = create<AppState>()(
           }
         }
         // Moving a lane keeps the project's phases in the same left→right order;
-        // phases without a lane stay at the end, in their existing order.
+        // phases without a lane stay at the end, in their existing order. Each
+        // phase may be consumed ONCE — homonym lane titles used to duplicate
+        // the same phase object into the array on every drag frame.
         if (patch.x !== undefined || patch.width !== undefined || patch.title) {
           const laneOrder = [...(board.lanes ?? [])].sort((a, b) => a.x - b.x).map(l => l.title);
           projects = projects.map(p => {
             if (p.id !== board.linkedProjectId) return p;
-            const byLane = laneOrder
-              .map(t => p.phases.find(ph => ph.name === t))
-              .filter((ph): ph is NonNullable<typeof ph> => !!ph);
-            const rest = p.phases.filter(ph => !laneOrder.includes(ph.name));
-            return { ...p, phases: [...byLane, ...rest] };
+            const used = new Set<string>();
+            const byLane: ProjectPhase[] = [];
+            for (const title of laneOrder) {
+              const ph = p.phases.find(x => x.name === title && !used.has(x.id));
+              if (ph) { used.add(ph.id); byLane.push(ph); }
+            }
+            const rest = p.phases.filter(ph => !used.has(ph.id) && !laneOrder.includes(ph.name));
+            const leftover = p.phases.filter(ph => !used.has(ph.id) && laneOrder.includes(ph.name) && !rest.includes(ph));
+            return { ...p, phases: [...byLane, ...leftover, ...rest] };
           });
         }
         return { flows, projects, tasks };
@@ -675,13 +690,19 @@ export const useAppStore = create<AppState>()(
         const project = s.projects.find(p => p.id === id);
         if (!project) return s;
         const tasks = s.tasks.filter(t => t.projectId === id);
-        const entry: TrashItem = { id: trashId(), deletedAt: now(), type: 'project', data: project, tasks };
+        const linkedBoard = s.flows.find(f => f.linkedProjectId === id);
+        const entry: TrashItem = { id: trashId(), deletedAt: now(), type: 'project', data: project, tasks, flowId: linkedBoard?.id };
         return {
           projects: s.projects.filter(p => p.id !== id),
           tasks: s.tasks.filter(t => t.projectId !== id),
           activeProjectId: s.activeProjectId === id ? null : s.activeProjectId,
           view: s.activeProjectId === id ? 'company' : s.view,
           trash: [...s.trash, entry],
+          // Release the board wired to this project — a dangling link let the
+          // user "save as project" AGAIN on the same board, twinning a second
+          // project to the same flow tasks. The trash entry remembers the board
+          // so restoring the project re-links it.
+          flows: s.flows.map(f => f.linkedProjectId === id ? { ...f, linkedProjectId: undefined } : f),
         };
       }),
 
@@ -699,6 +720,11 @@ export const useAppStore = create<AppState>()(
         if (task.parentTaskId) {
           const parent = s.tasks.find(t => t.id === task.parentTaskId);
           if (!parent?.flowTaskId) return { tasks: [...s.tasks, task] };
+          // Parent twin deleted on the flow side (the parent is a ghost there):
+          // linking the child to a flow task that will never exist would make
+          // it born "removida no fluxo". Add it unlinked instead.
+          const parentAlive = board.nodes.some(n => n.tasks.some(t => t.id === parent.flowTaskId));
+          if (!parentAlive) return { tasks: [...s.tasks, task] };
           const flows = s.flows.map(f => f.id !== board.id ? f : {
             ...f,
             nodes: f.nodes.map(n => ({
@@ -770,8 +796,11 @@ export const useAppStore = create<AppState>()(
                 id: trashId(),
                 deletedAt: now(),
                 type: 'task',
-                data: { ...existing!, status: 'Concluído' },
-                subtasks,
+                // The flow twin follows the SERIES: the new occurrence inherits
+                // flowTaskId, so the archived copy must drop it — restoring it
+                // would otherwise mint two tasks twinned to the same flow item.
+                data: { ...existing!, status: 'Concluído', flowTaskId: undefined },
+                subtasks: subtasks.map(st => ({ ...st, flowTaskId: undefined })),
               };
 
               return {
@@ -888,8 +917,52 @@ export const useAppStore = create<AppState>()(
           const existing = new Set((target?.phases ?? []).map(ph => ph.name));
           const missing = [...new Set(newTasks.map(t => t.phase))].filter(name => !existing.has(name));
 
+          // Linked flow board: template tasks must mirror there too, or the two
+          // views silently diverge (tasks visible in the list, absent from the
+          // canvas, no badge and no ghost). Each top-level task lands in the
+          // leftmost block of its phase — tasks whose phase has no block are
+          // added unlinked, same as addTask does.
+          const board = s.flows.find(fl => fl.linkedProjectId === projectId);
+          let flows = s.flows;
+          let mirroredTasks = newTasks;
+          if (board) {
+            const additions = new Map<string, FlowNodeTask[]>(); // nodeId -> new flow tasks
+            const linkByTaskId = new Map<string, string>();      // project task id -> flow id
+            newTasks.filter(t => !t.parentTaskId).forEach((t, i) => {
+              const host = board.nodes
+                .filter(n => phaseForNode(board, n) === t.phase)
+                .sort((a, b) => a.x - b.x)[0];
+              if (!host) return;
+              const ftId = `fnt${ts}-tpl${i}`;
+              linkByTaskId.set(t.id, ftId);
+              const subs = newTasks.filter(st => st.parentTaskId === t.id);
+              subs.forEach((st, si) => linkByTaskId.set(st.id, `${ftId}-s${si}`));
+              const list = additions.get(host.id) ?? [];
+              list.push({
+                id: ftId,
+                title: t.title,
+                type: t.type,
+                fromProject: true,
+                subtasks: subs.map((st, si) => ({ id: `${ftId}-s${si}`, title: st.title })),
+              });
+              additions.set(host.id, list);
+            });
+            if (additions.size > 0) {
+              flows = s.flows.map(fl => fl.id !== board.id ? fl : {
+                ...fl,
+                nodes: fl.nodes.map(n => additions.has(n.id)
+                  ? { ...n, tasks: [...n.tasks, ...additions.get(n.id)!] }
+                  : n),
+              });
+              mirroredTasks = newTasks.map(t =>
+                linkByTaskId.has(t.id) ? { ...t, flowTaskId: linkByTaskId.get(t.id) } : t
+              );
+            }
+          }
+
           return {
-            tasks: [...s.tasks, ...newTasks],
+            flows,
+            tasks: [...s.tasks, ...mirroredTasks],
             projects: missing.length === 0 ? s.projects : s.projects.map(p =>
               p.id !== projectId ? p : {
                 ...p,
@@ -916,7 +989,18 @@ export const useAppStore = create<AppState>()(
           const project = s.projects.find(p => p.id === projectId);
           const oldPhase = project?.phases.find(ph => ph.id === phaseId);
           const oldName = oldPhase?.name ?? '';
+          // Lanes drive phases, so a phase renamed on the project side must pull
+          // its lane along — otherwise new flow tasks in that lane would land
+          // in a phase name that no longer exists (invisible on the board).
+          const linkedBoard = s.flows.find(f => f.linkedProjectId === projectId);
+          const flows = linkedBoard && oldName
+            ? s.flows.map(f => f.id !== linkedBoard.id ? f : {
+                ...f,
+                lanes: (f.lanes ?? []).map(l => l.title === oldName ? { ...l, title: newName } : l),
+              })
+            : s.flows;
           return {
+            flows,
             projects: s.projects.map((p) =>
               p.id !== projectId ? p : {
                 ...p,
@@ -1108,7 +1192,7 @@ export const useAppStore = create<AppState>()(
           width: LANE_W,
         }));
 
-        let taskPatches = new Map<string, string>(); // project task id -> flow task/subtask id
+        const taskPatches = new Map<string, string>(); // project task id -> flow task/subtask id
         const nodes: FlowNode[] = project.phases.map((ph, i) => {
           const phaseTasks = s.tasks.filter(t => t.projectId === projectId && t.phase === ph.name && !t.parentTaskId);
           const tasks: FlowNodeTask[] = phaseTasks.map((t, ti) => {
@@ -1178,25 +1262,37 @@ export const useAppStore = create<AppState>()(
         switch (item.type) {
           case 'company':
             return { ...remaining, companies: [...s.companies, item.data], projects: [...s.projects, ...item.projects], tasks: [...s.tasks, ...item.tasks] };
-          case 'project':
-            return { ...remaining, projects: [...s.projects, item.data], tasks: [...s.tasks, ...item.tasks] };
+          case 'project': {
+            // Re-wire the flow board this project was linked to when deleted,
+            // unless the board is gone or was meanwhile linked elsewhere.
+            const flows = item.flowId
+              ? s.flows.map(f => f.id === item.flowId && !f.linkedProjectId ? { ...f, linkedProjectId: item.data.id } : f)
+              : s.flows;
+            return { ...remaining, flows, projects: [...s.projects, item.data], tasks: [...s.tasks, ...item.tasks] };
+          }
           case 'task':
             return { ...remaining, tasks: [...s.tasks, item.data, ...item.subtasks] };
           case 'flow':
             return { ...remaining, flows: [...s.flows, item.data] };
           case 'flowNode': {
             const flowExists = s.flows.some(f => f.id === item.flowId);
-            if (!flowExists) return remaining;
+            // Board gone: keep the item in the trash instead of consuming it —
+            // restoring the board later must still be able to bring it back.
+            if (!flowExists) return s;
             return { ...remaining, flows: s.flows.map(f => f.id !== item.flowId ? f : { ...f, nodes: [...f.nodes, item.data] }) };
           }
           case 'taskTemplate':
             return { ...remaining, templates: [...s.templates, item.data] };
           case 'phaseTemplate':
             return { ...remaining, phaseTemplates: [...s.phaseTemplates, item.data] };
-          case 'phase':
+          case 'phase': {
+            if (!s.projects.some(p => p.id === item.projectId)) return s; // keep in trash
             return { ...remaining, projects: s.projects.map(p => p.id !== item.projectId ? p : { ...p, phases: [...p.phases, item.data] }) };
-          case 'customColumn':
+          }
+          case 'customColumn': {
+            if (!s.projects.some(p => p.id === item.projectId)) return s; // keep in trash
             return { ...remaining, projects: s.projects.map(p => p.id !== item.projectId ? p : { ...p, customColumns: [...(p.customColumns ?? []), item.data] }) };
+          }
           case 'docEntry': {
             // Guard against a duplicate: another device may have restored it
             // already, and two records with the same id break React keys and

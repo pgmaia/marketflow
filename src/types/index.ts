@@ -179,7 +179,7 @@ export interface PersonalTask {
 
 export type TrashItem =
   | { id: string; deletedAt: string; type: 'company';        data: Company;       projects: Project[]; tasks: Task[] }
-  | { id: string; deletedAt: string; type: 'project';        data: Project;       tasks: Task[] }
+  | { id: string; deletedAt: string; type: 'project';        data: Project;       tasks: Task[]; flowId?: string }
   | { id: string; deletedAt: string; type: 'task';           data: Task;          subtasks: Task[] }
   | { id: string; deletedAt: string; type: 'flow';           data: FlowBoard }
   | { id: string; deletedAt: string; type: 'flowNode';       data: FlowNode;      flowId: string }
