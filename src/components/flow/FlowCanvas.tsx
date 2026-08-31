@@ -8,6 +8,45 @@ import { localISO } from '../../lib/date';
 
 // Colours cycled through as phase bands are created.
 const LANE_PALETTE = ['#1f6feb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9', '#ec4899'];
+
+// Estimated card height, used by edges/fitView to aim at the card's centre.
+// Subtask rows are the same 32px as task rows, so they must be counted — a
+// task-only formula would make arrows land above centre on cards with subtasks.
+function nodeEstHeight(n: FlowNode): number {
+  const rows = n.tasks.reduce((acc, t) => acc + 1 + (t.subtasks?.length ?? 0), 0);
+  return 52 + (n.description ? 52 : 32) + rows * 32 + 44;
+}
+
+// Connection points on the four sides of a card, each with its outward
+// direction — used to route edges and to aim the curve's control points.
+type Anchor = { x: number; y: number; dx: number; dy: number };
+function nodeAnchors(n: FlowNode): Anchor[] {
+  const h = nodeEstHeight(n);
+  return [
+    { x: n.x + n.width,     y: n.y + h / 2, dx: 1,  dy: 0 },  // right
+    { x: n.x,               y: n.y + h / 2, dx: -1, dy: 0 },  // left
+    { x: n.x + n.width / 2, y: n.y,         dx: 0,  dy: -1 }, // top
+    { x: n.x + n.width / 2, y: n.y + h,     dx: 0,  dy: 1 },  // bottom
+  ];
+}
+
+// Pick the pair of sides with the shortest distance between the two cards.
+// Blocks stacked vertically therefore connect bottom→top on their own — no
+// stored direction, so every existing arrow benefits immediately.
+function routeEdge(from: FlowNode, to: FlowNode): { a: Anchor; b: Anchor } {
+  let best: { a: Anchor; b: Anchor } | null = null;
+  let bestD = Infinity;
+  for (const a of nodeAnchors(from)) for (const b of nodeAnchors(to)) {
+    const d = Math.hypot(b.x - a.x, b.y - a.y);
+    if (d < bestD) { bestD = d; best = { a, b }; }
+  }
+  return best!;
+}
+
+function edgePath(a: Anchor, b: Anchor): string {
+  const bend = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) * 0.45);
+  return `M ${a.x} ${a.y} C ${a.x + a.dx * bend} ${a.y + a.dy * bend} ${b.x + b.dx * bend} ${b.y + b.dy * bend} ${b.x} ${b.y}`;
+}
 const LANE_MIN_WIDTH = 160;
 
 const NODE_COLORS: Record<string, string> = {
@@ -47,29 +86,16 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
   const to   = nodes.find(n => n.id === edge.toId);
   if (!from || !to) return null;
 
-  // Estimate node heights based on tasks + description area
-  const fromH = 52 + (from.description ? 52 : 32) + from.tasks.length * 32 + 44;
-  const toH   = 52 + (to.description ? 52 : 32) + to.tasks.length * 32 + 44;
-
-  const sx = from.x + from.width;
-  const sy = from.y + fromH / 2;
-  const tx = to.x;
-  const ty = to.y + toH / 2;
-  const gap = tx - sx;
-  const bend = Math.max(40, Math.abs(gap) * 0.45);
-  const cx1 = sx + bend;
-  const cy1 = sy;
-  const cx2 = tx - bend;
-  const cy2 = ty;
-
-  const midX = (sx + tx) / 2;
-  const midY = (sy + ty) / 2;
+  const { a, b } = routeEdge(from, to);
+  const d = edgePath(a, b);
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
 
   return (
     <g>
       {/* Invisible wider path for hover detection */}
       <path
-        d={`M ${sx} ${sy} C ${cx1} ${cy1} ${cx2} ${cy2} ${tx} ${ty}`}
+        d={d}
         fill="none" stroke="transparent" strokeWidth={12}
         className="cursor-pointer"
         style={{ pointerEvents: 'stroke' }}
@@ -78,7 +104,7 @@ function EdgeLine({ edge, nodes, onDelete }: { edge: FlowEdge; nodes: FlowNode[]
       />
       {/* Visible edge */}
       <path
-        d={`M ${sx} ${sy} C ${cx1} ${cy1} ${cx2} ${cy2} ${tx} ${ty}`}
+        d={d}
         fill="none"
         stroke={hovered ? '#1f6feb' : '#9ca3af'}
         strokeWidth={hovered ? 2.5 : 2}
@@ -130,18 +156,21 @@ function FlowNodeCard({
   onSaveAsTemplate: () => void;
   onDeleteRequest: () => void;
 }) {
-  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask } = useAppStore();
+  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask } = useAppStore();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(node.title);
   const [editingDesc, setEditingDesc] = useState(false);
   const [descVal, setDescVal] = useState(node.description ?? '');
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  // Which task is receiving a new subtask right now (one composer at a time).
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hovered, setHovered] = useState(false);
 
   const descHeight = node.description ? 52 : 32;
-  const nodeHeight = 52 + descHeight + node.tasks.length * 32 + 44;
+  const nodeHeight = nodeEstHeight(node);
 
   const handleDescSave = () => {
     updateFlowNode(flowId, node.id, { description: descVal.trim() });
@@ -160,6 +189,14 @@ function FlowNodeCard({
     addFlowNodeTask(flowId, node.id, task);
     setNewTaskTitle('');
     setAddingTask(false);
+  };
+
+  const handleAddSubtask = (taskId: string) => {
+    const t = newSubtaskTitle.trim();
+    if (!t) return;
+    addFlowNodeSubtask(flowId, node.id, taskId, { id: `fns${Date.now()}`, title: t });
+    setNewSubtaskTitle('');
+    // keep the composer open — checklists are usually typed in one burst
   };
 
   return (
@@ -271,18 +308,68 @@ function FlowNodeCard({
         {/* Tasks list */}
         <div className="bg-white">
           {node.tasks.map(task => (
-            <div
-              key={task.id}
-              className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors"
-            >
-              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
-              <span className="flex-1 text-[12px] text-gray-700 truncate">{task.title}</span>
-              <button
-                onClick={e => { e.stopPropagation(); deleteFlowNodeTask(flowId, node.id, task.id); }}
-                className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-red-400 transition-all"
-              >
-                <X size={11} />
-              </button>
+            <div key={task.id}>
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors">
+                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
+                <span className="flex-1 text-[12px] text-gray-700 truncate">{task.title}</span>
+                {(task.subtasks?.length ?? 0) > 0 && (
+                  <span className="text-[10px] text-gray-300 shrink-0">{task.subtasks!.length}</span>
+                )}
+                <button
+                  onClick={e => { e.stopPropagation(); setAddingSubtaskFor(addingSubtaskFor === task.id ? null : task.id); setNewSubtaskTitle(''); }}
+                  className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-[#1f6feb] transition-all"
+                  title="Adicionar subtarefa"
+                >
+                  <Plus size={11} />
+                </button>
+                <button
+                  onClick={e => { e.stopPropagation(); deleteFlowNodeTask(flowId, node.id, task.id); }}
+                  className="opacity-0 group-hover/task:opacity-100 text-gray-300 hover:text-red-400 transition-all"
+                  title="Apagar tarefa e suas subtarefas"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+
+              {/* Subtasks — indented under their task */}
+              {(task.subtasks ?? []).map(sub => (
+                <div
+                  key={sub.id}
+                  className="flex items-center gap-2 pl-7 pr-3 py-2 border-b border-gray-50 group/sub hover:bg-gray-50 transition-colors"
+                >
+                  <span className="text-gray-300 text-[11px] leading-none shrink-0">↳</span>
+                  <span className="flex-1 text-[11px] text-gray-500 truncate">{sub.title}</span>
+                  <button
+                    onClick={e => { e.stopPropagation(); deleteFlowNodeSubtask(flowId, node.id, task.id, sub.id); }}
+                    className="opacity-0 group-hover/sub:opacity-100 text-gray-300 hover:text-red-400 transition-all"
+                  >
+                    <X size={10} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Inline subtask composer */}
+              {addingSubtaskFor === task.id && (
+                <div className="flex items-center gap-1.5 pl-7 pr-3 py-1.5 border-b border-gray-50" onClick={e => e.stopPropagation()}>
+                  <input
+                    autoFocus
+                    value={newSubtaskTitle}
+                    onChange={e => setNewSubtaskTitle(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleAddSubtask(task.id);
+                      if (e.key === 'Escape') { setAddingSubtaskFor(null); setNewSubtaskTitle(''); }
+                    }}
+                    placeholder="Nome da subtarefa..."
+                    className="flex-1 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300"
+                  />
+                  <button onClick={() => handleAddSubtask(task.id)} className="w-5 h-5 flex items-center justify-center rounded bg-green-500 text-white shrink-0">
+                    <Check size={10} />
+                  </button>
+                  <button onClick={() => { setAddingSubtaskFor(null); setNewSubtaskTitle(''); }} className="w-5 h-5 flex items-center justify-center rounded bg-gray-100 text-gray-400 shrink-0">
+                    <X size={10} />
+                  </button>
+                </div>
+              )}
             </div>
           ))}
 
@@ -318,19 +405,27 @@ function FlowNodeCard({
         </div>
       </div>
 
-      {/* Connection handle — shown on hover or when selected */}
-      {(hovered || selected) && !connecting && (
+      {/* Connection handles — one per side, so flows can run vertically too.
+          The arrow itself routes by proximity; any handle starts the same
+          connection, the grabbed side just shapes the preview. */}
+      {(hovered || selected) && !connecting && ([
+        { key: 'right',  style: { right: -14, top: nodeHeight / 2 - 14 } },
+        { key: 'left',   style: { left: -14, top: nodeHeight / 2 - 14 } },
+        { key: 'top',    style: { top: -14, left: node.width / 2 - 14 } },
+        { key: 'bottom', style: { bottom: -14, left: node.width / 2 - 14 } },
+      ] as const).map(h => (
         <div
-          className="absolute w-8 h-8 rounded-full bg-white border-2 border-[#1f6feb] hover:bg-[#1f6feb] cursor-crosshair transition-colors flex items-center justify-center shadow-md group/handle"
-          style={{ right: -16, top: nodeHeight / 2 - 16 }}
+          key={h.key}
+          className="absolute w-7 h-7 rounded-full bg-white border-2 border-[#1f6feb] hover:bg-[#1f6feb] cursor-crosshair transition-colors flex items-center justify-center shadow-md group/handle"
+          style={h.style as React.CSSProperties}
           onMouseDown={e => { e.stopPropagation(); onConnectFrom(e); }}
           title="Arrastar para conectar"
         >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-[#1f6feb] group-hover/handle:text-white transition-colors">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" className="text-[#1f6feb] group-hover/handle:text-white transition-colors">
             <path d="M1 6H10M7 3L10 6L7 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
-      )}
+      ))}
 
       {/* Actions — shown when selected */}
       {selected && (
@@ -363,19 +458,14 @@ function FlowNodeCard({
 function PreviewEdge({ fromId, toPos, nodes }: { fromId: string; toPos: { x: number; y: number }; nodes: FlowNode[] }) {
   const from = nodes.find(n => n.id === fromId);
   if (!from) return null;
-  const fromH = 52 + (from.description ? 52 : 32) + from.tasks.length * 32 + 44;
-  const sx = from.x + from.width;
-  const sy = from.y + fromH / 2;
-  const tx = toPos.x;
-  const ty = toPos.y;
-  const bend = Math.max(40, Math.abs(tx - sx) * 0.45);
-  const cx1 = sx + bend;
-  const cy1 = sy;
-  const cx2 = tx - bend;
-  const cy2 = ty;
+  // Follow the mouse from whichever side is nearest to it, so pulling upwards
+  // previews a top exit instead of always snaking out of the right edge.
+  const a = nodeAnchors(from).reduce((best, an) =>
+    Math.hypot(toPos.x - an.x, toPos.y - an.y) < Math.hypot(toPos.x - best.x, toPos.y - best.y) ? an : best);
+  const bend = Math.max(40, Math.hypot(toPos.x - a.x, toPos.y - a.y) * 0.45);
   return (
     <path
-      d={`M ${sx} ${sy} C ${cx1} ${cy1} ${cx2} ${cy2} ${tx} ${ty}`}
+      d={`M ${a.x} ${a.y} C ${a.x + a.dx * bend} ${a.y + a.dy * bend} ${toPos.x} ${toPos.y} ${toPos.x} ${toPos.y}`}
       fill="none" stroke="#1f6feb" strokeWidth={2} strokeDasharray="6,4"
       markerEnd="url(#arrowhead-preview)"
       style={{ pointerEvents: 'none' }}
@@ -589,12 +679,20 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
         // content by importing it as a task inside its band.
         return [{ ...base, id: `t-${ts}-${ni}-solo`, title: n.title, type: 'Copy' as const }];
       }
-      return n.tasks.map((ft, ti) => ({
-        ...base,
-        id: `t-${ts}-${ni}-${ti}`,
-        title: ft.title,
-        type: ft.type ?? 'Copy',
-      }));
+      return n.tasks.flatMap((ft, ti) => {
+        const parentId = `t-${ts}-${ni}-${ti}`;
+        return [
+          { ...base, id: parentId, title: ft.title, type: ft.type ?? 'Copy' },
+          // Subtasks ride along as real project subtasks under their parent.
+          ...(ft.subtasks ?? []).map((st, si) => ({
+            ...base,
+            id: `${parentId}-s${si}`,
+            title: st.title,
+            type: ft.type ?? 'Copy',
+            parentTaskId: parentId,
+          })),
+        ];
+      });
     });
 
     addProject(project);
@@ -881,7 +979,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     setSelectedLaneId(lane.id);
   };
 
-    const handleAddFromTemplate = (tpl: { id: string; name: string; tasks: Array<{ title: string; type?: string }> }) => {
+    const handleAddFromTemplate = (tpl: { id: string; name: string; tasks: Array<{ title: string; type?: string; subtasks?: Array<{ title: string }> }> }) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
     const w = 220;
     // Offset each new node slightly so they don't stack
@@ -901,6 +999,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
         id: `fnt${Date.now()}-${i}`,
         title: t.title,
         type: t.type as FlowNode['tasks'][number]['type'],
+        subtasks: (t.subtasks ?? []).map((st, si) => ({ id: `fns${Date.now()}-${i}-${si}`, title: st.title })),
       })),
     };
     addFlowNode(boardId, node);
@@ -918,6 +1017,12 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
         type: t.type ?? 'Copy',
         phase: node.title,
         priority: 'Medium' as const,
+        subtasks: (t.subtasks ?? []).map(st => ({
+          title: st.title,
+          type: t.type ?? 'Copy',
+          phase: node.title,
+          priority: 'Medium' as const,
+        })),
       })),
       createdAt: localISO(),
     });
@@ -945,7 +1050,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     const minX = Math.min(...board.nodes.map(n => n.x));
     const minY = Math.min(...board.nodes.map(n => n.y));
     const maxX = Math.max(...board.nodes.map(n => n.x + n.width));
-    const maxY = Math.max(...board.nodes.map(n => { const h = 52 + (n.description ? 52 : 32) + n.tasks.length * 32 + 44; return n.y + h; }));
+    const maxY = Math.max(...board.nodes.map(n => n.y + nodeEstHeight(n)));
     const contentW = maxX - minX;
     const contentH = maxY - minY;
     const newZoom = Math.min(0.95, Math.min((rect.width - 120) / contentW, (rect.height - 120) / contentH));

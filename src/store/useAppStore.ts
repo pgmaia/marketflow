@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane, FlowNodeSubtask } from '../types';
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
@@ -118,6 +118,8 @@ interface AppState {
   deleteFlowEdge: (flowId: string, edgeId: string) => void;
   addFlowNodeTask: (flowId: string, nodeId: string, task: FlowNodeTask) => void;
   deleteFlowNodeTask: (flowId: string, nodeId: string, taskId: string) => void;
+  addFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtask: FlowNodeSubtask) => void;
+  deleteFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtaskId: string) => void;
 
   // Company CRUD
   addCompany: (company: Company) => void;
@@ -468,6 +470,8 @@ export const useAppStore = create<AppState>()(
       deleteFlowLane: (flowId, laneId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).filter(l => l.id !== laneId) }) })),
       addFlowNodeTask: (flowId, nodeId, task) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: [...n.tasks, task] }) }) })),
       deleteFlowNodeTask: (flowId, nodeId, taskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.filter(t => t.id !== taskId) }) }) })),
+      addFlowNodeSubtask: (flowId, nodeId, taskId, subtask) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: [...(t.subtasks ?? []), subtask] }) }) }) })),
+      deleteFlowNodeSubtask: (flowId, nodeId, taskId, subtaskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(st => st.id !== subtaskId) }) }) }) })),
 
       addCompany: (company) => set((s) => ({ companies: [...s.companies, company] })),
       deleteCompany: (id) => set((s) => {

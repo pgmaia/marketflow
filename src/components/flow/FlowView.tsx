@@ -59,6 +59,7 @@ function NewBoardModal({ onClose, onCreate }: {
         id: `fnt-${ts}-${i}-${ti}`,
         title: t.title,
         type: t.type,
+        subtasks: (t.subtasks ?? []).map((st, si) => ({ id: `fns-${ts}-${i}-${ti}-${si}`, title: st.title })),
       }));
       return {
         id: `fn-${ts}-${i}`,
@@ -144,17 +145,27 @@ function NewBoardModal({ onClose, onCreate }: {
     // Each node task → a Task
     const taskDue = localISO(new Date(ts + 30 * 86400000));
     const tasks: Task[] = nodes.flatMap((n, ni) =>
-      n.tasks.map((ft, ti) => ({
-        id: `t-${ts}-${ni}-${ti}`,
-        projectId,
-        phase: n.title,
-        title: ft.title,
-        type: ft.type ?? 'Copy',
-        status: 'Backlog' as const,
-        priority: 'Medium' as const,
-        dueDate: taskDue,
-        createdAt: now,
-      }))
+      n.tasks.flatMap((ft, ti) => {
+        const parentId = `t-${ts}-${ni}-${ti}`;
+        const base = {
+          projectId,
+          phase: n.title,
+          status: 'Backlog' as const,
+          priority: 'Medium' as const,
+          dueDate: taskDue,
+          createdAt: now,
+        };
+        return [
+          { ...base, id: parentId, title: ft.title, type: ft.type ?? 'Copy' },
+          ...(ft.subtasks ?? []).map((st, si) => ({
+            ...base,
+            id: `${parentId}-s${si}`,
+            title: st.title,
+            type: ft.type ?? 'Copy',
+            parentTaskId: parentId,
+          })),
+        ];
+      })
     );
 
     onCreate({ type: 'project', project, tasks });

@@ -186,10 +186,17 @@ export type TrashItem =
 
 export type FlowNodeType = 'stage' | 'action' | 'note' | 'decision';
 
+export interface FlowNodeSubtask {
+  id: string;
+  title: string;
+}
+
 export interface FlowNodeTask {
   id: string;
   title: string;
   type?: TaskType;
+  // Optional so tasks created before subtasks existed keep hydrating cleanly.
+  subtasks?: FlowNodeSubtask[];
 }
 
 export interface FlowNode {
