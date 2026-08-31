@@ -43,9 +43,18 @@ function routeEdge(from: FlowNode, to: FlowNode): { a: Anchor; b: Anchor } {
   return best!;
 }
 
-function edgePath(a: Anchor, b: Anchor): string {
+function edgeGeometry(a: Anchor, b: Anchor): { d: string; midX: number; midY: number } {
   const bend = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) * 0.45);
-  return `M ${a.x} ${a.y} C ${a.x + a.dx * bend} ${a.y + a.dy * bend} ${b.x + b.dx * bend} ${b.y + b.dy * bend} ${b.x} ${b.y}`;
+  const c1x = a.x + a.dx * bend, c1y = a.y + a.dy * bend;
+  const c2x = b.x + b.dx * bend, c2y = b.y + b.dy * bend;
+  // The delete button must sit ON the curve. The straight-chord midpoint used
+  // before drifts far from a strongly bent Bézier, leaving the X floating in
+  // empty canvas. Evaluate the cubic at t = 0.5: (P0 + 3·C1 + 3·C2 + P3) / 8.
+  return {
+    d: `M ${a.x} ${a.y} C ${c1x} ${c1y} ${c2x} ${c2y} ${b.x} ${b.y}`,
+    midX: (a.x + 3 * c1x + 3 * c2x + b.x) / 8,
+    midY: (a.y + 3 * c1y + 3 * c2y + b.y) / 8,
+  };
 }
 const LANE_MIN_WIDTH = 160;
 
@@ -93,9 +102,7 @@ function EdgeLine({ edge, nodes, onDelete, hovered, emphasized, onHoverStart, on
   if (!from || !to) return null;
 
   const { a, b } = routeEdge(from, to);
-  const d = edgePath(a, b);
-  const midX = (a.x + b.x) / 2;
-  const midY = (a.y + b.y) / 2;
+  const { d, midX, midY } = edgeGeometry(a, b);
   const showDelete = hovered || emphasized;
 
   return (
