@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download, MessagesSquare } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download, MessagesSquare, GitBranch } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower, getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -12,10 +12,11 @@ import { PhaseEditor } from './PhaseEditor';
 import { EditProjectModal } from './EditProjectModal';
 import { ProjectDocumentView } from './ProjectDocumentView';
 import { ProjectDocsView } from './ProjectDocsView';
+import { FlowCanvas } from '../flow/FlowCanvas';
 import { localISO } from '../../lib/date';
 
-type ViewMode = 'board' | 'list' | 'calendar' | 'document' | 'docs';
-const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', document: 'Anotações', docs: 'Documentação' };
+type ViewMode = 'board' | 'list' | 'calendar' | 'flow' | 'document' | 'docs';
+const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', flow: 'Fluxo', document: 'Anotações', docs: 'Documentação' };
 
 type SortBy = 'manual' | 'dueDate' | 'priority' | 'assignee' | 'title' | 'status';
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
@@ -61,7 +62,7 @@ function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, stri
 }
 
 export function KanbanBoard() {
-  const { projects, tasks, companies, teamMembers, teams, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany, updateProject } = useAppStore();
+  const { projects, tasks, companies, teamMembers, teams, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany, updateProject, flows, createFlowFromProject } = useAppStore();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [showTeam, setShowTeam] = useState(true);
   const [showDone, setShowDone] = useState(true);
@@ -344,13 +345,13 @@ export function KanbanBoard() {
         <div className="px-4 md:px-12 flex items-center justify-between gap-2 flex-wrap">
           {/* View tabs */}
           <div className="flex items-center">
-            {(['board', 'list', 'calendar', 'document', 'docs'] as ViewMode[]).map(v => (
+            {(['board', 'list', 'calendar', 'flow', 'document', 'docs'] as ViewMode[]).map(v => (
               <button
                 key={v}
                 onClick={() => setViewMode(v)}
                 className={`flex items-center gap-1.5 px-3 py-2.5 text-[12px] font-medium border-b-2 transition-colors ${viewMode === v ? 'border-[#1f6feb] text-[#1f6feb]' : 'border-transparent text-gray-400 hover:text-gray-600 hover:border-gray-200'}`}
               >
-                {v === 'board' ? <LayoutGrid size={13} /> : v === 'list' ? <List size={13} /> : v === 'calendar' ? <CalendarDays size={13} /> : v === 'document' ? <FileText size={13} /> : <MessagesSquare size={13} />}
+                {v === 'board' ? <LayoutGrid size={13} /> : v === 'list' ? <List size={13} /> : v === 'calendar' ? <CalendarDays size={13} /> : v === 'flow' ? <GitBranch size={13} /> : v === 'document' ? <FileText size={13} /> : <MessagesSquare size={13} />}
                 {viewLabel[v]}
               </button>
             ))}
@@ -454,7 +455,7 @@ export function KanbanBoard() {
         {/* Member filter bar — only on the views that actually filter tasks.
             Anotações and Documentação show no task list, so it sat there as
             another control that changes nothing when you click it. */}
-        {viewMode !== 'document' && viewMode !== 'docs' && (projectMembers.length > 0 || currentUserId) && (
+        {viewMode !== 'document' && viewMode !== 'docs' && viewMode !== 'flow' && (projectMembers.length > 0 || currentUserId) && (
           <div className="px-4 md:px-12 py-2.5 flex items-center gap-2.5 border-t border-[#E5E7EB] flex-wrap">
             <span className="text-[10px] font-bold text-gray-300 uppercase tracking-wider shrink-0">Responsável</span>
 
@@ -532,6 +533,34 @@ export function KanbanBoard() {
 
       {/* Content area */}
       <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-white">
+
+        {/* Flow view — the project's own canvas, generated from its phases on
+            first open and twinned with it from then on. */}
+        {viewMode === 'flow' && (() => {
+          const linkedFlow = flows.find(fl => fl.linkedProjectId === project.id);
+          if (linkedFlow) return <FlowCanvas key={linkedFlow.id} boardId={linkedFlow.id} embedded />;
+          return (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center max-w-sm px-6">
+                <div className="w-12 h-12 rounded-2xl bg-[#1f6feb]/10 flex items-center justify-center mx-auto mb-4">
+                  <GitBranch size={20} className="text-[#1f6feb]" />
+                </div>
+                <p className="text-[15px] font-bold text-gray-900 mb-1.5">Gerar o fluxo deste projeto</p>
+                <p className="text-[12px] text-gray-400 leading-relaxed mb-5">
+                  As fases viram colunas coloridas e as tarefas viram blocos. A partir daí as duas
+                  visualizações ficam interligadas: o que for criado ou excluído em uma aparece marcado na outra.
+                </p>
+                <button
+                  onClick={() => createFlowFromProject(project.id)}
+                  className="h-9 px-5 rounded-xl text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: '#1f6feb' }}
+                >
+                  Criar fluxo
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Documentation — full width log, no member filter/team panel */}
         {viewMode === 'docs' && (

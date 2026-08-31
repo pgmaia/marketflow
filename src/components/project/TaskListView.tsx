@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X } from 'lucide-react';
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus } from '../../types';
 import { getAssigneeIds } from '../../types';
@@ -576,8 +576,17 @@ function TaskRow({
   customCols: CustomColumn[];
 }) {
   const { setActiveTask } = useAppStore();
+  const flows = useAppStore(st => st.flows);
   const isDone = task.status === 'Concluído';
   const hasSubtasks = subtasks.length > 0;
+
+  // Twin bookkeeping with the project's linked flow board. A task whose flow
+  // twin was deleted renders greyed out ("removida no fluxo") and only leaves
+  // this list when it is deleted here as well — a removal is never one-sided.
+  const linkedFlow = task.flowTaskId ? flows.find(fl => fl.linkedProjectId === task.projectId) : undefined;
+  const flowGhost = !!linkedFlow && !linkedFlow.nodes.some(n =>
+    n.tasks.some(ft => ft.id === task.flowTaskId || (ft.subtasks ?? []).some(st => st.id === task.flowTaskId))
+  );
 
   return (
     <div
@@ -588,7 +597,7 @@ function TaskRow({
         setTimeout(() => (e.target as HTMLElement).style.opacity = '0.4', 0);
       }}
       onDragEnd={e => { (e.target as HTMLElement).style.opacity = '1'; }}
-      className={`grid items-center border-b border-[#F3F4F6] transition-colors cursor-default ${selected ? 'bg-blue-50/60' : 'hover:bg-[#FAFAFA]'}`}
+      className={`grid items-center border-b border-[#F3F4F6] transition-colors cursor-default ${selected ? 'bg-blue-50/60' : 'hover:bg-[#FAFAFA]'} ${flowGhost ? 'opacity-60 grayscale' : ''}`}
       style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px' }}
     >
       {/* Checkbox */}
@@ -625,6 +634,23 @@ function TaskRow({
         className={`text-[13px] font-medium pl-3 truncate cursor-pointer ${isDone ? 'line-through text-gray-400' : task.isMilestone ? 'font-semibold text-blue-700' : task.isMeta ? 'font-semibold text-green-700' : 'text-[#111]'} transition-colors flex items-center gap-1.5`}
       >
         {indent && <span className="text-gray-300 mr-2">↳</span>}
+        {flowGhost && (
+          <span
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-bold border border-gray-200 shrink-0"
+            title="Excluída no fluxo — apague aqui também para remover de vez"
+          >
+            <GitBranch size={9} />
+            Removida no fluxo
+          </span>
+        )}
+        {!flowGhost && task.origin === 'flow' && linkedFlow && (
+          <span
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-gray-50 text-gray-400 text-[9px] font-bold border border-gray-150 shrink-0"
+            title="Criada no fluxo"
+          >
+            <GitBranch size={8} />
+          </span>
+        )}
         {task.isMilestone ? (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-orange-50 text-[#1f6feb] text-[10px] font-bold border border-[#1f6feb]/20 shrink-0">
             <Flag size={9} />

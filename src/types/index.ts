@@ -73,6 +73,13 @@ export interface Task {
   metaUnit?: string;      // unit label (e.g. "leads", "R$", "%")
   customFields?: Record<string, string>; // colId -> value
   recurrence?: TaskRecurrence;
+  // ── Flow linkage ── set when this task is twinned with a task inside a flow
+  // board linked to its project. Deleting one side does NOT delete the other:
+  // the surviving twin renders greyed out ("removida no fluxo/projeto") and the
+  // pair only vanishes for good once both sides are deleted.
+  flowTaskId?: string;
+  // 'flow' when the task was born on the flow canvas (badge in the task list).
+  origin?: 'flow';
 }
 
 export interface Project {
@@ -197,6 +204,8 @@ export interface FlowNodeTask {
   type?: TaskType;
   // Optional so tasks created before subtasks existed keep hydrating cleanly.
   subtasks?: FlowNodeSubtask[];
+  // True when this task arrived from the linked project (badge on the card).
+  fromProject?: boolean;
 }
 
 export interface FlowNode {
@@ -237,6 +246,10 @@ export interface FlowBoard {
   edges: FlowEdge[];
   // Optional so boards saved before lanes existed keep hydrating cleanly.
   lanes?: FlowLane[];
+  // Project this board generated via "Salvar como projeto". While set, the two
+  // stay wired: lanes drive the project's phases, and task additions/deletions
+  // are mirrored with provenance marks on both sides.
+  linkedProjectId?: string;
   createdAt: string;
 }
 

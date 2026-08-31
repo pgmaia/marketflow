@@ -162,7 +162,19 @@ function FlowNodeCard({
   onSaveAsTemplate: () => void;
   onDeleteRequest: () => void;
 }) {
-  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask } = useAppStore();
+  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, flows, projects, tasks: projectTasks } = useAppStore();
+
+  // On a linked board, every flow task/subtask has a project twin (flowTaskId
+  // points back at it). A twin that no longer exists means it was deleted on
+  // the project side — the flow copy renders greyed out until it is deleted
+  // here too, so a removal is only final once it happened in BOTH views.
+  const _board = flows.find(fl => fl.id === flowId);
+  const _linkedId = _board?.linkedProjectId && projects.some(p => p.id === _board.linkedProjectId)
+    ? _board.linkedProjectId : null;
+  const liveTwinIds = _linkedId
+    ? new Set(projectTasks.filter(t => t.projectId === _linkedId && t.flowTaskId).map(t => t.flowTaskId as string))
+    : null;
+  const isGhost = (id: string) => !!liveTwinIds && !liveTwinIds.has(id);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(node.title);
   const [editingDesc, setEditingDesc] = useState(false);
@@ -315,9 +327,17 @@ function FlowNodeCard({
         <div className="bg-white">
           {node.tasks.map(task => (
             <div key={task.id}>
-              <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors">
+              <div className={`flex items-center gap-2 px-3 py-2 border-b border-gray-50 group/task hover:bg-gray-50 transition-colors ${isGhost(task.id) ? 'opacity-60 grayscale' : ''}`}>
                 <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
-                <span className="flex-1 text-[12px] text-gray-700 truncate">{task.title}</span>
+                {task.fromProject && !isGhost(task.id) && (
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#1f6feb]" title="Adicionada no projeto" />
+                )}
+                <span className={`flex-1 text-[12px] truncate ${isGhost(task.id) ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{task.title}</span>
+                {isGhost(task.id) && (
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-gray-400 bg-gray-100 rounded px-1 py-0.5 shrink-0" title="Excluída no projeto — apague aqui também para remover de vez">
+                    removida no projeto
+                  </span>
+                )}
                 {(task.subtasks?.length ?? 0) > 0 && (
                   <span className="text-[10px] text-gray-300 shrink-0">{task.subtasks!.length}</span>
                 )}
@@ -344,7 +364,10 @@ function FlowNodeCard({
                   className="flex items-center gap-2 pl-7 pr-3 py-2 border-b border-gray-50 group/sub hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-gray-300 text-[11px] leading-none shrink-0">↳</span>
-                  <span className="flex-1 text-[11px] text-gray-500 truncate">{sub.title}</span>
+                  <span className={`flex-1 text-[11px] truncate ${isGhost(sub.id) ? 'text-gray-400 line-through opacity-70' : 'text-gray-500'}`}>{sub.title}</span>
+                  {isGhost(sub.id) && (
+                    <span className="text-[8px] font-bold uppercase text-gray-400 bg-gray-100 rounded px-1 py-0.5 shrink-0">removida</span>
+                  )}
                   <button
                     onClick={e => { e.stopPropagation(); deleteFlowNodeSubtask(flowId, node.id, task.id, sub.id); }}
                     className="opacity-0 group-hover/sub:opacity-100 text-gray-300 hover:text-red-400 transition-all"
@@ -595,7 +618,7 @@ function LaneHeader({
 }
 
 function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () => void }) {
-  const { companies, teams, addProject, addTask, setActiveProject } = useAppStore();
+  const { companies, teams, addProject, addTask, setActiveProject, updateFlow } = useAppStore();
   const [projectName, setProjectName] = useState(board.name);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
@@ -688,14 +711,17 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
       return n.tasks.flatMap((ft, ti) => {
         const parentId = `t-${ts}-${ni}-${ti}`;
         return [
-          { ...base, id: parentId, title: ft.title, type: ft.type ?? 'Copy' },
-          // Subtasks ride along as real project subtasks under their parent.
+          // flowTaskId twins each project task with its flow counterpart, so the
+          // two views can mirror additions and grey out one-sided deletions.
+          { ...base, id: parentId, title: ft.title, type: ft.type ?? 'Copy', flowTaskId: ft.id, origin: 'flow' as const },
           ...(ft.subtasks ?? []).map((st, si) => ({
             ...base,
             id: `${parentId}-s${si}`,
             title: st.title,
             type: ft.type ?? 'Copy',
             parentTaskId: parentId,
+            flowTaskId: st.id,
+            origin: 'flow' as const,
           })),
         ];
       });
@@ -703,6 +729,9 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 
     addProject(project);
     tasks.forEach(t => addTask(t));
+    // Wire the board to the project it just generated: from here on, lanes
+    // drive the phases and task changes mirror across the two views.
+    updateFlow(board.id, { linkedProjectId: projectId });
     setActiveProject(projectId);
     onClose();
   };
@@ -825,7 +854,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
-export function FlowCanvas({ boardId }: { boardId: string }) {
+export function FlowCanvas({ boardId, embedded = false }: { boardId: string; embedded?: boolean }) {
   const { flows, templates, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
   const board = flows.find(f => f.id === boardId);
 
@@ -1083,15 +1112,19 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
     <div className="flex flex-col flex-1 min-h-0 bg-white">
       {/* Top bar */}
       <div className="flex items-center gap-3 px-5 py-3 border-b border-[#E5E7EB] shrink-0">
-        <button
-          onClick={() => useAppStore.setState({ activeFlowId: null })}
-          className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          <ArrowLeft size={14} />
-          Fluxos
-        </button>
-        <span className="text-gray-200">/</span>
-        <span className="text-[13px] font-semibold text-[#111]">{board.name}</span>
+        {!embedded && (
+          <>
+            <button
+              onClick={() => useAppStore.setState({ activeFlowId: null })}
+              className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <ArrowLeft size={14} />
+              Fluxos
+            </button>
+            <span className="text-gray-200">/</span>
+            <span className="text-[13px] font-semibold text-[#111]">{board.name}</span>
+          </>
+        )}
 
         <div className="flex-1" />
 
@@ -1102,7 +1135,27 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
           </div>
         )}
 
-        {/* Save as project button */}
+        {/* Linked project chip / save button */}
+        {(() => {
+          if (embedded) return null;
+          const linked = board.linkedProjectId ? useAppStore.getState().projects.find(p => p.id === board.linkedProjectId) : undefined;
+          if (!linked) return null;
+          return (
+            <button
+              onClick={() => {
+                useAppStore.getState().setActiveCompany(linked.companyId);
+                useAppStore.getState().setActiveProject(linked.id);
+                useAppStore.getState().setView('project');
+              }}
+              className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold border border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb] hover:bg-[#1f6feb]/10 transition-colors"
+              title="Este fluxo está interligado ao projeto — fases e tarefas se espelham"
+            >
+              <FolderKanban size={13} />
+              Projeto: {linked.name}
+            </button>
+          );
+        })()}
+        {!(board.linkedProjectId && useAppStore.getState().projects.some(p => p.id === board.linkedProjectId)) && (
         <button
           onClick={() => setShowSaveAsProject(true)}
           className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-semibold text-white hover:opacity-90 transition-opacity"
@@ -1111,6 +1164,7 @@ export function FlowCanvas({ boardId }: { boardId: string }) {
           <FolderKanban size={13} />
           Salvar como projeto
         </button>
+        )}
 
         {/* Zoom controls */}
         <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">

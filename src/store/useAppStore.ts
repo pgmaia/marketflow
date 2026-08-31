@@ -170,11 +170,32 @@ interface AppState {
   addDocEntry: (projectId: string, section: DocSection, text: string) => void;
   deleteDocEntry: (id: string) => void;
 
+  // Flow ↔ project linkage
+  createFlowFromProject: (projectId: string) => void;
+
   // Task Types CRUD
   addTaskType: (type: TaskTypeConfig) => void;
   updateTaskType: (value: string, patch: Partial<TaskTypeConfig>) => void;
   deleteTaskType: (value: string) => void;
   reorderTaskTypes: (types: TaskTypeConfig[]) => void;
+}
+
+// ── Flow ↔ project linkage helpers ───────────────────────────────────────────
+// On a linked board, a node's tasks belong to the phase of the lane the node
+// sits in (nearest lane when outside all of them); with no lanes, the node's
+// own title is the phase — the same rule "Salvar como projeto" uses.
+function phaseForNode(board: FlowBoard, node: FlowNode): string {
+  const lanes = [...(board.lanes ?? [])].sort((a, b) => a.x - b.x);
+  if (lanes.length === 0) return node.title;
+  const cx = node.x + node.width / 2;
+  const inside = lanes.find(l => cx >= l.x && cx <= l.x + l.width);
+  if (inside) return inside.title;
+  let best = lanes[0], bestD = Infinity;
+  for (const l of lanes) {
+    const d = Math.abs(cx - (l.x + l.width / 2));
+    if (d < bestD) { bestD = d; best = l; }
+  }
+  return best.title;
 }
 
 const trashId = () => `trash-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -465,12 +486,104 @@ export const useAppStore = create<AppState>()(
       addFlowEdge: (flowId, edge) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: [...f.edges, edge] }) })),
       deleteFlowEdge: (flowId, edgeId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: f.edges.filter(e => e.id !== edgeId) }) })),
       // Lanes may be absent on boards created before the feature — always ?? [].
-      addFlowLane: (flowId, lane) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: [...(f.lanes ?? []), lane] }) })),
-      updateFlowLane: (flowId, laneId, patch) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).map(l => l.id === laneId ? { ...l, ...patch } : l) }) })),
+      addFlowLane: (flowId, lane) => set((s) => {
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: [...(f.lanes ?? []), lane] });
+        const board = s.flows.find(f => f.id === flowId);
+        // A new lane on a linked board becomes a phase of the project.
+        if (!board?.linkedProjectId) return { flows };
+        const projects = s.projects.map(p => {
+          if (p.id !== board.linkedProjectId) return p;
+          if (p.phases.some(ph => ph.name === lane.title)) return p;
+          return { ...p, phases: [...p.phases, { id: `ph-${Date.now()}`, name: lane.title }] };
+        });
+        return { flows, projects };
+      }),
+      updateFlowLane: (flowId, laneId, patch) => set((s) => {
+        const before = s.flows.find(f => f.id === flowId)?.lanes?.find(l => l.id === laneId);
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).map(l => l.id === laneId ? { ...l, ...patch } : l) });
+        const board = flows.find(f => f.id === flowId);
+        if (!board?.linkedProjectId || !before) return { flows };
+        let projects = s.projects;
+        let tasks = s.tasks;
+        // Renaming a lane renames the matching phase (and migrates its tasks,
+        // same as renamePhase); if the project had no such phase, create it.
+        if (patch.title && patch.title !== before.title) {
+          const proj = projects.find(p => p.id === board.linkedProjectId);
+          if (proj) {
+            if (proj.phases.some(ph => ph.name === before.title)) {
+              projects = projects.map(p => p.id !== proj.id ? p : {
+                ...p, phases: p.phases.map(ph => ph.name === before.title ? { ...ph, name: patch.title! } : ph),
+              });
+              tasks = tasks.map(t => t.projectId === proj.id && t.phase === before.title ? { ...t, phase: patch.title! } : t);
+            } else if (!proj.phases.some(ph => ph.name === patch.title)) {
+              projects = projects.map(p => p.id !== proj.id ? p : {
+                ...p, phases: [...p.phases, { id: `ph-${Date.now()}`, name: patch.title! }],
+              });
+            }
+          }
+        }
+        // Moving a lane keeps the project's phases in the same left→right order;
+        // phases without a lane stay at the end, in their existing order.
+        if (patch.x !== undefined || patch.width !== undefined || patch.title) {
+          const laneOrder = [...(board.lanes ?? [])].sort((a, b) => a.x - b.x).map(l => l.title);
+          projects = projects.map(p => {
+            if (p.id !== board.linkedProjectId) return p;
+            const byLane = laneOrder
+              .map(t => p.phases.find(ph => ph.name === t))
+              .filter((ph): ph is NonNullable<typeof ph> => !!ph);
+            const rest = p.phases.filter(ph => !laneOrder.includes(ph.name));
+            return { ...p, phases: [...byLane, ...rest] };
+          });
+        }
+        return { flows, projects, tasks };
+      }),
       deleteFlowLane: (flowId, laneId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, lanes: (f.lanes ?? []).filter(l => l.id !== laneId) }) })),
-      addFlowNodeTask: (flowId, nodeId, task) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: [...n.tasks, task] }) }) })),
+      addFlowNodeTask: (flowId, nodeId, task) => set((s) => {
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: [...n.tasks, task] }) });
+        // Linked board: the task is also born in the project, twinned by id.
+        const board = s.flows.find(f => f.id === flowId);
+        const node = board?.nodes.find(n => n.id === nodeId);
+        const linked = board?.linkedProjectId && s.projects.some(p => p.id === board.linkedProjectId);
+        if (!board || !node || !linked) return { flows };
+        const twin: Task = {
+          id: `t${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          projectId: board.linkedProjectId!,
+          phase: phaseForNode(board, node),
+          title: task.title,
+          type: (task.type ?? 'Copy') as TaskType,
+          status: 'Backlog',
+          priority: 'Medium',
+          dueDate: localISO(new Date(Date.now() + 7 * 86400000)),
+          createdAt: localISO(),
+          flowTaskId: task.id,
+          origin: 'flow',
+        };
+        return { flows, tasks: [...s.tasks, twin] };
+      }),
       deleteFlowNodeTask: (flowId, nodeId, taskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.filter(t => t.id !== taskId) }) }) })),
-      addFlowNodeSubtask: (flowId, nodeId, taskId, subtask) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: [...(t.subtasks ?? []), subtask] }) }) }) })),
+      addFlowNodeSubtask: (flowId, nodeId, taskId, subtask) => set((s) => {
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: [...(t.subtasks ?? []), subtask] }) }) });
+        const board = s.flows.find(f => f.id === flowId);
+        const parent = board?.linkedProjectId
+          ? s.tasks.find(t => t.projectId === board.linkedProjectId && t.flowTaskId === taskId)
+          : undefined;
+        if (!board || !parent) return { flows };
+        const twin: Task = {
+          id: `t${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          projectId: parent.projectId,
+          phase: parent.phase,
+          title: subtask.title,
+          type: parent.type,
+          status: 'Backlog',
+          priority: 'Medium',
+          dueDate: parent.dueDate,
+          createdAt: localISO(),
+          parentTaskId: parent.id,
+          flowTaskId: subtask.id,
+          origin: 'flow',
+        };
+        return { flows, tasks: [...s.tasks, twin] };
+      }),
       deleteFlowNodeSubtask: (flowId, nodeId, taskId, subtaskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(st => st.id !== subtaskId) }) }) }) })),
 
       addCompany: (company) => set((s) => ({ companies: [...s.companies, company] })),
@@ -524,7 +637,46 @@ export const useAppStore = create<AppState>()(
         };
       }),
 
-      addTask: (task) => set((s) => ({ tasks: [...s.tasks, task] })),
+      addTask: (task) => set((s) => {
+        // Tasks arriving FROM the flow already carry flowTaskId — adding them to
+        // the flow again would loop. Only project-born tasks materialise there.
+        const board = !task.flowTaskId
+          ? s.flows.find(f => f.linkedProjectId === task.projectId)
+          : undefined;
+        if (!board) return { tasks: [...s.tasks, task] };
+
+        const flowTaskId = `fnt${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+        // Subtask: attach under the parent's flow twin, if the parent has one.
+        if (task.parentTaskId) {
+          const parent = s.tasks.find(t => t.id === task.parentTaskId);
+          if (!parent?.flowTaskId) return { tasks: [...s.tasks, task] };
+          const flows = s.flows.map(f => f.id !== board.id ? f : {
+            ...f,
+            nodes: f.nodes.map(n => ({
+              ...n,
+              tasks: n.tasks.map(t => t.id !== parent.flowTaskId ? t : {
+                ...t, subtasks: [...(t.subtasks ?? []), { id: flowTaskId, title: task.title }],
+              }),
+            })),
+          });
+          return { flows, tasks: [...s.tasks, { ...task, flowTaskId }] };
+        }
+
+        // Top-level: goes into the leftmost node whose phase matches the task's.
+        const host = board.nodes
+          .filter(n => phaseForNode(board, n) === task.phase)
+          .sort((a, b) => a.x - b.x)[0];
+        if (!host) return { tasks: [...s.tasks, task] };
+        const flows = s.flows.map(f => f.id !== board.id ? f : {
+          ...f,
+          nodes: f.nodes.map(n => n.id !== host.id ? n : {
+            ...n,
+            tasks: [...n.tasks, { id: flowTaskId, title: task.title, type: task.type, fromProject: true }],
+          }),
+        });
+        return { flows, tasks: [...s.tasks, { ...task, flowTaskId }] };
+      }),
       updateTask: (id, updates) =>
         set((s) => {
           const existing = s.tasks.find(t => t.id === id);
@@ -870,6 +1022,78 @@ export const useAppStore = create<AppState>()(
         }),
 
       // ── Task Types CRUD ────────────────────────────────────────────────────
+      // Generates the project's flow view: one coloured lane per phase, one block
+      // per phase holding its tasks, everything twinned (flowTaskId) so the two
+      // views mirror additions and grey out one-sided deletions from then on.
+      createFlowFromProject: (projectId) => set((s) => {
+        const project = s.projects.find(p => p.id === projectId);
+        if (!project) return s;
+        if (s.flows.some(fl => fl.linkedProjectId === projectId)) return s; // already has one
+        const ts = Date.now();
+        const LANE_W = 360, GAP = 16, NODE_W = 250;
+        const laneColors = ['#1f6feb', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#0ea5e9', '#ec4899'];
+
+        const lanes: FlowLane[] = project.phases.map((ph, i) => ({
+          id: `fl${ts}-${i}`,
+          title: ph.name,
+          color: laneColors[i % laneColors.length],
+          x: 60 + i * (LANE_W + GAP),
+          width: LANE_W,
+        }));
+
+        let taskPatches = new Map<string, string>(); // project task id -> flow task/subtask id
+        const nodes: FlowNode[] = project.phases.map((ph, i) => {
+          const phaseTasks = s.tasks.filter(t => t.projectId === projectId && t.phase === ph.name && !t.parentTaskId);
+          const tasks: FlowNodeTask[] = phaseTasks.map((t, ti) => {
+            const ftId = `fnt${ts}-${i}-${ti}`;
+            taskPatches.set(t.id, ftId);
+            const subs = s.tasks.filter(st => st.parentTaskId === t.id);
+            return {
+              id: ftId,
+              title: t.title,
+              type: t.type,
+              subtasks: subs.map((st, si) => {
+                const fsId = `fns${ts}-${i}-${ti}-${si}`;
+                taskPatches.set(st.id, fsId);
+                return { id: fsId, title: st.title };
+              }),
+            };
+          });
+          return {
+            id: `fn${ts}-${i}`,
+            type: 'stage' as const,
+            x: 60 + i * (LANE_W + GAP) + (LANE_W - NODE_W) / 2,
+            y: 120,
+            width: NODE_W,
+            title: ph.name,
+            color: laneColors[i % laneColors.length],
+            tasks,
+          };
+        });
+
+        const edges: FlowEdge[] = nodes.slice(0, -1).map((n, i) => ({
+          id: `fe${ts}-${i}`,
+          fromId: n.id,
+          toId: nodes[i + 1].id,
+        }));
+
+        const board: FlowBoard = {
+          id: `flow-${ts}`,
+          name: project.name,
+          description: project.description,
+          nodes,
+          edges,
+          lanes,
+          linkedProjectId: projectId,
+          createdAt: localISO(),
+        };
+
+        return {
+          flows: [...s.flows, board],
+          tasks: s.tasks.map(t => taskPatches.has(t.id) ? { ...t, flowTaskId: taskPatches.get(t.id) } : t),
+        };
+      }),
+
       addTaskType: (type) => set((s) => ({ taskTypes: [...s.taskTypes, type] })),
       updateTaskType: (value, patch) => set((s) => ({
         taskTypes: s.taskTypes.map(t => t.value === value ? { ...t, ...patch } : t),
