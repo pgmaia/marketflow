@@ -119,6 +119,7 @@ interface AppState {
   addFlowNodeTask: (flowId: string, nodeId: string, task: FlowNodeTask) => void;
   deleteFlowNodeTask: (flowId: string, nodeId: string, taskId: string) => void;
   addFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtask: FlowNodeSubtask) => void;
+  renameFlowNodeTask: (flowId: string, nodeId: string, taskId: string, title: string) => void;
   deleteFlowNodeSubtask: (flowId: string, nodeId: string, taskId: string, subtaskId: string) => void;
 
   // Company CRUD
@@ -584,7 +585,31 @@ export const useAppStore = create<AppState>()(
         };
         return { flows, tasks: [...s.tasks, twin] };
       }),
-      deleteFlowNodeSubtask: (flowId, nodeId, taskId, subtaskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(st => st.id !== subtaskId) }) }) }) })),
+      // Renames a task OR subtask on the card (taskId may be either id). On a
+      // linked board the project twin is renamed too, so the two views never
+      // drift apart on what a task is called.
+      renameFlowNodeTask: (flowId, nodeId, taskId, title) => set((s) => {
+        const flows = s.flows.map(f => f.id !== flowId ? f : ({
+          ...f,
+          nodes: f.nodes.map(n => n.id !== nodeId ? n : ({
+            ...n,
+            tasks: n.tasks.map(t => {
+              if (t.id === taskId) return { ...t, title };
+              if ((t.subtasks ?? []).some(st => st.id === taskId))
+                return { ...t, subtasks: (t.subtasks ?? []).map(st => st.id === taskId ? { ...st, title } : st) };
+              return t;
+            }),
+          })),
+        }));
+        const board = s.flows.find(f => f.id === flowId);
+        if (!board?.linkedProjectId) return { flows };
+        const tasks = s.tasks.map(t =>
+          t.projectId === board.linkedProjectId && t.flowTaskId === taskId ? { ...t, title } : t
+        );
+        return { flows, tasks };
+      }),
+
+            deleteFlowNodeSubtask: (flowId, nodeId, taskId, subtaskId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id !== nodeId ? n : { ...n, tasks: n.tasks.map(t => t.id !== taskId ? t : { ...t, subtasks: (t.subtasks ?? []).filter(st => st.id !== subtaskId) }) }) }) })),
 
       addCompany: (company) => set((s) => ({ companies: [...s.companies, company] })),
       deleteCompany: (id) => set((s) => {
@@ -746,7 +771,26 @@ export const useAppStore = create<AppState>()(
             };
           }
           // ── Normal update ────────────────────────────────────────────────
-          return { tasks: s.tasks.map(t => t.id === id ? { ...t, ...updates } : t) };
+          // A title change mirrors into the flow twin, keeping both views in step.
+          let flows = s.flows;
+          if (updates.title !== undefined && existing?.flowTaskId) {
+            const board = s.flows.find(f => f.linkedProjectId === existing.projectId);
+            if (board) {
+              flows = s.flows.map(f => f.id !== board.id ? f : ({
+                ...f,
+                nodes: f.nodes.map(n => ({
+                  ...n,
+                  tasks: n.tasks.map(t => {
+                    if (t.id === existing.flowTaskId) return { ...t, title: updates.title! };
+                    if ((t.subtasks ?? []).some(st => st.id === existing.flowTaskId))
+                      return { ...t, subtasks: (t.subtasks ?? []).map(st => st.id === existing.flowTaskId ? { ...st, title: updates.title! } : st) };
+                    return t;
+                  }),
+                })),
+              }));
+            }
+          }
+          return { tasks: s.tasks.map(t => t.id === id ? { ...t, ...updates } : t), flows };
         }),
       deleteTask: (id) => set((s) => {
         const task = s.tasks.find(t => t.id === id);

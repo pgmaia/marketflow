@@ -162,7 +162,7 @@ function FlowNodeCard({
   onSaveAsTemplate: () => void;
   onDeleteRequest: () => void;
 }) {
-  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, flows, projects, tasks: projectTasks } = useAppStore();
+  const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, renameFlowNodeTask, flows, projects, tasks: projectTasks } = useAppStore();
 
   // On a linked board, every flow task/subtask has a project twin (flowTaskId
   // points back at it). A twin that no longer exists means it was deleted on
@@ -184,6 +184,15 @@ function FlowNodeCard({
   // Which task is receiving a new subtask right now (one composer at a time).
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  // Inline rename of a task/subtask row (taskId may be either kind of id).
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskVal, setEditingTaskVal] = useState('');
+
+  const commitTaskRename = (taskId: string) => {
+    const v = editingTaskVal.trim();
+    if (v) renameFlowNodeTask(flowId, node.id, taskId, v);
+    setEditingTaskId(null);
+  };
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [hovered, setHovered] = useState(false);
 
@@ -332,7 +341,33 @@ function FlowNodeCard({
                 {task.fromProject && !isGhost(task.id) && (
                   <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#1f6feb]" title="Adicionada no projeto" />
                 )}
-                <span className={`flex-1 text-[12px] truncate ${isGhost(task.id) ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{task.title}</span>
+                {editingTaskId === task.id ? (
+                  <input
+                    autoFocus
+                    value={editingTaskVal}
+                    onChange={e => setEditingTaskVal(e.target.value)}
+                    onClick={e => e.stopPropagation()}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') commitTaskRename(task.id);
+                      if (e.key === 'Escape') setEditingTaskId(null);
+                    }}
+                    onBlur={() => commitTaskRename(task.id)}
+                    className="flex-1 min-w-0 text-[12px] text-gray-700 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-blue-300"
+                  />
+                ) : (
+                  <span
+                    className={`flex-1 text-[12px] truncate ${isGhost(task.id) ? 'text-gray-400 line-through' : 'text-gray-700 cursor-text hover:text-[#1f6feb]'}`}
+                    title={isGhost(task.id) ? undefined : 'Clique para renomear'}
+                    onClick={e => {
+                      if (isGhost(task.id)) return;
+                      e.stopPropagation();
+                      setEditingTaskId(task.id);
+                      setEditingTaskVal(task.title);
+                    }}
+                  >
+                    {task.title}
+                  </span>
+                )}
                 {isGhost(task.id) && (
                   <span className="text-[9px] font-bold uppercase tracking-wide text-gray-400 bg-gray-100 rounded px-1 py-0.5 shrink-0" title="Excluída no projeto — apague aqui também para remover de vez">
                     removida no projeto
@@ -364,7 +399,33 @@ function FlowNodeCard({
                   className="flex items-center gap-2 pl-7 pr-3 py-2 border-b border-gray-50 group/sub hover:bg-gray-50 transition-colors"
                 >
                   <span className="text-gray-300 text-[11px] leading-none shrink-0">↳</span>
-                  <span className={`flex-1 text-[11px] truncate ${isGhost(sub.id) ? 'text-gray-400 line-through opacity-70' : 'text-gray-500'}`}>{sub.title}</span>
+                  {editingTaskId === sub.id ? (
+                    <input
+                      autoFocus
+                      value={editingTaskVal}
+                      onChange={e => setEditingTaskVal(e.target.value)}
+                      onClick={e => e.stopPropagation()}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commitTaskRename(sub.id);
+                        if (e.key === 'Escape') setEditingTaskId(null);
+                      }}
+                      onBlur={() => commitTaskRename(sub.id)}
+                      className="flex-1 min-w-0 text-[11px] text-gray-600 bg-gray-50 border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-blue-300"
+                    />
+                  ) : (
+                    <span
+                      className={`flex-1 text-[11px] truncate ${isGhost(sub.id) ? 'text-gray-400 line-through opacity-70' : 'text-gray-500 cursor-text hover:text-[#1f6feb]'}`}
+                      title={isGhost(sub.id) ? undefined : 'Clique para renomear'}
+                      onClick={e => {
+                        if (isGhost(sub.id)) return;
+                        e.stopPropagation();
+                        setEditingTaskId(sub.id);
+                        setEditingTaskVal(sub.title);
+                      }}
+                    >
+                      {sub.title}
+                    </span>
+                  )}
                   {isGhost(sub.id) && (
                     <span className="text-[8px] font-bold uppercase text-gray-400 bg-gray-100 rounded px-1 py-0.5 shrink-0">removida</span>
                   )}
