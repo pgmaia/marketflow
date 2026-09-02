@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 , Copy } from 'lucide-react';
+import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 , Copy , FileDown } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase } from '../../types';
+import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase, TemplateTask, TaskType } from '../../types';
 import { localISO } from '../../lib/date';
+import html2canvas from 'html2canvas-pro';
+import { jsPDF } from 'jspdf';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -995,6 +997,9 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
   const [laneDrag, setLaneDrag] = useState<{ laneId: string; mode: 'move' | 'resize'; startClientX: number; laneX: number; laneWidth: number } | null>(null);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [boardTplSaved, setBoardTplSaved] = useState(false);
   const updateFlowNodePos = useAppStore(s => s.updateFlowNode);
 
   const toCanvas = useCallback((screenX: number, screenY: number) => {
@@ -1235,7 +1240,60 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     }
   };
 
-  const handleConnectTo = (targetId: string) => {
+  /** Saves the WHOLE board as a task template: every task carries the phase of
+   *  the lane its block sits in (or the block title when there are no lanes) —
+   *  the same convention as "Salvar como projeto". Task-less blocks become a
+   *  task themselves so their content isn't dropped. The result plugs into the
+   *  existing template system: it can seed new flows and be applied to projects. */
+  const handleSaveBoardAsTemplate = () => {
+    if (!board || board.nodes.length === 0) return;
+    const lanes = [...(board.lanes ?? [])].sort((a, b) => a.x - b.x);
+    const phaseOf = (n: FlowNode): string => {
+      if (lanes.length === 0) return n.title;
+      const cx = n.x + n.width / 2;
+      const inside = lanes.find(l => cx >= l.x && cx <= l.x + l.width);
+      if (inside) return inside.title;
+      let best = lanes[0], bestD = Infinity;
+      for (const l of lanes) {
+        const d = Math.abs(cx - (l.x + l.width / 2));
+        if (d < bestD) { bestD = d; best = l; }
+      }
+      return best.title;
+    };
+    const tplTasks: TemplateTask[] = [];
+    for (const n of board.nodes) {
+      const phase = phaseOf(n);
+      if (n.tasks.length === 0) {
+        tplTasks.push({ title: n.title, type: 'Copy', phase, priority: 'Medium' });
+        continue;
+      }
+      for (const t of n.tasks) {
+        tplTasks.push({
+          title: t.title,
+          type: (t.type ?? 'Copy') as TaskType,
+          phase,
+          priority: 'Medium',
+          subtasks: (t.subtasks ?? []).map(st => ({
+            title: st.title,
+            type: (t.type ?? 'Copy') as TaskType,
+            phase,
+            priority: 'Medium' as const,
+          })),
+        });
+      }
+    }
+    addTemplate({
+      id: `tpl-${Date.now()}`,
+      name: board.name,
+      description: board.description ?? `Template do fluxo ${board.name}`,
+      tasks: tplTasks,
+      createdAt: localISO(),
+    });
+    setBoardTplSaved(true);
+    setTimeout(() => setBoardTplSaved(false), 2500);
+  };
+
+    const handleConnectTo = (targetId: string) => {
     if (!connectingFrom || connectingFrom === targetId) { setConnectingFrom(null); return; }
     // Avoid duplicate edges
     const exists = board?.edges.some(e => e.fromId === connectingFrom && e.toId === targetId);
@@ -1245,7 +1303,85 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     setConnectingFrom(null);
   };
 
-  const fitView = () => {
+  /** Renders the whole board (not just the viewport) into a landscape PDF.
+   *  The live container is pan/zoom-transformed, so the capture happens on
+   *  html2canvas's document CLONE: there the transform is reset and the phase
+   *  headers — which live outside the container in the app — are re-drawn as
+   *  plain labels above the content. No flicker in the real page. */
+  const handleExportPdf = async () => {
+    const el = contentRef.current;
+    if (!el || !board || exportingPdf) return;
+    setExportingPdf(true);
+    try {
+      const nodes = board.nodes;
+      const lanes = board.lanes ?? [];
+      if (nodes.length === 0 && lanes.length === 0) return;
+      const xs = [
+        ...nodes.map(n => n.x), ...nodes.map(n => n.x + n.width),
+        ...lanes.map(l => l.x), ...lanes.map(l => l.x + l.width),
+      ];
+      const ys = [
+        ...nodes.map(n => n.y), ...nodes.map(n => n.y + nodeEstHeight(n) + 40),
+        ...(lanes.length ? [80] : []),
+      ];
+      const pad = 48;
+      const headerRoom = lanes.length ? 56 : 0;
+      const minX = Math.min(...xs) - pad;
+      const minY = Math.min(...ys) - pad - headerRoom;
+      const w = Math.max(...xs) + pad - minX;
+      const h = Math.max(...ys) + pad - minY;
+
+      const canvas = await html2canvas(el, {
+        x: minX, y: minY, width: w, height: h,
+        scale: 2,
+        backgroundColor: '#F8F9FB',
+        onclone: doc => {
+          const cloned = doc.querySelector('[data-flow-content]') as HTMLElement | null;
+          if (!cloned) return;
+          cloned.style.transform = 'none';
+          // Phase labels live outside this container in the app; re-draw them.
+          for (const lane of lanes) {
+            const label = doc.createElement('div');
+            label.textContent = lane.title;
+            Object.assign(label.style, {
+              position: 'absolute',
+              left: `${lane.x + 12}px`,
+              top: `${minY + 14}px`,
+              padding: '4px 10px',
+              borderRadius: '8px',
+              background: '#ffffff',
+              border: `1px solid ${lane.color}55`,
+              color: '#111827',
+              fontSize: '13px',
+              fontWeight: '700',
+              zIndex: '30',
+            });
+            cloned.appendChild(label);
+          }
+        },
+      });
+
+      // JPEG comprimido: o PDF é para ENVIO — em PNG a mesma captura passava
+      // de 6 MB; em JPEG fica em torno de algumas centenas de KB.
+      const img = canvas.toDataURL('image/jpeg', 0.85);
+      const landscape = canvas.width >= canvas.height;
+      const pdf = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const margin = 8;
+      const scale = Math.min((pageW - margin * 2) / canvas.width, (pageH - margin * 2) / canvas.height);
+      const imgW = canvas.width * scale;
+      const imgH = canvas.height * scale;
+      pdf.setFontSize(11);
+      pdf.text(board.name, margin, margin - 1 > 6 ? margin - 1 : 6);
+      pdf.addImage(img, 'JPEG', (pageW - imgW) / 2, (pageH - imgH) / 2, imgW, imgH);
+      pdf.save(`${board.name}.pdf`);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+    const fitView = () => {
     if (!board || board.nodes.length === 0) return;
     const rect = wrapperRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -1331,6 +1467,28 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
           Salvar como projeto
         </button>
         )}
+
+        {/* Save whole board as template */}
+        <button
+          onClick={handleSaveBoardAsTemplate}
+          disabled={boardTplSaved || board.nodes.length === 0}
+          className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-medium border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-60"
+          title="Salvar o fluxo inteiro como template"
+        >
+          <Layers size={13} />
+          {boardTplSaved ? 'Template salvo ✓' : 'Template'}
+        </button>
+
+        {/* Export PDF */}
+        <button
+          onClick={handleExportPdf}
+          disabled={exportingPdf}
+          className="flex items-center gap-1.5 h-7 px-3 rounded-lg text-[12px] font-medium border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 transition-colors disabled:opacity-50"
+          title="Salvar o fluxo como PDF"
+        >
+          <FileDown size={13} />
+          {exportingPdf ? 'Gerando…' : 'PDF'}
+        </button>
 
         {/* Zoom controls */}
         <div className="flex items-center gap-1 border border-gray-200 rounded-lg overflow-hidden">
@@ -1447,6 +1605,8 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
 
           {/* Transform container */}
           <div
+            ref={contentRef}
+            data-flow-content
             className="absolute"
             style={{
               transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
