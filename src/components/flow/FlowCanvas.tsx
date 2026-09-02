@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 } from 'lucide-react';
+import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 , Copy } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase } from '../../types';
 import { localISO } from '../../lib/date';
@@ -156,6 +156,7 @@ function FlowNodeCard({
   onConnectFrom,
   onConnectTo,
   onSaveAsTemplate,
+  onDuplicate,
   onDeleteRequest,
 }: {
   node: FlowNode;
@@ -167,6 +168,7 @@ function FlowNodeCard({
   onConnectFrom: (e: React.MouseEvent) => void;
   onConnectTo: () => void;
   onSaveAsTemplate: () => void;
+  onDuplicate: () => void;
   onDeleteRequest: () => void;
 }) {
   const { updateFlowNode, addFlowNodeTask, deleteFlowNodeTask, addFlowNodeSubtask, deleteFlowNodeSubtask, renameFlowNodeTask, moveFlowNodeTask, flows, projects, tasks: projectTasks } = useAppStore();
@@ -568,16 +570,27 @@ function FlowNodeCard({
           >
             <Trash2 size={11} />
           </button>
-          {/* Save as template button — below the card */}
-          <button
-            onMouseDown={e => e.stopPropagation()}
-            onClick={e => { e.stopPropagation(); onSaveAsTemplate(); }}
-            className="absolute -bottom-8 left-0 right-0 mx-auto w-fit flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-[#1f6feb] hover:text-[#1f6feb] transition-colors shadow-sm whitespace-nowrap"
-            style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
-          >
-            <Layers size={10} />
-            Salvar como template
-          </button>
+          {/* Action pills below the card */}
+          <div className="absolute -bottom-8 left-0 right-0 flex items-center justify-center gap-1.5 whitespace-nowrap">
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onDuplicate(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-[#1f6feb] hover:text-[#1f6feb] transition-colors shadow-sm"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+            >
+              <Copy size={10} />
+              Duplicar
+            </button>
+            <button
+              onMouseDown={e => e.stopPropagation()}
+              onClick={e => { e.stopPropagation(); onSaveAsTemplate(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-[11px] font-semibold text-gray-600 hover:border-[#1f6feb] hover:text-[#1f6feb] transition-colors shadow-sm"
+              style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+            >
+              <Layers size={10} />
+              Salvar como template
+            </button>
+          </div>
         </>
       )}
     </div>
@@ -960,7 +973,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
 export function FlowCanvas({ boardId, embedded = false }: { boardId: string; embedded?: boolean }) {
-  const { flows, templates, projects, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
+  const { flows, templates, projects, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, duplicateFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
   const board = flows.find(f => f.id === boardId);
 
   const [pan, setPan] = useState({ x: 60, y: 60 });
@@ -1520,6 +1533,11 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
                 }}
                 onConnectTo={() => handleConnectTo(node.id)}
                 onSaveAsTemplate={() => handleSaveNodeAsTemplate(node)}
+                onDuplicate={() => {
+                  const newId = `fn${Date.now()}-dup`;
+                  duplicateFlowNode(boardId, node.id, newId);
+                  setSelectedId(newId);
+                }}
                 onDeleteRequest={() => setPendingDeleteNodeId(node.id)}
               />
             ))}

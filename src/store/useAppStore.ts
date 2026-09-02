@@ -111,6 +111,7 @@ interface AppState {
   updateFlowNode: (flowId: string, nodeId: string, patch: Partial<FlowNode>) => void;
   addFlowNode: (flowId: string, node: FlowNode) => void;
   deleteFlowNode: (flowId: string, nodeId: string) => void;
+  duplicateFlowNode: (flowId: string, nodeId: string, newNodeId: string) => void;
   addFlowEdge: (flowId: string, edge: FlowEdge) => void;
   addFlowLane: (flowId: string, lane: FlowLane) => void;
   updateFlowLane: (flowId: string, laneId: string, patch: Partial<FlowLane>) => void;
@@ -485,7 +486,65 @@ export const useAppStore = create<AppState>()(
           trash: [...s.trash, entry],
         };
       }),
-      addFlowEdge: (flowId, edge) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: [...f.edges, edge] }) })),
+      // Clones a block: same colour/width/description, tasks and subtasks with
+      // fresh ids, offset so the copy doesn't hide the original. On a linked
+      // board every cloned task is born with a project twin (otherwise it would
+      // render as "removida no projeto" immediately) — and GHOST tasks are left
+      // out of the copy: duplicating must not resurrect what the project side
+      // deliberately deleted.
+      duplicateFlowNode: (flowId, nodeId, newNodeId) => set((s) => {
+        const board = s.flows.find(f => f.id === flowId);
+        const node = board?.nodes.find(n => n.id === nodeId);
+        if (!board || !node) return s;
+        const ts = Date.now();
+        const linkedId = board.linkedProjectId && s.projects.some(p => p.id === board.linkedProjectId)
+          ? board.linkedProjectId : null;
+        const liveTwins = linkedId
+          ? new Set(s.tasks.filter(t => t.projectId === linkedId && t.flowTaskId).map(t => t.flowTaskId as string))
+          : null;
+
+        const sourceTasks = liveTwins ? node.tasks.filter(t => liveTwins.has(t.id)) : node.tasks;
+        const cloneTasks: FlowNodeTask[] = sourceTasks.map((t, i) => ({
+          ...t,
+          id: `fnt${ts}-d${i}`,
+          subtasks: (t.subtasks ?? [])
+            .filter(st => !liveTwins || liveTwins.has(st.id))
+            .map((st, si) => ({ ...st, id: `fns${ts}-d${i}-${si}` })),
+        }));
+        const clone: FlowNode = {
+          ...node,
+          id: newNodeId,
+          x: node.x + 36,
+          y: node.y + 36,
+          title: `${node.title} (cópia)`,
+          tasks: cloneTasks,
+        };
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: [...f.nodes, clone] });
+        if (!linkedId) return { flows };
+
+        const phase = phaseForNode(board, clone);
+        const due = localISO(new Date(ts + 7 * 86400000));
+        const created = localISO();
+        const twins: Task[] = [];
+        cloneTasks.forEach((t, i) => {
+          const pid = `t${ts}-d${i}`;
+          twins.push({
+            id: pid, projectId: linkedId, phase, title: t.title,
+            type: (t.type ?? 'Copy') as TaskType, status: 'Backlog', priority: 'Medium',
+            dueDate: due, createdAt: created, flowTaskId: t.id, origin: 'flow',
+          });
+          (t.subtasks ?? []).forEach((st, si) => {
+            twins.push({
+              id: `${pid}-s${si}`, projectId: linkedId, phase, title: st.title,
+              type: (t.type ?? 'Copy') as TaskType, status: 'Backlog', priority: 'Medium',
+              dueDate: due, createdAt: created, parentTaskId: pid, flowTaskId: st.id, origin: 'flow',
+            });
+          });
+        });
+        return { flows, tasks: [...s.tasks, ...twins] };
+      }),
+
+            addFlowEdge: (flowId, edge) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: [...f.edges, edge] }) })),
       deleteFlowEdge: (flowId, edgeId) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, edges: f.edges.filter(e => e.id !== edgeId) }) })),
       // Lanes may be absent on boards created before the feature — always ?? [].
       addFlowLane: (flowId, lane) => set((s) => {
