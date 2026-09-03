@@ -1339,6 +1339,11 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
           const cloned = doc.querySelector('[data-flow-content]') as HTMLElement | null;
           if (!cloned) return;
           cloned.style.transform = 'none';
+          // html2canvas rasterizes inline SVG unreliably (marker-end arrowheads
+          // in particular) — the arrows simply vanished from the PDF. The SVGs
+          // are hidden here and every edge is redrawn straight onto the bitmap
+          // afterwards, from the same routeEdge geometry the screen uses.
+          cloned.querySelectorAll('svg').forEach(el => { (el as unknown as HTMLElement).style.display = 'none'; });
           // Phase labels live outside this container in the app; re-draw them.
           for (const lane of lanes) {
             const label = doc.createElement('div');
@@ -1363,6 +1368,40 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
 
       // JPEG comprimido: o PDF é para ENVIO — em PNG a mesma captura passava
       // de 6 MB; em JPEG fica em torno de algumas centenas de KB.
+      // Redraw the arrows in canvas space: crop origin (minX,minY), scale 2.
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(2, 0, 0, 2, -minX * 2, -minY * 2);
+        ctx.strokeStyle = '#9ca3af';
+        ctx.fillStyle = '#9ca3af';
+        ctx.lineWidth = 2;
+        for (const edge of board.edges) {
+          const from = nodes.find(n => n.id === edge.fromId);
+          const to = nodes.find(n => n.id === edge.toId);
+          if (!from || !to) continue;
+          const { a, b } = routeEdge(from, to);
+          const bend = Math.max(40, Math.hypot(b.x - a.x, b.y - a.y) * 0.45);
+          ctx.beginPath();
+          ctx.moveTo(a.x, a.y);
+          ctx.bezierCurveTo(a.x + a.dx * bend, a.y + a.dy * bend, b.x + b.dx * bend, b.y + b.dy * bend, b.x, b.y);
+          ctx.stroke();
+          // Arrowhead: the curve arrives travelling opposite the anchor's
+          // outward direction, so the tip points along (-b.dx, -b.dy).
+          const ang = Math.atan2(-b.dy, -b.dx);
+          ctx.save();
+          ctx.translate(b.x, b.y);
+          ctx.rotate(ang);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(-10, -4.5);
+          ctx.lineTo(-10, 4.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        }
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
+
       const img = canvas.toDataURL('image/jpeg', 0.85);
       const landscape = canvas.width >= canvas.height;
       const pdf = new jsPDF({ orientation: landscape ? 'landscape' : 'portrait', unit: 'mm', format: 'a4' });
