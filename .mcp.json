@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "icarus": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["mcp/server.mjs"]
+    }
+  }
+}

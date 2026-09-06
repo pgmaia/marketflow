@@ -29,16 +29,33 @@ aberto (Realtime por linha, Fase 2 do backend).
   nunca escreve no blob (merge fica exclusivo do app).
 - Excluir tarefa é de propósito só pelo app (lá existe a Lixeira).
 
-## Configuração
+## Como usar
 
-Credenciais em `mcp/.env` (fora do git):
+Só membros com conta no Icarus (e-mail + senha do app) conseguem conectar.
+
+### Equipe — Claude Desktop (recomendado)
+
+Instale a extensão `Icarus.mcpb` (peça o arquivo ao Paulo, ou gere com
+`sh mcp/build-mcpb.sh` → sai em `mcp/dist/`):
+
+1. Dê dois cliques no `Icarus.mcpb` (ou Claude Desktop → Settings →
+   Extensions → arraste o arquivo).
+2. Preencha seu e-mail e senha do Icarus na telinha de configuração
+   (a senha fica no cofre do sistema, não em arquivo).
+3. Pronto — pergunte "quais tarefas vencem essa semana?".
+
+### Desenvolvedores — Claude Code
+
+O repo já tem `.mcp.json` (escopo de projeto): abrindo este repo no Claude
+Code, o servidor é oferecido automaticamente. Antes, uma vez:
 
 ```
-ICARUS_EMAIL=seu@email.com
-ICARUS_PASSWORD=...
+cd mcp && npm install
+cp .env.example .env   # e preencha ICARUS_EMAIL / ICARUS_PASSWORD
 ```
 
-Registro no Claude (`~/.claude.json` → `mcpServers`):
+Para registrar fora do repo (escopo de usuário), em `~/.claude.json` →
+`mcpServers`:
 
 ```json
 "icarus": { "type": "stdio", "command": "node", "args": ["/Users/paulomaia/Skills/marketflow/mcp/server.mjs"] }

@@ -1,0 +1,40 @@
+{
+  "manifest_version": "0.2",
+  "name": "icarus",
+  "display_name": "Icarus",
+  "version": "1.0.0",
+  "description": "Consulte e altere projetos, tarefas e documentação do Icarus por prompt.",
+  "long_description": "Conecta o Claude à plataforma Icarus da equipe: listar e buscar tarefas, criar e atualizar tarefas (status, prazo, fase, responsáveis) e ler/escrever registros de Documentação dos projetos. As alterações aparecem no app na hora.",
+  "author": { "name": "Paulo Maia" },
+  "server": {
+    "type": "node",
+    "entry_point": "server/server.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/server.mjs"],
+      "env": {
+        "ICARUS_EMAIL": "${user_config.email}",
+        "ICARUS_PASSWORD": "${user_config.password}"
+      }
+    }
+  },
+  "user_config": {
+    "email": {
+      "type": "string",
+      "title": "E-mail do Icarus",
+      "description": "O mesmo e-mail que você usa para entrar no Icarus",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "Senha do Icarus",
+      "description": "A mesma senha do app",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=18" }
+  }
+}
