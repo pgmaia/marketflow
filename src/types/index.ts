@@ -80,6 +80,10 @@ export interface Task {
   flowTaskId?: string;
   // 'flow' when the task was born on the flow canvas (badge in the task list).
   origin?: 'flow';
+  // Nome do BLOCO (etapa) do fluxo de onde a tarefa veio — exibido como a
+  // coluna "Etapa" na Lista e usado para aglutinar tarefas do mesmo bloco.
+  // Acompanha renomeações do bloco enquanto o vínculo existir.
+  etapa?: string;
 }
 
 export interface Project {

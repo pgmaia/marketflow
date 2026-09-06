@@ -528,7 +528,18 @@ export const useAppStore = create<AppState>()(
         };
       }),
       addFlowNode: (flowId, node) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: [...f.nodes, node] }) })),
-      updateFlowNode: (flowId, nodeId, patch) => set((s) => ({ flows: s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id === nodeId ? { ...n, ...patch } : n) }) })),
+      updateFlowNode: (flowId, nodeId, patch) => set((s) => {
+        const flows = s.flows.map(f => f.id !== flowId ? f : { ...f, nodes: f.nodes.map(n => n.id === nodeId ? { ...n, ...patch } : n) });
+        // Renomear o bloco espelha a coluna "Etapa" nos gêmeos do projeto.
+        if (patch.title === undefined) return { flows };
+        const node = s.flows.find(f => f.id === flowId)?.nodes.find(n => n.id === nodeId);
+        if (!node) return { flows };
+        const flowIds = new Set(node.tasks.flatMap(t => [t.id, ...(t.subtasks ?? []).map(st => st.id)]));
+        return {
+          flows,
+          tasks: s.tasks.map(t => t.flowTaskId && flowIds.has(t.flowTaskId) ? { ...t, etapa: patch.title } : t),
+        };
+      }),
       deleteFlowNode: (flowId, nodeId) => set((s) => {
         const flow = s.flows.find(f => f.id === flowId);
         const node = flow?.nodes.find(n => n.id === nodeId);
@@ -588,13 +599,13 @@ export const useAppStore = create<AppState>()(
           twins.push({
             id: pid, projectId: linkedId, phase, title: t.title,
             type: (t.type ?? 'Copy') as TaskType, status: 'Backlog', priority: 'Medium',
-            dueDate: due, createdAt: created, flowTaskId: t.id, origin: 'flow',
+            dueDate: due, createdAt: created, flowTaskId: t.id, origin: 'flow', etapa: clone.title,
           });
           (t.subtasks ?? []).forEach((st, si) => {
             twins.push({
               id: `${pid}-s${si}`, projectId: linkedId, phase, title: st.title,
               type: (t.type ?? 'Copy') as TaskType, status: 'Backlog', priority: 'Medium',
-              dueDate: due, createdAt: created, parentTaskId: pid, flowTaskId: st.id, origin: 'flow',
+              dueDate: due, createdAt: created, parentTaskId: pid, flowTaskId: st.id, origin: 'flow', etapa: clone.title,
             });
           });
         });
@@ -690,6 +701,7 @@ export const useAppStore = create<AppState>()(
           createdAt: localISO(),
           flowTaskId: task.id,
           origin: 'flow',
+          etapa: node.title,
         };
         return { flows, tasks: [...s.tasks, twin] };
       }),
@@ -714,6 +726,7 @@ export const useAppStore = create<AppState>()(
           parentTaskId: parent.id,
           flowTaskId: subtask.id,
           origin: 'flow',
+          etapa: parent.etapa,
         };
         return { flows, tasks: [...s.tasks, twin] };
       }),
@@ -850,7 +863,8 @@ export const useAppStore = create<AppState>()(
               }),
             })),
           });
-          return { flows, tasks: [...s.tasks, { ...task, flowTaskId }] };
+          const parentEtapa = s.tasks.find(t => t.id === task.parentTaskId)?.etapa;
+          return { flows, tasks: [...s.tasks, { ...task, flowTaskId, etapa: parentEtapa }] };
         }
 
         // Top-level: goes into the leftmost node whose phase matches the task's.
@@ -865,7 +879,7 @@ export const useAppStore = create<AppState>()(
             tasks: [...n.tasks, { id: flowTaskId, title: task.title, type: task.type, fromProject: true }],
           }),
         });
-        return { flows, tasks: [...s.tasks, { ...task, flowTaskId }] };
+        return { flows, tasks: [...s.tasks, { ...task, flowTaskId, etapa: host.title }] };
       }),
       updateTask: (id, updates) =>
         set((s) => {
@@ -1044,6 +1058,7 @@ export const useAppStore = create<AppState>()(
           if (board) {
             const additions = new Map<string, FlowNodeTask[]>(); // nodeId -> new flow tasks
             const linkByTaskId = new Map<string, string>();      // project task id -> flow id
+            const etapaByTaskId = new Map<string, string>();     // project task id -> nome do bloco
             newTasks.filter(t => !t.parentTaskId).forEach((t, i) => {
               const host = board.nodes
                 .filter(n => phaseForNode(board, n) === t.phase)
@@ -1051,8 +1066,9 @@ export const useAppStore = create<AppState>()(
               if (!host) return;
               const ftId = `fnt${ts}-tpl${i}`;
               linkByTaskId.set(t.id, ftId);
+              etapaByTaskId.set(t.id, host.title);
               const subs = newTasks.filter(st => st.parentTaskId === t.id);
-              subs.forEach((st, si) => linkByTaskId.set(st.id, `${ftId}-s${si}`));
+              subs.forEach((st, si) => { linkByTaskId.set(st.id, `${ftId}-s${si}`); etapaByTaskId.set(st.id, host.title); });
               const list = additions.get(host.id) ?? [];
               list.push({
                 id: ftId,
@@ -1071,7 +1087,7 @@ export const useAppStore = create<AppState>()(
                   : n),
               });
               mirroredTasks = newTasks.map(t =>
-                linkByTaskId.has(t.id) ? { ...t, flowTaskId: linkByTaskId.get(t.id) } : t
+                linkByTaskId.has(t.id) ? { ...t, flowTaskId: linkByTaskId.get(t.id), etapa: etapaByTaskId.get(t.id) } : t
               );
             }
           }
@@ -1355,9 +1371,18 @@ export const useAppStore = create<AppState>()(
           createdAt: localISO(),
         };
 
+        // Os nós nascem um por fase, com o nome da fase — a coluna "Etapa"
+        // das tarefas vinculadas recebe esse mesmo nome.
+        const etapaByTaskId = new Map<string, string>();
+        nodes.forEach(n => n.tasks.forEach(ft => {
+          etapaByTaskId.set(ft.id, n.title);
+          (ft.subtasks ?? []).forEach(st => etapaByTaskId.set(st.id, n.title));
+        }));
         return {
           flows: [...s.flows, board],
-          tasks: s.tasks.map(t => taskPatches.has(t.id) ? { ...t, flowTaskId: taskPatches.get(t.id) } : t),
+          tasks: s.tasks.map(t => taskPatches.has(t.id)
+            ? { ...t, flowTaskId: taskPatches.get(t.id), etapa: etapaByTaskId.get(taskPatches.get(t.id)!) }
+            : t),
         };
       }),
 

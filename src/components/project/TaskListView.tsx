@@ -256,23 +256,23 @@ function AssigneePicker({ task }: { task: Task }) {
   );
 }
 
-type ColWidths = { name: number; status: number; priority: number; dueDate: number };
-const DEFAULT_COL_WIDTHS: ColWidths = { name: 280, status: 160, priority: 120, dueDate: 130 };
+type ColWidths = { name: number; etapa: number; status: number; priority: number; dueDate: number };
+const DEFAULT_COL_WIDTHS: ColWidths = { name: 280, etapa: 150, status: 160, priority: 120, dueDate: 130 };
 const DEFAULT_CUSTOM_COL_WIDTH = 160;
 
 function makeGrid(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customPart = customCols.map(c => `${customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH}px`).join(' ');
-  return `36px 28px 16px ${w.name}px ${w.status}px ${w.priority}px ${w.dueDate}px${customPart ? ' ' + customPart : ''} 60px 32px`;
+  return `36px 28px 16px ${w.name}px ${w.etapa}px ${w.status}px ${w.priority}px ${w.dueDate}px${customPart ? ' ' + customPart : ''} 60px 32px`;
 }
 function makeMinW(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return `${36 + 28 + 16 + w.name + w.status + w.priority + w.dueDate + customTotal + 60 + 32}px`;
+  return `${36 + 28 + 16 + w.name + w.etapa + w.status + w.priority + w.dueDate + customTotal + 60 + 32}px`;
 }
 // Numeric version — needed so the content wrapper can declare border-box min-width
 // = grid content width + px-10 horizontal padding (40px × 2 = 80px)
 function makeMinWNum(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return 36 + 28 + 16 + w.name + w.status + w.priority + w.dueDate + customTotal + 60 + 32;
+  return 36 + 28 + 16 + w.name + w.etapa + w.status + w.priority + w.dueDate + customTotal + 60 + 32;
 }
 
 // Needed to pass grid to TaskRow without prop drilling — share via context-free pattern
@@ -679,6 +679,20 @@ function TaskRow({
         )}
       </p>
 
+      {/* Etapa — bloco do fluxo de onde a tarefa veio */}
+      <div className="pr-2 min-w-0">
+        {task.etapa ? (
+          <span
+            className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
+            title={task.etapa}
+          >
+            <span className="truncate">{task.etapa}</span>
+          </span>
+        ) : (
+          <span className="text-[12px] text-gray-300">—</span>
+        )}
+      </div>
+
       {/* Inline pickers */}
       <div><StatusPicker task={task} /></div>
       <div><PriorityPicker task={task} /></div>
@@ -969,7 +983,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
         />
       </div>
       {/* Empty cells to fill the grid */}
-      <span /><span /><span />
+      <span /><span /><span /><span />
     </div>
   );
 }
@@ -1069,7 +1083,16 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
 
   // In "separate" mode, subtasks appear as flat rows grouped by phase
   const getPhaseRows = (phaseName: string): Task[] => {
-    const parents = topLevelTasks.filter(t => t.phase === phaseName);
+    let parents = topLevelTasks.filter(t => t.phase === phaseName);
+    // Aglutinação por Etapa (só na ordem manual, para não brigar com o
+    // Ordenar): tarefas do mesmo bloco do fluxo ficam adjacentes, na ordem em
+    // que cada etapa aparece; as sem etapa vêm depois, na ordem original.
+    if (!sortFn) {
+      const etapaOrder = new Map<string, number>();
+      parents.forEach(t => { if (t.etapa && !etapaOrder.has(t.etapa)) etapaOrder.set(t.etapa, etapaOrder.size); });
+      const rank = (t: Task) => (t.etapa && etapaOrder.has(t.etapa) ? etapaOrder.get(t.etapa)! : etapaOrder.size);
+      parents = [...parents].sort((a, b) => rank(a) - rank(b)); // sort é estável
+    }
     if (subtaskMode !== 'separate') return parents;
     const subs = tasks.filter(t => t.parentTaskId && t.phase === phaseName);
     return [...parents, ...subs];
@@ -1093,6 +1116,10 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
             <span className="pl-3 relative flex items-center">
               Nome da tarefa
               <span onMouseDown={e => startResize('name', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+            </span>
+            <span className="relative flex items-center">
+              Etapa
+              <span onMouseDown={e => startResize('etapa', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             <span className="relative flex items-center">
               Status

@@ -158,6 +158,7 @@ function fmtTask(t, members, projects) {
     prioridade: PRIORITY_LABEL[t.priority] ?? t.priority,
     prazo: t.due_date ?? null,
     responsaveis: resp || null,
+    ...(t.etapa ? { etapa: t.etapa } : {}),
     ...(t.description ? { descricao: t.description } : {}),
     ...(t.is_milestone ? { marco: true } : {}),
     ...(t.is_meta ? { meta: `${t.meta_current ?? 0}/${t.meta_target ?? '?'} ${t.meta_unit ?? ''}`.trim() } : {}),

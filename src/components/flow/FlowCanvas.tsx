@@ -819,6 +819,8 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
         priority: 'Medium' as const,
         dueDate: taskDue,
         createdAt: now,
+        // Coluna "Etapa" no projeto: o bloco de onde a tarefa veio.
+        etapa: n.title,
       };
       if (usingLanes && n.tasks.length === 0) {
         // Block titles stop being phases when bands exist; keep the block's
