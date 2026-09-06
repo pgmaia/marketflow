@@ -1,0 +1,13 @@
+{
+  "name": "icarus-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Servidor MCP do Icarus — consulta e altera projetos/tarefas/documentação via prompt",
+  "main": "server.mjs",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@supabase/supabase-js": "^2.49.0",
+    "zod": "^4.5.4"
+  }
+}
