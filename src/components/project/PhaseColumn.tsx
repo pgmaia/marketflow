@@ -6,9 +6,11 @@ import { TaskCard } from './TaskCard';
 
 interface PhaseColumnProps {
   phase: string;
+  phaseId: string;
   index: number;
   tasks: Task[];
   onAddTask: (phase: string) => void;
+  onReorderPhase: (srcPhaseId: string, targetPhaseId: string) => void;
 }
 
 const knownConfig: Record<string, { emoji: string; accent: string }> = {
@@ -36,9 +38,10 @@ function getPhaseConfig(phase: string, index: number) {
   return { emoji: emojiFallback[i], accent: accentPalette[i] };
 }
 
-export function PhaseColumn({ phase, index, tasks, onAddTask }: PhaseColumnProps) {
+export function PhaseColumn({ phase, phaseId, index, tasks, onAddTask, onReorderPhase }: PhaseColumnProps) {
   const { updateTask } = useAppStore();
   const [dragOver, setDragOver] = useState(false);
+  const [colDragOver, setColDragOver] = useState(false);
   const cfg = getPhaseConfig(phase, index);
   const done = tasks.filter(t => t.status === 'Concluído').length;
   const progress = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
@@ -49,11 +52,22 @@ export function PhaseColumn({ phase, index, tasks, onAddTask }: PhaseColumnProps
   const metas = sorted.filter(t => t.isMeta);
   const regularTasks = sorted.filter(t => !t.isMilestone && !t.isMeta);
 
-  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); setDragOver(true); };
-  const handleDragLeave = () => setDragOver(false);
+  // Durante o dragover o conteúdo do dataTransfer é ilegível — só os TIPOS
+  // ficam disponíveis (em minúsculas), e é por eles que distinguimos arrastar
+  // uma COLUNA (reordenar fases) de arrastar uma TAREFA (mudar de fase).
+  const isColumnDrag = (e: React.DragEvent) => e.dataTransfer.types.includes('phaseid');
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (isColumnDrag(e)) setColDragOver(true);
+    else setDragOver(true);
+  };
+  const handleDragLeave = () => { setDragOver(false); setColDragOver(false); };
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
+    setColDragOver(false);
+    const srcPhaseId = e.dataTransfer.getData('phaseId');
+    if (srcPhaseId) { onReorderPhase(srcPhaseId, phaseId); return; }
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId) updateTask(taskId, { phase });
   };
@@ -67,8 +81,18 @@ export function PhaseColumn({ phase, index, tasks, onAddTask }: PhaseColumnProps
       onDrop={handleDrop}
     >
 
-      {/* ── Column header ── */}
-      <div className="bg-white rounded-xl border border-gray-100 px-4 py-3.5 mb-3 shrink-0">
+      {/* ── Column header — arrastável para reordenar as colunas ── */}
+      <div
+        draggable
+        onDragStart={e => {
+          e.dataTransfer.setData('phaseId', phaseId);
+          e.dataTransfer.effectAllowed = 'move';
+        }}
+        title="Arraste para reordenar as colunas"
+        className={`bg-white rounded-xl border px-4 py-3.5 mb-3 shrink-0 cursor-grab active:cursor-grabbing transition-colors ${
+          colDragOver ? 'border-[#1f6feb] ring-2 ring-[#1f6feb]/30' : 'border-gray-100'
+        }`}
+      >
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2.5">
             <span className="text-[17px] leading-none">{cfg.emoji}</span>

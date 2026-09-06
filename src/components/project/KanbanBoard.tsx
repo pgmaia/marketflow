@@ -62,7 +62,7 @@ function sortTasks(tasks: Task[], sortBy: SortBy, memberMap: Record<string, stri
 }
 
 export function KanbanBoard() {
-  const { projects, tasks, companies, teamMembers, teams, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany, updateProject, flows, createFlowFromProject } = useAppStore();
+  const { projects, tasks, companies, teamMembers, teams, currentUserId, activeProjectId, setActiveTask, addTask, deleteProject, setActiveCompany, updateProject, flows, createFlowFromProject, reorderPhases } = useAppStore();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [showTeam, setShowTeam] = useState(true);
   const [showDone, setShowDone] = useState(true);
@@ -590,8 +590,23 @@ export function KanbanBoard() {
                   key={ph.id}
                   index={i}
                   phase={ph.name}
+                  phaseId={ph.id}
                   tasks={filteredTopLevel.filter(t => t.phase === ph.name)}
                   onAddTask={handleAddTask}
+                  onReorderPhase={(srcId, targetId) => {
+                    if (srcId === targetId) return;
+                    const arr = [...project.phases];
+                    const from = arr.findIndex(p => p.id === srcId);
+                    if (from < 0) return;
+                    const [item] = arr.splice(from, 1);
+                    // Alvo recalculado APÓS a remoção — mesmo cuidado do
+                    // PhaseEditor: sem isso, arrastar para a direita cai uma
+                    // posição além de onde foi solto.
+                    const to = arr.findIndex(p => p.id === targetId);
+                    if (to < 0) return;
+                    arr.splice(to, 0, item);
+                    reorderPhases(project.id, arr);
+                  }}
                 />
               ))}
             </div>
