@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 import { useAppStore } from '../store/useAppStore';
 import { localISO } from './date';
-import type { Task, DocEntry } from '../types';
+import type { Task, DocEntry, Company, Project, TeamMember, Team } from '../types';
 
 const ROW_KEY = 'main';
 
@@ -47,19 +47,24 @@ function migrateStatuses(state: SyncState): SyncState {
 
 // Only these fields are synced across devices VIA THE BLOB.
 // Session state (isAuthenticated, currentUserId, darkMode, navigation) stays local per device.
-// FASE 2: 'tasks' e 'docEntries' saíram do blob — vivem nas tabelas próprias
-// `tasks` e `doc_entries`, gravadas POR LINHA (ver seção "Row sync" no fim).
+// FASE 2: 'tasks' e 'docEntries' saíram do blob. FASE 3: 'companies',
+// 'projects', 'teamMembers', 'teams' e os mapas de acesso também — todos vivem
+// em tabelas próprias, gravadas POR LINHA (ver seção "Row sync" no fim).
 const SYNC_FIELDS = [
-  'personalTasks', 'companies', 'projects',
-  'teamMembers', 'teams', 'templates', 'phaseTemplates',
-  'memberAccess', 'memberCompanyAccess', 'flows', 'trash',
+  'personalTasks', 'templates', 'phaseTemplates', 'flows', 'trash',
   'memberPasswords', 'deletedMemberIds', 'taskTypes',
 ] as const;
 
-// Blobs antigos (e backups/exports) ainda carregam tasks/docEntries.
+// Blobs antigos (e backups/exports) ainda carregam as chaves legadas.
 type SyncState = Record<typeof SYNC_FIELDS[number], unknown> & {
   tasks?: unknown;
   docEntries?: unknown;
+  companies?: unknown;
+  projects?: unknown;
+  teamMembers?: unknown;
+  teams?: unknown;
+  memberAccess?: unknown;
+  memberCompanyAccess?: unknown;
 };
 
 /** Restringe um snapshot vindo de fora (blob antigo, backup, import) aos campos
@@ -262,10 +267,12 @@ async function pushToSupabase(syncState: SyncState): Promise<boolean> {
   localStorage.setItem(LAST_PUSH_KEY, pushTs.toString());
   // The server now holds exactly this — it becomes the base for future merges.
   lastPushed = syncState;
-  // O backup diário é um snapshot COMPLETO: o blob não carrega mais
-  // tasks/docEntries, então anexamos o estado atual das tabelas.
+  // O backup diário é um snapshot COMPLETO (blob + tabelas). Com a RLS da
+  // Fase 3 só Admin escreve em marketflow_backups — gated aqui também para
+  // não gerar tentativas negadas a cada save de não-admin.
   const s = useAppStore.getState();
-  maybeCreateDailyBackup({ ...syncState, tasks: s.tasks, docEntries: s.docEntries });
+  const me = s.teamMembers.find(m => m.id === s.currentUserId);
+  if (me?.permission === 'Admin') maybeCreateDailyBackup(fullSnapshot());
   return true;
 }
 
@@ -326,19 +333,20 @@ export async function restoreBackup(id: number) {
   isSyncing = true;
   useAppStore.setState(blobPart as Partial<ReturnType<typeof useAppStore.getState>>);
   isSyncing = false;
-  // Tarefas e documentação do backup voltam para as TABELAS, não para o blob.
-  if (Array.isArray(migrated.tasks) || Array.isArray(migrated.docEntries)) {
-    await replaceAllRows(
-      Array.isArray(migrated.tasks) ? migrated.tasks as Task[] : null,
-      Array.isArray(migrated.docEntries) ? migrated.docEntries as DocEntry[] : null,
-    );
-  }
+  // As entidades que vivem em tabelas voltam para as TABELAS, não para o blob.
+  await replaceAllRows(migrated);
 }
 
 /** Snapshot completo para backup/export: blob + entidades que vivem em tabelas. */
 function fullSnapshot() {
-  const state = useAppStore.getState();
-  return { ...extractSyncState(state), tasks: state.tasks, docEntries: state.docEntries };
+  const s = useAppStore.getState();
+  return {
+    ...extractSyncState(s),
+    tasks: s.tasks, docEntries: s.docEntries,
+    companies: s.companies, projects: s.projects,
+    teamMembers: s.teamMembers, teams: s.teams,
+    memberAccess: s.memberAccess, memberCompanyAccess: s.memberCompanyAccess,
+  };
 }
 
 /** Create an immediate manual backup right now. */
@@ -369,12 +377,7 @@ export async function importStateFromJSON(file: File) {
   isSyncing = true;
   useAppStore.setState(blobPart as Partial<ReturnType<typeof useAppStore.getState>>);
   isSyncing = false;
-  if (Array.isArray(parsed.tasks) || Array.isArray(parsed.docEntries)) {
-    await replaceAllRows(
-      Array.isArray(parsed.tasks) ? parsed.tasks as Task[] : null,
-      Array.isArray(parsed.docEntries) ? parsed.docEntries as DocEntry[] : null,
-    );
-  }
+  await replaceAllRows(parsed);
 }
 
 /** Called once on app mount. Loads remote state and THEN enables saves. */
@@ -582,8 +585,17 @@ export function subscribeToRealtime() {
 }
 
 function buildRealtimeChannel() {
-  return supabase
-    .channel('marketflow-sync')
+  let ch = supabase.channel('marketflow-sync');
+  // Uma assinatura por tabela de linhas (tasks, doc_entries, companies, …).
+  for (const table of Object.keys(TABLE_HANDLERS)) {
+    ch = ch.on(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      'postgres_changes' as any,
+      { event: '*', schema: 'public', table },
+      (payload: RowChangePayload) => onRowChange(table, payload)
+    );
+  }
+  return ch
     .on(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       'postgres_changes' as any,
@@ -603,18 +615,6 @@ function buildRealtimeChannel() {
         applyRemote(migrateStatuses(payload.new.data as SyncState));
       }
     )
-    .on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table: 'tasks' },
-      (payload: RowChangePayload) => onTaskRowChange(payload)
-    )
-    .on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table: 'doc_entries' },
-      (payload: RowChangePayload) => onDocRowChange(payload)
-    )
     .subscribe((status) => {
       // When the WebSocket reconnects after a drop, Supabase does NOT replay
       // missed postgres_changes events. We re-fetch manually so the user never
@@ -629,56 +629,57 @@ function buildRealtimeChannel() {
     });
 }
 
+
 // ═════════════════════════════════════════════════════════════════════════════
-// FASE 2 — ROW SYNC: tarefas e documentação em tabelas próprias
+// ROW SYNC (Fases 2+3) — entidades em tabelas próprias, gravadas POR LINHA
 //
 // O blob inteiro era UMA linha: duas pessoas salvando quase ao mesmo tempo
-// disputavam a linha toda e dependiam do merge de cliente para não se
-// atropelar. Tarefas e registros de documentação agora são LINHAS individuais:
-// cada edição toca apenas as suas linhas, então dois usuários mexendo em
-// tarefas diferentes nunca mais conflitam — estruturalmente.
+// disputavam a linha toda. Cada entidade agora é uma LINHA individual: cada
+// edição toca apenas as suas linhas, então dois usuários mexendo em coisas
+// diferentes nunca conflitam — estruturalmente.
 //
-// Desenho:
-//  • Leitura  — loadRows() busca as tabelas no login (auto-migra do blob
-//    legado se estiverem vazias — o 1º cliente autenticado semeia as linhas).
-//  • Escrita  — watchRows() detecta mudança de referência em state.tasks /
-//    state.docEntries e agenda um DIFF contra o último estado enviado
-//    (lastPushedTaskRows/lastPushedDocRows): só as linhas alteradas viram
-//    upsert; as removidas viram soft-delete (deleted_at) — a Lixeira do blob
-//    continua guardando a cópia para restauração.
+//  • Leitura  — loadRows() busca as tabelas no login.
+//  • Escrita  — watchRows() detecta mudança de referência nas chaves do store
+//    e agenda um DIFF contra o último estado enviado (baseline por tabela):
+//    só linhas alteradas viram upsert; removidas viram soft-delete
+//    (member_access, sem histórico, é delete direto).
 //  • Realtime — INSERT/UPDATE/DELETE por linha entram direto no store, com a
-//    mesma regra do merge do blob: se EU mexi nessa linha e ainda não enviei,
-//    a minha versão vence (o meu push subsequente propaga).
+//    regra do merge: se EU mexi nessa linha e ainda não enviei, minha versão
+//    vence (o meu push subsequente propaga).
+//  • RLS Fase 3 — o banco IMPÕE a escrita por permissão; uma escrita negada
+//    é logada e re-tentada (o app não deveria gerá-la: a UI já esconde).
 // ═════════════════════════════════════════════════════════════════════════════
 
 type Row = Record<string, unknown>;
 type RowChangePayload = { eventType?: string; new?: Row; old?: Row };
 
-// Ordem estável: o blob preservava a ordem do array. sort_order é atribuído uma
-// única vez (migração: índice original; tarefa nova: Date.now(), que é sempre
-// maior) e nunca reatribuído — reordenações internas do array não geram pushes
-// em massa de linhas cujo conteúdo não mudou (que poderiam carregar cópias
-// desatualizadas e atropelar edições concorrentes de outro usuário).
-const sortOrders = new Map<string, number>();
-
-let rowsLoaded = false;
-let lastPushedTaskRows = new Map<string, string>(); // id → canonRow(última linha enviada/recebida)
-let lastPushedDocRows  = new Map<string, string>();
-let prevTasksRef: unknown = null;
-let prevDocsRef:  unknown = null;
-let rowSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let rowPushInFlight = false;
+// Ordem estável: sort_order é atribuído uma única vez (migração: índice
+// original; entidade nova: Date.now(), sempre maior) e nunca reatribuído —
+// reordenações internas do array não geram pushes em massa de linhas cujo
+// conteúdo não mudou (que carregariam cópias velhas e atropelariam edições
+// concorrentes de outro usuário).
+const sortOrders = new Map<string, Map<string, number>>();
+function sortOrderFor(table: string, id: string): number {
+  let m = sortOrders.get(table);
+  if (!m) { m = new Map(); sortOrders.set(table, m); }
+  let v = m.get(id);
+  if (v === undefined) { v = Date.now() + Math.random(); m.set(id, v); }
+  return v;
+}
 
 const ts = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 
-/** Canon de uma linha para comparação: ignora updated_at (o trigger do banco o
- *  altera) e normaliza timestamps (o Postgres devolve '+00:00', o JS gera 'Z'). */
+/** Canon de uma linha para comparação: ignora created_at/updated_at (o banco
+ *  os controla; formatos de timestamp divergem entre JS e Postgres) e
+ *  normaliza deleted_at. */
 function canonRow(row: Row): string {
-  const { updated_at: _u, ...rest } = row;
-  return canon({ ...rest, created_at: ts(rest.created_at), deleted_at: ts(rest.deleted_at) });
+  const { updated_at: _u, created_at: _c, ...rest } = row;
+  return canon({ ...rest, deleted_at: ts(rest.deleted_at) });
 }
 
-// ── Mapeamento camelCase ↔ snake_case ────────────────────────────────────────
+// ── Mapeamento camelCase ↔ snake_case por entidade ───────────────────────────
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 function taskToRow(t: Task): Row {
   return {
     id: t.id,
@@ -689,7 +690,6 @@ function taskToRow(t: Task): Row {
     type: t.type,
     status: t.status,
     priority: t.priority,
-    // Normaliza o legado assigneeId singular para a lista.
     assignee_ids: t.assigneeIds ?? (t.assigneeId ? [t.assigneeId] : []),
     due_date: t.dueDate || null,
     notes: t.notes ?? null,
@@ -705,14 +705,8 @@ function taskToRow(t: Task): Row {
     origin: t.origin ?? null,
     deleted_at: null,
     created_at: t.createdAt || localISO(),
-    sort_order: sortOrders.get(t.id) ?? nextSortOrder(t.id),
+    sort_order: sortOrderFor('tasks', t.id),
   };
-}
-
-function nextSortOrder(id: string): number {
-  const v = Date.now() + Math.random(); // desempate para criações no mesmo ms
-  sortOrders.set(id, v);
-  return v;
 }
 
 function rowToTask(r: Row): Task {
@@ -766,7 +760,141 @@ function rowToDoc(r: Row): DocEntry {
   };
 }
 
-async function upsertChunked(table: 'tasks' | 'doc_entries', rows: Row[]): Promise<boolean> {
+function companyToRow(c: Company): Row {
+  return {
+    id: c.id, name: c.name,
+    industry: c.industry ?? '', color: c.color ?? '#1f6feb', logo: c.logo ?? '',
+    deleted_at: null, sort_order: sortOrderFor('companies', c.id),
+  };
+}
+function rowToCompany(r: Row): Company {
+  return { id: r.id as string, name: r.name as string, industry: (r.industry as string) ?? '', color: (r.color as string) ?? '#1f6feb', logo: (r.logo as string) ?? '' };
+}
+
+function projectToRow(p: Project): Row {
+  return {
+    id: p.id, company_id: p.companyId, name: p.name,
+    description: p.description ?? '', start_date: p.startDate ?? '', end_date: p.endDate ?? '',
+    team_member_ids: p.teamMemberIds ?? [], color: p.color ?? '#1f6feb',
+    phases: p.phases ?? [], custom_columns: p.customColumns ?? null, document: p.document ?? null,
+    deleted_at: null, sort_order: sortOrderFor('projects', p.id),
+  };
+}
+function rowToProject(r: Row): Project {
+  const p: Project = {
+    id: r.id as string, companyId: r.company_id as string, name: r.name as string,
+    description: (r.description as string) ?? '', startDate: (r.start_date as string) ?? '',
+    endDate: (r.end_date as string) ?? '',
+    teamMemberIds: Array.isArray(r.team_member_ids) ? r.team_member_ids as string[] : [],
+    color: (r.color as string) ?? '#1f6feb',
+    phases: Array.isArray(r.phases) ? r.phases as Project['phases'] : [],
+  };
+  if (r.custom_columns != null) p.customColumns = r.custom_columns as Project['customColumns'];
+  if (r.document != null) p.document = r.document as string;
+  return p;
+}
+
+function memberToRow(m: TeamMember): Row {
+  return {
+    id: m.id, name: m.name, role: m.role ?? '', avatar: m.avatar ?? '',
+    color: m.color ?? '#888888', email: m.email ?? '', permission: m.permission ?? null,
+    deleted_at: null, sort_order: sortOrderFor('team_members', m.id),
+  };
+}
+function rowToMember(r: Row): TeamMember {
+  const m: TeamMember = {
+    id: r.id as string, name: r.name as string, role: (r.role as string) ?? '',
+    avatar: (r.avatar as string) ?? '', color: (r.color as string) ?? '#888888',
+    email: (r.email as string) ?? '',
+  };
+  if (r.permission != null) m.permission = r.permission as TeamMember['permission'];
+  return m;
+}
+
+function teamToRow(t: Team): Row {
+  return {
+    id: t.id, name: t.name, color: t.color ?? '#1f6feb',
+    member_ids: t.memberIds ?? [], company_id: t.companyId ?? null,
+    created_at_app: t.createdAt ?? '',
+    deleted_at: null, sort_order: sortOrderFor('teams', t.id),
+  };
+}
+function rowToTeam(r: Row): Team {
+  const t: Team = {
+    id: r.id as string, name: r.name as string, color: (r.color as string) ?? '#1f6feb',
+    memberIds: Array.isArray(r.member_ids) ? r.member_ids as string[] : [],
+    createdAt: (r.created_at_app as string) ?? '',
+  };
+  if (r.company_id != null) t.companyId = r.company_id as string;
+  return t;
+}
+
+// ── Registro de entidades ────────────────────────────────────────────────────
+type StoreState = ReturnType<typeof useAppStore.getState>;
+type ArrayKey = 'tasks' | 'docEntries' | 'companies' | 'projects' | 'teamMembers' | 'teams';
+
+type EntityCfg = {
+  table: string;
+  storeKey: ArrayKey;
+  toRow: (e: any) => Row;
+  fromRow: (r: Row) => any;
+  order: string[];
+  /** Só tasks/doc_entries semeiam do blob se a tabela estiver vazia (Fase 2).
+   *  As tabelas da Fase 3 foram semeadas por SQL na migração. */
+  seedFromBlob?: 'tasks' | 'docEntries';
+};
+
+const ROW_ENTITIES: EntityCfg[] = [
+  { table: 'team_members', storeKey: 'teamMembers', toRow: memberToRow,  fromRow: rowToMember,  order: ['sort_order', 'id'] },
+  { table: 'companies',    storeKey: 'companies',   toRow: companyToRow, fromRow: rowToCompany, order: ['sort_order', 'id'] },
+  { table: 'projects',     storeKey: 'projects',    toRow: projectToRow, fromRow: rowToProject, order: ['sort_order', 'id'] },
+  { table: 'teams',        storeKey: 'teams',       toRow: teamToRow,    fromRow: rowToTeam,    order: ['sort_order', 'id'] },
+  { table: 'tasks',        storeKey: 'tasks',       toRow: taskToRow,    fromRow: rowToTask,    order: ['sort_order', 'id'], seedFromBlob: 'tasks' },
+  { table: 'doc_entries',  storeKey: 'docEntries',  toRow: docToRow,     fromRow: rowToDoc,     order: ['created_at'],       seedFromBlob: 'docEntries' },
+];
+
+// member_access é especial: uma linha por membro, derivada de DOIS mapas do
+// store (memberAccess: projetos; memberCompanyAccess: empresas). Valor NULL na
+// coluna = sem restrição (default-aberto do app).
+const ACCESS_TABLE = 'member_access';
+
+function accessRowsFromState(s: StoreState): Row[] {
+  const keys = new Set([...Object.keys(s.memberAccess ?? {}), ...Object.keys(s.memberCompanyAccess ?? {})]);
+  return [...keys].map(k => ({
+    member_id: k,
+    project_ids: s.memberAccess[k] ?? null,
+    company_ids: s.memberCompanyAccess[k] ?? null,
+  }));
+}
+
+function applyAccessRows(rows: Row[]): { memberAccess: Record<string, string[]>; memberCompanyAccess: Record<string, string[]> } {
+  const memberAccess: Record<string, string[]> = {};
+  const memberCompanyAccess: Record<string, string[]> = {};
+  for (const r of rows) {
+    const id = r.member_id as string;
+    if (Array.isArray(r.project_ids)) memberAccess[id] = r.project_ids as string[];
+    if (Array.isArray(r.company_ids)) memberCompanyAccess[id] = r.company_ids as string[];
+  }
+  return { memberAccess, memberCompanyAccess };
+}
+
+// Tabela → como aplicar um evento Realtime (preenchido no fim da seção).
+const TABLE_HANDLERS: Record<string, (payload: RowChangePayload) => void> = {};
+
+// ── Estado do motor ──────────────────────────────────────────────────────────
+let rowsLoaded = false;
+const baselines = new Map<string, Map<string, string>>(); // table → (id → canonRow)
+function baselineFor(table: string): Map<string, string> {
+  let m = baselines.get(table);
+  if (!m) { m = new Map(); baselines.set(table, m); }
+  return m;
+}
+const WATCH_KEYS = [...ROW_ENTITIES.map(e => e.storeKey), 'memberAccess', 'memberCompanyAccess'] as const;
+let prevRefs: Record<string, unknown> | null = null;
+let rowSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let rowPushInFlight = false;
+
+async function upsertChunked(table: string, rows: Row[]): Promise<boolean> {
   for (let i = 0; i < rows.length; i += 200) {
     const { error } = await supabase.from(table).upsert(rows.slice(i, i + 200));
     if (error) { console.error(`[rowsync] upsert ${table}:`, error.message); return false; }
@@ -774,65 +902,83 @@ async function upsertChunked(table: 'tasks' | 'doc_entries', rows: Row[]): Promi
   return true;
 }
 
-/** Carrega tarefas + documentação das tabelas. Se as tabelas estiverem vazias e
- *  o blob legado (ou o estado local) tiver dados, semeia as linhas — a migração
- *  blob→tabelas acontece sozinha, no primeiro cliente autenticado que logar. */
+function fetchAll(cfg: EntityCfg) {
+  let q = supabase.from(cfg.table).select('*').is('deleted_at', null);
+  for (const col of cfg.order) q = q.order(col);
+  return q;
+}
+
+/** Carrega todas as entidades das tabelas e aplica no store de uma vez. */
 async function loadRows(legacyBlob: SyncState | null) {
-  const [tRes, dRes] = await Promise.all([
-    supabase.from('tasks').select('*').is('deleted_at', null).order('sort_order').order('id'),
-    supabase.from('doc_entries').select('*').is('deleted_at', null).order('created_at'),
+  const results = await Promise.all([
+    ...ROW_ENTITIES.map(cfg => fetchAll(cfg)),
+    supabase.from(ACCESS_TABLE).select('*'),
   ]);
-  if (tRes.error || dRes.error) {
-    console.error('[rowsync] load error:', tRes.error?.message ?? dRes.error?.message);
+  const firstError = results.find(r => r.error);
+  if (firstError?.error) {
+    console.error('[rowsync] load error:', firstError.error.message);
     return; // rowsLoaded fica false — nenhum diff roda, nada é destruído
   }
 
   const store = useAppStore.getState();
-  // Fonte da semeadura: o blob do servidor (se ainda carrega as chaves legadas)
-  // ganha do estado local persistido, que pode estar desatualizado.
-  const seedTasks = (Array.isArray(legacyBlob?.tasks) ? legacyBlob!.tasks : store.tasks) as Task[];
-  const seedDocs  = (Array.isArray(legacyBlob?.docEntries) ? legacyBlob!.docEntries : store.docEntries) as DocEntry[];
+  const patch: Record<string, unknown> = {};
 
-  let tasks: Task[];
-  if (tRes.data.length === 0 && seedTasks.length > 0) {
-    console.log(`[rowsync] tabela tasks vazia — migrando ${seedTasks.length} tarefas do blob`);
-    seedTasks.forEach((t, i) => sortOrders.set(t.id, i));
-    const rows = seedTasks.map(taskToRow);
-    if (!(await upsertChunked('tasks', rows))) return;
-    tasks = seedTasks.map(t => ({ ...t, assigneeIds: t.assigneeIds ?? (t.assigneeId ? [t.assigneeId] : []) }));
-    lastPushedTaskRows = new Map(rows.map(r => [r.id as string, canonRow(r)]));
-  } else {
-    tasks = (tRes.data as Row[]).map(rowToTask);
-    (tRes.data as Row[]).forEach(r => sortOrders.set(r.id as string, Number(r.sort_order) || 0));
-    lastPushedTaskRows = new Map((tRes.data as Row[]).map(r => [r.id as string, canonRow({ ...r, updated_at: undefined })]));
+  for (let i = 0; i < ROW_ENTITIES.length; i++) {
+    const cfg = ROW_ENTITIES[i];
+    const rows = results[i].data as Row[];
+    const current = store[cfg.storeKey] as any[];
+
+    if (rows.length === 0 && cfg.seedFromBlob && (legacyBlob?.[cfg.seedFromBlob] as any[])?.length) {
+      // Fase 2 (tasks/docs): tabela vazia + blob legado com dados → semeia.
+      const seed = legacyBlob![cfg.seedFromBlob] as any[];
+      console.log(`[rowsync] tabela ${cfg.table} vazia — migrando ${seed.length} itens do blob`);
+      seed.forEach((e, idx) => sortOrders.get(cfg.table)?.set(e.id, idx) ?? sortOrders.set(cfg.table, new Map([[e.id, idx]])));
+      const seedRows = seed.map(cfg.toRow);
+      if (!(await upsertChunked(cfg.table, seedRows))) return;
+      patch[cfg.storeKey] = seed;
+      baselines.set(cfg.table, new Map(seedRows.map(r => [r.id as string, canonRow(r)])));
+      continue;
+    }
+
+    if (rows.length === 0 && current.length > 0 && !cfg.seedFromBlob) {
+      // Tabela da Fase 3 vazia mas há dados locais: algo errado com a migração
+      // SQL — NÃO aplica o vazio (apagaria a tela). Mantém o local e trata o
+      // estado local como baseline para não disparar re-inserção em massa.
+      console.error(`[rowsync] tabela ${cfg.table} vazia com dados locais — mantendo dados locais; verifique a migração`);
+      const localRows = current.map(cfg.toRow);
+      baselines.set(cfg.table, new Map(localRows.map(r => [r.id as string, canonRow(r)])));
+      continue;
+    }
+
+    patch[cfg.storeKey] = rows.map(cfg.fromRow);
+    const so = new Map<string, number>();
+    rows.forEach(r => so.set(r.id as string, Number(r.sort_order) || 0));
+    sortOrders.set(cfg.table, so);
+    baselines.set(cfg.table, new Map(rows.map(r => [r.id as string, canonRow(r)])));
   }
 
-  let docs: DocEntry[];
-  if (dRes.data.length === 0 && seedDocs.length > 0) {
-    console.log(`[rowsync] tabela doc_entries vazia — migrando ${seedDocs.length} registros do blob`);
-    const rows = seedDocs.map(docToRow);
-    if (!(await upsertChunked('doc_entries', rows))) return;
-    docs = seedDocs;
-    lastPushedDocRows = new Map(rows.map(r => [r.id as string, canonRow(r)]));
-  } else {
-    docs = (dRes.data as Row[]).map(rowToDoc);
-    lastPushedDocRows = new Map((dRes.data as Row[]).map(r => [r.id as string, canonRow(r)]));
-  }
+  const accessRows = results[results.length - 1].data as Row[];
+  Object.assign(patch, applyAccessRows(accessRows));
+  baselines.set(ACCESS_TABLE, new Map(accessRows.map(r => [r.member_id as string, canonRow(r)])));
 
   isSyncing = true;
-  useAppStore.setState({ tasks, docEntries: docs });
+  useAppStore.setState(patch as Partial<StoreState>);
   isSyncing = false;
-  prevTasksRef = useAppStore.getState().tasks;
-  prevDocsRef  = useAppStore.getState().docEntries;
+  snapshotRefs();
   rowsLoaded = true;
 }
 
+function snapshotRefs() {
+  const s = useAppStore.getState();
+  prevRefs = Object.fromEntries(WATCH_KEYS.map(k => [k, s[k as keyof StoreState]]));
+}
+
 /** Chamado em toda mutação do store (via scheduleSave): detecta por identidade
- *  se tasks/docEntries mudaram e agenda o diff. Barato — duas comparações. */
-function watchRows(state: ReturnType<typeof useAppStore.getState>) {
-  if (state.tasks === prevTasksRef && state.docEntries === prevDocsRef) return;
-  prevTasksRef = state.tasks;
-  prevDocsRef  = state.docEntries;
+ *  se alguma chave sincronizada por linha mudou e agenda o diff. */
+function watchRows(state: StoreState) {
+  const changed = prevRefs === null || WATCH_KEYS.some(k => state[k as keyof StoreState] !== prevRefs![k]);
+  if (!changed) return;
+  prevRefs = Object.fromEntries(WATCH_KEYS.map(k => [k, state[k as keyof StoreState]]));
   if (isSyncing || !rowsLoaded) return; // mudança veio do próprio sync
   queueRowSave();
 }
@@ -846,51 +992,58 @@ function queueRowSave() {
 async function pushRowDiff() {
   if (rowPushInFlight) { queueRowSave(); return; } // serializa; re-tenta depois
   rowPushInFlight = true;
+  let anyFailure = false;
   try {
     const state = useAppStore.getState();
 
-    // ── tasks ──
-    const wantTasks = new Map<string, Row>();
-    for (const t of state.tasks) wantTasks.set(t.id, taskToRow(t));
-    const taskUpserts: Row[] = [];
-    for (const [id, row] of wantTasks) {
-      if (lastPushedTaskRows.get(id) !== canonRow(row)) taskUpserts.push(row);
-    }
-    const taskDeletes = [...lastPushedTaskRows.keys()].filter(id => !wantTasks.has(id));
+    for (const cfg of ROW_ENTITIES) {
+      const baseline = baselineFor(cfg.table);
+      const want = new Map<string, Row>();
+      for (const e of state[cfg.storeKey] as any[]) want.set(e.id, cfg.toRow(e));
 
-    // ── doc_entries ──
-    const wantDocs = new Map<string, Row>();
-    for (const d of state.docEntries) wantDocs.set(d.id, docToRow(d));
-    const docUpserts: Row[] = [];
-    for (const [id, row] of wantDocs) {
-      if (lastPushedDocRows.get(id) !== canonRow(row)) docUpserts.push(row);
-    }
-    const docDeletes = [...lastPushedDocRows.keys()].filter(id => !wantDocs.has(id));
+      const upserts: Row[] = [];
+      for (const [id, row] of want) if (baseline.get(id) !== canonRow(row)) upserts.push(row);
+      const deletes = [...baseline.keys()].filter(id => !want.has(id));
+      if (!upserts.length && !deletes.length) continue;
 
-    if (!taskUpserts.length && !taskDeletes.length && !docUpserts.length && !docDeletes.length) return;
-
-    let ok = true;
-    if (taskUpserts.length) ok = await upsertChunked('tasks', taskUpserts) && ok;
-    if (ok && taskDeletes.length) {
-      const { error } = await supabase.from('tasks')
-        .update({ deleted_at: new Date().toISOString() }).in('id', taskDeletes);
-      if (error) { console.error('[rowsync] delete tasks:', error.message); ok = false; }
-    }
-    if (ok && docUpserts.length) ok = await upsertChunked('doc_entries', docUpserts) && ok;
-    if (ok && docDeletes.length) {
-      const { error } = await supabase.from('doc_entries')
-        .update({ deleted_at: new Date().toISOString() }).in('id', docDeletes);
-      if (error) { console.error('[rowsync] delete docs:', error.message); ok = false; }
+      let ok = true;
+      if (upserts.length) ok = await upsertChunked(cfg.table, upserts);
+      if (ok && deletes.length) {
+        const { error } = await supabase.from(cfg.table)
+          .update({ deleted_at: new Date().toISOString() }).in('id', deletes);
+        if (error) { console.error(`[rowsync] delete ${cfg.table}:`, error.message); ok = false; }
+      }
+      if (ok) {
+        for (const r of upserts) baseline.set(r.id as string, canonRow(r));
+        for (const id of deletes) baseline.delete(id);
+      } else anyFailure = true;
     }
 
-    if (ok) {
-      for (const r of taskUpserts) lastPushedTaskRows.set(r.id as string, canonRow(r));
-      for (const id of taskDeletes) lastPushedTaskRows.delete(id);
-      for (const r of docUpserts) lastPushedDocRows.set(r.id as string, canonRow(r));
-      for (const id of docDeletes) lastPushedDocRows.delete(id);
-    } else {
-      // Falhou (rede?): re-agenda — o diff é recalculado do zero contra o mesmo
-      // baseline, então nada se perde e edições novas entram na mesma leva.
+    // member_access (linha por membro; sem soft-delete)
+    {
+      const baseline = baselineFor(ACCESS_TABLE);
+      const want = new Map<string, Row>();
+      for (const r of accessRowsFromState(state)) want.set(r.member_id as string, r);
+      const upserts: Row[] = [];
+      for (const [id, row] of want) if (baseline.get(id) !== canonRow(row)) upserts.push(row);
+      const deletes = [...baseline.keys()].filter(id => !want.has(id));
+      if (upserts.length || deletes.length) {
+        let ok = true;
+        if (upserts.length) ok = await upsertChunked(ACCESS_TABLE, upserts);
+        if (ok && deletes.length) {
+          const { error } = await supabase.from(ACCESS_TABLE).delete().in('member_id', deletes);
+          if (error) { console.error('[rowsync] delete member_access:', error.message); ok = false; }
+        }
+        if (ok) {
+          for (const r of upserts) baseline.set(r.member_id as string, canonRow(r));
+          for (const id of deletes) baseline.delete(id);
+        } else anyFailure = true;
+      }
+    }
+
+    if (anyFailure) {
+      // Falhou (rede? RLS?): re-agenda — o diff é recalculado do zero contra o
+      // mesmo baseline, então nada se perde e edições novas entram na mesma leva.
       console.warn('[rowsync] push falhou — nova tentativa em 8 s');
       setTimeout(() => queueRowSave(), 8000);
     }
@@ -900,133 +1053,170 @@ async function pushRowDiff() {
 }
 
 /** Uma linha desta tabela mudou localmente e ainda não foi enviada? */
-function localRowDiffers(id: string, kind: 'task' | 'doc'): boolean {
+function localRowDiffers(cfg: EntityCfg, id: string): boolean {
   const state = useAppStore.getState();
-  if (kind === 'task') {
-    const t = state.tasks.find(x => x.id === id);
-    const baseline = lastPushedTaskRows.get(id);
-    if (!t) return baseline !== undefined; // apagada localmente, delete pendente
-    return baseline !== canonRow(taskToRow(t));
-  }
-  const d = state.docEntries.find(x => x.id === id);
-  const baseline = lastPushedDocRows.get(id);
-  if (!d) return baseline !== undefined;
-  return baseline !== canonRow(docToRow(d));
+  const e = (state[cfg.storeKey] as any[]).find(x => x.id === id);
+  const baseline = baselineFor(cfg.table).get(id);
+  if (!e) return baseline !== undefined; // apagada localmente, delete pendente
+  return baseline !== canonRow(cfg.toRow(e));
 }
 
-function onTaskRowChange(payload: RowChangePayload) {
-  if (!rowsLoaded) return;
-  const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
-  const id = row?.id as string | undefined;
-  if (!id) return;
-  const removed = payload.eventType === 'DELETE' || (payload.new?.deleted_at != null);
+function makeRowHandler(cfg: EntityCfg) {
+  return (payload: RowChangePayload) => {
+    if (!rowsLoaded) return;
+    const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
+    const id = row?.id as string | undefined;
+    if (!id) return;
+    const removed = payload.eventType === 'DELETE' || (payload.new?.deleted_at != null);
+    const baseline = baselineFor(cfg.table);
 
-  if (payload.new) {
-    // Eco do nosso próprio push — o baseline já bate, nada a fazer.
-    const incoming = canonRow(payload.new);
-    if (!removed && lastPushedTaskRows.get(id) === incoming) return;
-    // Regra do merge: se EU mexi nesta linha e ainda não enviei, minha versão
-    // vence — o push pendente propaga. Só aplico o remoto se estou "limpo".
-    if (localRowDiffers(id, 'task')) return;
-    if (!removed) { lastPushedTaskRows.set(id, incoming); sortOrders.set(id, Number(payload.new.sort_order) || sortOrders.get(id) || 0); }
-  } else if (localRowDiffers(id, 'task')) return;
+    if (payload.new && Object.keys(payload.new).length) {
+      // Eco do nosso próprio push — o baseline já bate, nada a fazer.
+      const incoming = canonRow(payload.new);
+      if (!removed && baseline.get(id) === incoming) return;
+      // Regra do merge: se EU mexi nesta linha e ainda não enviei, minha versão
+      // vence — o push pendente propaga. Só aplico o remoto se estou "limpo".
+      if (localRowDiffers(cfg, id)) return;
+      if (!removed) {
+        baseline.set(id, incoming);
+        if (payload.new.sort_order != null) sortOrders.get(cfg.table)?.set(id, Number(payload.new.sort_order));
+      }
+    } else if (localRowDiffers(cfg, id)) return;
 
-  isSyncing = true;
-  if (removed) {
-    lastPushedTaskRows.delete(id);
-    useAppStore.setState(s => ({ tasks: s.tasks.filter(t => t.id !== id) }));
-  } else {
-    const task = rowToTask(payload.new!);
-    useAppStore.setState(s => {
-      const i = s.tasks.findIndex(t => t.id === id);
-      const tasks = i >= 0 ? s.tasks.map(t => (t.id === id ? task : t)) : [...s.tasks, task];
-      return { tasks };
-    });
-  }
-  isSyncing = false;
-  prevTasksRef = useAppStore.getState().tasks;
+    isSyncing = true;
+    if (removed) {
+      baseline.delete(id);
+      useAppStore.setState(s => ({ [cfg.storeKey]: (s[cfg.storeKey] as any[]).filter(e => e.id !== id) }) as Partial<StoreState>);
+    } else {
+      const entity = cfg.fromRow(payload.new!);
+      useAppStore.setState(s => {
+        const arr = s[cfg.storeKey] as any[];
+        const i = arr.findIndex(e => e.id === id);
+        return { [cfg.storeKey]: i >= 0 ? arr.map(e => (e.id === id ? entity : e)) : [...arr, entity] } as Partial<StoreState>;
+      });
+    }
+    isSyncing = false;
+    snapshotRefs();
+  };
 }
 
-function onDocRowChange(payload: RowChangePayload) {
+function accessRowHandler(payload: RowChangePayload) {
   if (!rowsLoaded) return;
   const row = payload.new && Object.keys(payload.new).length ? payload.new : payload.old;
-  const id = row?.id as string | undefined;
+  const id = row?.member_id as string | undefined;
   if (!id) return;
-  const removed = payload.eventType === 'DELETE' || (payload.new?.deleted_at != null);
+  const removed = payload.eventType === 'DELETE';
+  const baseline = baselineFor(ACCESS_TABLE);
 
-  if (payload.new) {
+  if (payload.new && Object.keys(payload.new).length) {
     const incoming = canonRow(payload.new);
-    if (!removed && lastPushedDocRows.get(id) === incoming) return;
-    if (localRowDiffers(id, 'doc')) return;
-    if (!removed) lastPushedDocRows.set(id, incoming);
-  } else if (localRowDiffers(id, 'doc')) return;
+    if (!removed && baseline.get(id) === incoming) return;
+  }
+  // Local mexeu e não enviou? Local vence.
+  const s = useAppStore.getState();
+  const localRow = accessRowsFromState(s).find(r => r.member_id === id);
+  const b = baseline.get(id);
+  const localDiffers = localRow ? b !== canonRow(localRow) : b !== undefined;
+  if (localDiffers) return;
 
   isSyncing = true;
-  if (removed) {
-    lastPushedDocRows.delete(id);
-    useAppStore.setState(s => ({ docEntries: s.docEntries.filter(d => d.id !== id) }));
-  } else {
-    const doc = rowToDoc(payload.new!);
-    useAppStore.setState(s => {
-      const i = s.docEntries.findIndex(d => d.id === id);
-      const docEntries = i >= 0 ? s.docEntries.map(d => (d.id === id ? doc : d)) : [...s.docEntries, doc];
-      return { docEntries };
-    });
-  }
+  useAppStore.setState(st => {
+    const memberAccess = { ...st.memberAccess };
+    const memberCompanyAccess = { ...st.memberCompanyAccess };
+    if (removed) {
+      delete memberAccess[id];
+      delete memberCompanyAccess[id];
+      baseline.delete(id);
+    } else {
+      if (Array.isArray(payload.new!.project_ids)) memberAccess[id] = payload.new!.project_ids as string[];
+      else delete memberAccess[id];
+      if (Array.isArray(payload.new!.company_ids)) memberCompanyAccess[id] = payload.new!.company_ids as string[];
+      else delete memberCompanyAccess[id];
+      baseline.set(id, canonRow(payload.new!));
+    }
+    return { memberAccess, memberCompanyAccess };
+  });
   isSyncing = false;
-  prevDocsRef = useAppStore.getState().docEntries;
+  snapshotRefs();
+}
+
+for (const cfg of ROW_ENTITIES) TABLE_HANDLERS[cfg.table] = makeRowHandler(cfg);
+TABLE_HANDLERS[ACCESS_TABLE] = accessRowHandler;
+
+function onRowChange(table: string, payload: RowChangePayload) {
+  TABLE_HANDLERS[table]?.(payload);
 }
 
 /** Reconexão do Realtime: eventos de linha perdidos não são reenviados —
  *  recarrega as tabelas se não houver push local pendente para não sobrescrever. */
 async function refetchRowsIfIdle() {
   if (!rowsLoaded || rowSaveTimer || rowPushInFlight) return;
-  const [tRes, dRes] = await Promise.all([
-    supabase.from('tasks').select('*').is('deleted_at', null).order('sort_order').order('id'),
-    supabase.from('doc_entries').select('*').is('deleted_at', null).order('created_at'),
+  const results = await Promise.all([
+    ...ROW_ENTITIES.map(cfg => fetchAll(cfg)),
+    supabase.from(ACCESS_TABLE).select('*'),
   ]);
-  if (tRes.error || dRes.error || rowSaveTimer || rowPushInFlight) return;
+  if (results.some(r => r.error) || rowSaveTimer || rowPushInFlight) return;
+
+  const patch: Record<string, unknown> = {};
+  for (let i = 0; i < ROW_ENTITIES.length; i++) {
+    const cfg = ROW_ENTITIES[i];
+    const rows = results[i].data as Row[];
+    patch[cfg.storeKey] = rows.map(cfg.fromRow);
+    const so = new Map<string, number>();
+    rows.forEach(r => so.set(r.id as string, Number(r.sort_order) || 0));
+    sortOrders.set(cfg.table, so);
+    baselines.set(cfg.table, new Map(rows.map(r => [r.id as string, canonRow(r)])));
+  }
+  const accessRows = results[results.length - 1].data as Row[];
+  Object.assign(patch, applyAccessRows(accessRows));
+  baselines.set(ACCESS_TABLE, new Map(accessRows.map(r => [r.member_id as string, canonRow(r)])));
+
   isSyncing = true;
-  useAppStore.setState({
-    tasks: (tRes.data as Row[]).map(rowToTask),
-    docEntries: (dRes.data as Row[]).map(rowToDoc),
-  });
+  useAppStore.setState(patch as Partial<StoreState>);
   isSyncing = false;
-  (tRes.data as Row[]).forEach(r => sortOrders.set(r.id as string, Number(r.sort_order) || 0));
-  lastPushedTaskRows = new Map((tRes.data as Row[]).map(r => [r.id as string, canonRow(r)]));
-  lastPushedDocRows  = new Map((dRes.data as Row[]).map(r => [r.id as string, canonRow(r)]));
-  prevTasksRef = useAppStore.getState().tasks;
-  prevDocsRef  = useAppStore.getState().docEntries;
+  snapshotRefs();
 }
 
 /** Substitui TODO o conteúdo das tabelas (restauração de backup / import):
  *  upsert de todas as linhas do snapshot + soft-delete das que sobraram. */
-async function replaceAllRows(tasks: Task[] | null, docs: DocEntry[] | null) {
-  if (tasks) {
-    tasks.forEach((t, i) => { if (!sortOrders.has(t.id)) sortOrders.set(t.id, i); });
-    const rows = tasks.map(taskToRow);
+async function replaceAllRows(snapshot: SyncState) {
+  const patch: Record<string, unknown> = {};
+
+  for (const cfg of ROW_ENTITIES) {
+    const entities = snapshot[cfg.storeKey as keyof SyncState];
+    if (!Array.isArray(entities)) continue;
+    const so = sortOrders.get(cfg.table) ?? new Map<string, number>();
+    entities.forEach((e: any, i: number) => { if (!so.has(e.id)) so.set(e.id, i); });
+    sortOrders.set(cfg.table, so);
+    const rows = (entities as any[]).map(cfg.toRow);
     const keep = new Set(rows.map(r => r.id as string));
-    const gone = [...lastPushedTaskRows.keys()].filter(id => !keep.has(id));
-    if (await upsertChunked('tasks', rows)) {
-      if (gone.length) await supabase.from('tasks').update({ deleted_at: new Date().toISOString() }).in('id', gone);
-      lastPushedTaskRows = new Map(rows.map(r => [r.id as string, canonRow(r)]));
-      isSyncing = true;
-      useAppStore.setState({ tasks });
-      isSyncing = false;
-      prevTasksRef = useAppStore.getState().tasks;
+    const gone = [...baselineFor(cfg.table).keys()].filter(id => !keep.has(id));
+    if (!(await upsertChunked(cfg.table, rows))) continue;
+    if (gone.length) await supabase.from(cfg.table).update({ deleted_at: new Date().toISOString() }).in('id', gone);
+    baselines.set(cfg.table, new Map(rows.map(r => [r.id as string, canonRow(r)])));
+    patch[cfg.storeKey] = entities;
+  }
+
+  if (snapshot.memberAccess || snapshot.memberCompanyAccess) {
+    const fake = {
+      memberAccess: (snapshot.memberAccess as Record<string, string[]>) ?? {},
+      memberCompanyAccess: (snapshot.memberCompanyAccess as Record<string, string[]>) ?? {},
+    } as StoreState;
+    const rows = accessRowsFromState(fake);
+    const keep = new Set(rows.map(r => r.member_id as string));
+    const gone = [...baselineFor(ACCESS_TABLE).keys()].filter(id => !keep.has(id));
+    if (await upsertChunked(ACCESS_TABLE, rows)) {
+      if (gone.length) await supabase.from(ACCESS_TABLE).delete().in('member_id', gone);
+      baselines.set(ACCESS_TABLE, new Map(rows.map(r => [r.member_id as string, canonRow(r)])));
+      patch.memberAccess = fake.memberAccess;
+      patch.memberCompanyAccess = fake.memberCompanyAccess;
     }
   }
-  if (docs) {
-    const rows = docs.map(docToRow);
-    const keep = new Set(rows.map(r => r.id as string));
-    const gone = [...lastPushedDocRows.keys()].filter(id => !keep.has(id));
-    if (await upsertChunked('doc_entries', rows)) {
-      if (gone.length) await supabase.from('doc_entries').update({ deleted_at: new Date().toISOString() }).in('id', gone);
-      lastPushedDocRows = new Map(rows.map(r => [r.id as string, canonRow(r)]));
-      isSyncing = true;
-      useAppStore.setState({ docEntries: docs });
-      isSyncing = false;
-      prevDocsRef = useAppStore.getState().docEntries;
-    }
+
+  if (Object.keys(patch).length) {
+    isSyncing = true;
+    useAppStore.setState(patch as Partial<StoreState>);
+    isSyncing = false;
+    snapshotRefs();
   }
 }

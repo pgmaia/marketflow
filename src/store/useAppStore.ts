@@ -38,6 +38,7 @@ import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES
 import { localISO } from '../lib/date';
 import { supabase } from '../lib/supabase';
 import { loadFromSupabase } from '../lib/syncSupabase';
+import { syncAuthAccount } from '../lib/memberAuth';
 
 // IDs that belong to seed data — used to distinguish user-created records
 const SEED_COMPANY_IDS = new Set(seedCompanies.map(c => c.id));
@@ -369,27 +370,53 @@ export const useAppStore = create<AppState>()(
       },
       toggleDarkMode: () => set(s => ({ darkMode: !s.darkMode })),
 
-      addTeamMember: (data, password) => set((s) => {
-        const id = `tm-${Date.now()}`;
-        const newMember: TeamMember = { id, ...data };
-        return {
-          teamMembers: [...s.teamMembers, newMember],
-          memberPasswords: { ...s.memberPasswords, [id]: password },
-          memberAccess: { ...s.memberAccess, [id]: s.projects.map(p => p.id) },
-        };
-      }),
+      addTeamMember: (data, password) => {
+        // Membro com e-mail ganha CONTA DE LOGIN de verdade (Edge Function,
+        // admin-only). Externos e sem e-mail ficam só no cadastro.
+        if (data.email && data.permission !== 'Externo') {
+          syncAuthAccount({ action: 'create', email: data.email, password });
+        }
+        set((s) => {
+          const id = `tm-${Date.now()}`;
+          const newMember: TeamMember = { id, ...data };
+          return {
+            teamMembers: [...s.teamMembers, newMember],
+            memberPasswords: { ...s.memberPasswords, [id]: password },
+            memberAccess: { ...s.memberAccess, [id]: s.projects.map(p => p.id) },
+          };
+        });
+      },
 
-      updateTeamMember: (id, data, newPassword) => set((s) => {
-        const passwords = newPassword
-          ? { ...s.memberPasswords, [id]: newPassword }
-          : s.memberPasswords;
-        return {
-          teamMembers: s.teamMembers.map(m => m.id === id ? { ...m, ...data } : m),
-          memberPasswords: passwords,
-        };
-      }),
+      updateTeamMember: (id, data, newPassword) => {
+        // Sincroniza a conta de login: troca de senha e/ou de e-mail.
+        const before = get().teamMembers.find(m => m.id === id);
+        const oldEmail = before?.email ?? '';
+        const nextEmail = data.email !== undefined ? data.email : oldEmail;
+        if ((newPassword || (nextEmail && nextEmail !== oldEmail)) && before?.permission !== 'Externo') {
+          syncAuthAccount({
+            action: 'update',
+            email: oldEmail || nextEmail,
+            new_email: nextEmail !== oldEmail ? nextEmail : undefined,
+            password: newPassword,
+          });
+        }
+        set((s) => {
+          const passwords = newPassword
+            ? { ...s.memberPasswords, [id]: newPassword }
+            : s.memberPasswords;
+          return {
+            teamMembers: s.teamMembers.map(m => m.id === id ? { ...m, ...data } : m),
+            memberPasswords: passwords,
+          };
+        });
+      },
 
-      deleteTeamMember: (id) => set((s) => {
+      deleteTeamMember: (id) => {
+        const gone = get().teamMembers.find(m => m.id === id);
+        if (gone?.email && gone.permission !== 'Externo') {
+          syncAuthAccount({ action: 'delete', email: gone.email });
+        }
+        set((s) => {
         const newMemberPasswords = { ...s.memberPasswords };
         delete newMemberPasswords[id];
         const newMemberAccess = { ...s.memberAccess };
@@ -409,7 +436,8 @@ export const useAppStore = create<AppState>()(
             teamMemberIds: p.teamMemberIds.filter(mid => mid !== id),
           })),
         };
-      }),
+        });
+      },
       // ── Teams ─────────────────────────────────────────────────────────────────
       addTeam: (name, color, companyId) => set((s) => ({
         teams: [...s.teams, {

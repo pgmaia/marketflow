@@ -7,9 +7,8 @@
 //    a RLS se aplica; nenhuma service key envolvida.
 //  • Tarefas e documentação: leitura/escrita DIRETO nas tabelas `tasks` e
 //    `doc_entries` (Fase 2). O Realtime propaga para os apps abertos na hora.
-//  • Projetos, empresas e membros ainda vivem no blob (`marketflow`, key=main):
-//    o MCP os lê SOMENTE LEITURA. Nunca escreve no blob — toda a lógica de
-//    merge de três vias fica exclusiva do app.
+//  • Projetos, empresas e membros (Fase 3): lidos das tabelas próprias,
+//    SOMENTE LEITURA — criar/editar projetos continua sendo ação do app.
 //  • Convenções de escrita idênticas às do app: id `t<timestamp>`, sort_order
 //    Date.now(), soft-delete não exposto (excluir tarefa é ação do app, onde
 //    existe Lixeira).
@@ -59,20 +58,37 @@ function ensureAuth() {
   return authed;
 }
 
-// ── Blob (projetos/empresas/membros) — leitura, cacheada por 30 s ────────────
-let blobCache = null; // { at, data }
-async function getBlob() {
+// ── Fase 3: projetos/empresas/membros vêm de TABELAS (cache de 30 s) ─────────
+const tableCache = new Map(); // table → { at, rows }
+async function getTable(table, orderCols = ['sort_order', 'id']) {
   await ensureAuth();
-  if (blobCache && Date.now() - blobCache.at < 30_000) return blobCache.data;
-  const { data, error } = await supabase.from('marketflow').select('data').eq('key', 'main').single();
-  if (error) throw new Error(`Erro lendo dados do Icarus: ${error.message}`);
-  blobCache = { at: Date.now(), data: data.data };
-  return data.data;
+  const hit = tableCache.get(table);
+  if (hit && Date.now() - hit.at < 30_000) return hit.rows;
+  let q = supabase.from(table).select('*').is('deleted_at', null);
+  for (const c of orderCols) q = q.order(c);
+  const { data, error } = await q;
+  if (error) throw new Error(`Erro lendo ${table}: ${error.message}`);
+  tableCache.set(table, { at: Date.now(), rows: data });
+  return data;
 }
 
 async function getMembers() {
-  const blob = await getBlob();
-  return (blob.teamMembers ?? []).filter(m => !(blob.deletedMemberIds ?? []).includes(m.id));
+  const rows = await getTable('team_members');
+  return rows.map(r => ({ id: r.id, name: r.name, role: r.role, email: r.email, permission: r.permission ?? 'Membro' }));
+}
+
+async function getProjects() {
+  const rows = await getTable('projects');
+  return rows.map(r => ({
+    id: r.id, companyId: r.company_id, name: r.name,
+    startDate: r.start_date, endDate: r.end_date,
+    phases: Array.isArray(r.phases) ? r.phases : [],
+  }));
+}
+
+async function getCompanies() {
+  const rows = await getTable('companies');
+  return rows.map(r => ({ id: r.id, name: r.name, industry: r.industry }));
 }
 
 async function currentMemberId() {
@@ -106,8 +122,7 @@ function normPriority(p) {
 }
 
 async function resolveProject(ref) {
-  const blob = await getBlob();
-  const projects = blob.projects ?? [];
+  const projects = await getProjects();
   const byId = projects.find(p => p.id === ref);
   if (byId) return byId;
   const q = ref.toLowerCase();
@@ -161,9 +176,8 @@ server.tool(
   {},
   async () => {
     try {
-      const blob = await getBlob();
-      const projects = blob.projects ?? [];
-      return ok((blob.companies ?? []).map(c => ({
+      const [companies, projects] = await Promise.all([getCompanies(), getProjects()]);
+      return ok(companies.map(c => ({
         id: c.id, nome: c.name, setor: c.industry || null,
         projetos: projects.filter(p => p.companyId === c.id).length,
       })));
@@ -177,15 +191,13 @@ server.tool(
   { empresa: z.string().optional().describe('Nome ou id da empresa para filtrar') },
   async ({ empresa }) => {
     try {
-      const blob = await getBlob();
-      let projects = blob.projects ?? [];
+      let [projects, companies] = await Promise.all([getProjects(), getCompanies()]);
       if (empresa) {
         const q = empresa.toLowerCase();
-        const comp = (blob.companies ?? []).find(c => c.id === empresa || c.name.toLowerCase().includes(q));
+        const comp = companies.find(c => c.id === empresa || c.name.toLowerCase().includes(q));
         if (!comp) throw new Error(`Empresa "${empresa}" não encontrada.`);
         projects = projects.filter(p => p.companyId === comp.id);
       }
-      const companies = blob.companies ?? [];
       return ok(projects.map(p => ({
         id: p.id, nome: p.name,
         empresa: companies.find(c => c.id === p.companyId)?.name ?? null,
@@ -251,14 +263,14 @@ server.tool(
     try {
       if (!texto && !vence_ate) throw new Error('Informe "texto" e/ou "vence_ate".');
       await ensureAuth();
-      const blob = await getBlob();
+      const projects = await getProjects();
       const members = await getMembers();
       let q = supabase.from('tasks').select('*').is('deleted_at', null).order('due_date');
       if (texto) q = q.ilike('title', `%${texto}%`);
       if (vence_ate) q = q.lte('due_date', vence_ate).neq('status', 'Concluído');
       const { data, error } = await q.limit(100);
       if (error) throw new Error(error.message);
-      return ok({ total: data.length, tarefas: data.map(t => fmtTask(t, members, blob.projects ?? [])) });
+      return ok({ total: data.length, tarefas: data.map(t => fmtTask(t, members, projects)) });
     } catch (e) { return fail(e); }
   }
 );
