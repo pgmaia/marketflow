@@ -36,6 +36,8 @@ export function calcNextDueDate(from: string, type: RecurrenceType, daysAfter = 
 }
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
 import { localISO } from '../lib/date';
+import { supabase } from '../lib/supabase';
+import { loadFromSupabase } from '../lib/syncSupabase';
 
 // IDs that belong to seed data — used to distinguish user-created records
 const SEED_COMPANY_IDS = new Set(seedCompanies.map(c => c.id));
@@ -79,7 +81,7 @@ interface AppState {
   setActiveTask: (id: string | null) => void;
   setView: (view: AppView) => void;
   setCurrentUser: (id: string | null) => void;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   toggleDarkMode: () => void;
   addTeamMember: (data: Omit<TeamMember, 'id'>, password: string) => void;
@@ -323,21 +325,45 @@ export const useAppStore = create<AppState>()(
       setActiveTask: (id) => set({ activeTaskId: id }),
       setView: (view) => set({ view }),
       setCurrentUser: (id) => set({ currentUserId: id }),
-      login: (email, password) => {
+      // Autentica no Supabase Auth (sessão real, exigida pela RLS). O caminho
+      // legado — senha guardada no estado — permanece como fallback apenas até
+      // a virada completa: sem sessão, com a RLS ligada, o app não carrega dados.
+      // Autentica PRIMEIRO no Supabase Auth e carrega os dados DEPOIS: com a
+      // RLS ativa, um navegador limpo não tem os membros localmente antes do
+      // primeiro carregamento autorizado — exigir o membro antes do login
+      // trancaria todo mundo fora em máquinas novas.
+      login: async (email, password) => {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+        if (!error) {
+          await loadFromSupabase();
+          const member = get().teamMembers.find(
+            m => m.email?.toLowerCase() === email.trim().toLowerCase()
+          );
+          if (member && member.permission !== 'Externo') {
+            set({ isAuthenticated: true, currentUserId: member.id });
+            return true;
+          }
+          await supabase.auth.signOut();
+          return false;
+        }
+        // fallback legado (pré-RLS / conta Auth ainda não criada) — depende do
+        // membro já estar no estado local, como sempre dependeu.
         const member = get().teamMembers.find(
           m => m.email?.toLowerCase() === email.trim().toLowerCase()
         );
-        if (!member) return false;
-        // Externos não têm acesso ao sistema
-        if (member.permission === 'Externo') return false;
-        // A password set by an admin must win over the hardcoded seed password,
-        // otherwise changing a seed member's password silently has no effect.
+        if (!member || member.permission === 'Externo') return false;
         const expectedPw = get().memberPasswords[member.id] ?? MEMBER_PASSWORDS[member.id];
         if (!expectedPw || expectedPw !== password) return false;
         set({ isAuthenticated: true, currentUserId: member.id });
         return true;
       },
-      logout: () => set({ isAuthenticated: false }),
+      logout: () => {
+        void supabase.auth.signOut();
+        set({ isAuthenticated: false });
+      },
       toggleDarkMode: () => set(s => ({ darkMode: !s.darkMode })),
 
       addTeamMember: (data, password) => set((s) => {

@@ -24,8 +24,11 @@ export default function App() {
   const isVisualizador = currentMember?.permission === 'Visualizador';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Supabase sync — load on mount, save on change, listen for remote updates
+  // Supabase sync — runs only for an authenticated session. With RLS on, a
+  // pre-login load would just fail; and the Realtime socket must carry the
+  // user's token, which only exists after sign-in. Re-runs on login/logout.
   useEffect(() => {
+    if (!isAuthenticated) return;
     loadFromSupabase().then(() => {
       const params = new URLSearchParams(window.location.search);
       const taskId = params.get('task');
@@ -66,7 +69,7 @@ export default function App() {
       channel.unsubscribe();
       unsubscribe();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);

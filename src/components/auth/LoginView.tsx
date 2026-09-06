@@ -26,16 +26,14 @@ export function LoginView() {
     m => m.email?.toLowerCase() === email.trim().toLowerCase()
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || !password) return;
     setLoading(true);
     setError('');
-    setTimeout(() => {
-      const ok = login(email, password);
-      if (!ok) { setError('E-mail ou senha incorretos.'); setPassword(''); }
-      setLoading(false);
-    }, 400);
+    const ok = await login(email, password);
+    if (!ok) { setError('E-mail ou senha incorretos.'); setPassword(''); }
+    setLoading(false);
   };
 
   return (

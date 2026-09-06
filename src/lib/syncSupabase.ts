@@ -359,6 +359,14 @@ export async function loadFromSupabase() {
 
   if (error) {
     console.error('[sync] load error:', error.message);
+    // Com a RLS ativa, um cliente com o flag legado "autenticado" mas SEM
+    // sessão do Supabase Auth não consegue ler nada. Em vez de rodar num cache
+    // local que diverge silenciosamente, volta para a tela de login.
+    const { data: sess } = await supabase.auth.getSession();
+    if (!sess.session && useAppStore.getState().isAuthenticated) {
+      useAppStore.setState({ isAuthenticated: false });
+      return;
+    }
     supabaseLoaded = true; // allow saves even on error so local changes aren't lost
     return;
   }
