@@ -349,8 +349,11 @@ export const useAppStore = create<AppState>()(
           await supabase.auth.signOut();
           return false;
         }
-        // fallback legado (pré-RLS / conta Auth ainda não criada) — depende do
-        // membro já estar no estado local, como sempre dependeu.
+        // Em produção o Supabase Auth é o ÚNICO caminho — a RLS está ativa e uma
+        // sessão local sem Auth não leria nada mesmo. O fallback por senha local
+        // sobrevive apenas em desenvolvimento, onde o backend isolado dos testes
+        // não tem Auth.
+        if (!import.meta.env.DEV) return false;
         const member = get().teamMembers.find(
           m => m.email?.toLowerCase() === email.trim().toLowerCase()
         );
