@@ -374,7 +374,7 @@ function fetchAll(table: string, order: string[]) {
 }
 
 // ── Carga inicial ────────────────────────────────────────────────────────────
-export async function loadFromSupabase() {
+export async function loadFromSupabase(attempt = 0) {
   const queries = [
     ...ROW_ENTITIES.map(cfg => fetchAll(cfg.table, cfg.order)),
     supabase.from(ACCESS_TABLE).select('*'),
@@ -389,8 +389,17 @@ export async function loadFromSupabase() {
     const { data: sess } = await supabase.auth.getSession();
     if (!sess.session && useAppStore.getState().isAuthenticated) {
       useAppStore.setState({ isAuthenticated: false });
+      return;
     }
-    return; // rowsLoaded fica false — nenhum diff roda, nada é destruído
+    // Rede instável: sem retry o app ficava preso no cache local persistido
+    // (dados velhos, sem sincronizar) até um reload manual. Re-tenta com
+    // backoff; enquanto isso rowsLoaded segue false e nada é destruído.
+    if (attempt < 5) {
+      const delay = Math.min(2000 * 2 ** attempt, 30000);
+      console.warn('[rowsync] nova tentativa de carga em ' + delay + ' ms');
+      setTimeout(() => { void loadFromSupabase(attempt + 1); }, delay);
+    }
+    return;
   }
 
   const store = useAppStore.getState();
@@ -726,7 +735,9 @@ export function subscribeToRealtime() {
 /** Reconexão: recarrega tudo, se não houver push local pendente. */
 async function refetchRowsIfIdle() {
   if (!rowsLoaded || rowSaveTimer || rowPushInFlight) return;
-  rowsLoaded = false; // pausa diffs enquanto recarrega
+  // NÃO zera rowsLoaded aqui: se a recarga falhar (rede), o sync ficaria
+  // morto até um reload manual. A carga aplica com isSyncing e re-baseia os
+  // baselines; um evento Realtime no meio é corrigido pela própria carga.
   await loadFromSupabase();
 }
 
