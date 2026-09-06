@@ -27,3 +27,4 @@ dist-ssr
 mcp/.env
 mcp/dist
 mcp/mcpb-build/node_modules
+mcp/mcpb-build/server
