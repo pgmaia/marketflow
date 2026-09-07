@@ -18,14 +18,18 @@ import { localISO } from '../../lib/date';
 type ViewMode = 'board' | 'list' | 'calendar' | 'flow' | 'document' | 'docs';
 const viewLabel: Record<ViewMode, string> = { board: 'Quadro', list: 'Lista', calendar: 'Calendário', flow: 'Fluxo', document: 'Anotações', docs: 'Documentação' };
 
-type SortBy = 'manual' | 'dueDate' | 'priority' | 'assignee' | 'title' | 'status';
+type SortBy = 'manual' | 'etapa' | 'title' | 'sprint' | 'status' | 'assignee' | 'dueDate' | 'priority' | 'link';
+// Espelha a sequência das colunas da Lista.
 const SORT_OPTIONS: { value: SortBy; label: string }[] = [
   { value: 'manual',   label: 'Manual (padrão)' },
+  { value: 'etapa',    label: 'Etapa'           },
+  { value: 'title',    label: 'Nome'            },
+  { value: 'sprint',   label: 'Sprint'          },
+  { value: 'status',   label: 'Status'          },
+  { value: 'assignee', label: 'Responsável'     },
   { value: 'dueDate',  label: 'Prazo'           },
   { value: 'priority', label: 'Prioridade'      },
-  { value: 'assignee', label: 'Responsável'     },
-  { value: 'title',    label: 'Nome'            },
-  { value: 'status',   label: 'Status'          },
+  { value: 'link',     label: 'Link/Arquivo'    },
 ];
 
 const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
@@ -50,6 +54,22 @@ export function makeTaskCompareFn(sortBy: SortBy, memberMap: Record<string, stri
         return at < bt ? -1 : at > bt ? 1 : 0;
       }
       case 'status': return (STATUS_ORDER[a.status] ?? 9) - (STATUS_ORDER[b.status] ?? 9);
+      case 'etapa': {
+        // Alfabética; sem etapa vai para o fim.
+        const ae = (a.etapa ?? '\uffff').toLowerCase();
+        const be = (b.etapa ?? '\uffff').toLowerCase();
+        return ae < be ? -1 : ae > be ? 1 : 0;
+      }
+      case 'sprint': {
+        // Canônico YYYY-MM-S ordena cronologicamente; sem sprint no fim.
+        const as_ = a.sprint ?? '\uffff';
+        const bs_ = b.sprint ?? '\uffff';
+        return as_ < bs_ ? -1 : as_ > bs_ ? 1 : 0;
+      }
+      case 'link': {
+        // Com link primeiro; entre eles, mantém a ordem relativa.
+        return (a.link ? 0 : 1) - (b.link ? 0 : 1);
+      }
       default:       return 0;
     }
   };

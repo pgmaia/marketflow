@@ -233,7 +233,7 @@ function AddMemberModal({ existingEmails, onClose, onAdd }: AddMemberModalProps)
       // member can never sign in — the first holder always wins.
       if (existingEmails.includes(email.trim().toLowerCase())) { setError('Já existe um membro com este e-mail'); return; }
       if (!role.trim()) { setError('Cargo é obrigatório'); return; }
-      if (password.length < 4) { setError('Senha deve ter ao menos 4 caracteres'); return; }
+      if (password.length < 6) { setError('Senha deve ter ao menos 6 caracteres (mínimo da conta de login)'); return; }
       if (password !== confirm) { setError('As senhas não conferem'); return; }
     }
     setError('');
@@ -428,7 +428,7 @@ function EditMemberModal({ member, onClose, onSave }: EditMemberModalProps) {
     e.preventDefault();
     if (!name.trim()) { setError('Nome é obrigatório'); return; }
     if (!isExterno && email && !email.includes('@')) { setError('E-mail inválido'); return; }
-    if (password && password.length < 4) { setError('Senha deve ter ao menos 4 caracteres'); return; }
+    if (password && password.length < 6) { setError('Senha deve ter ao menos 6 caracteres (mínimo da conta de login)'); return; }
     if (password && password !== confirm) { setError('As senhas não conferem'); return; }
     setError('');
     onSave(member.id, { name: name.trim(), email: email.trim(), role: role.trim(), color }, password || undefined);
@@ -1173,13 +1173,21 @@ export function UserManagementView() {
 
                   <div className="px-6 py-5">
                     <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-3">Nível de acesso</p>
+                    {selectedMember.id === currentUserId && (
+                      <p className="text-[11px] text-amber-600 mb-3">
+                        Você não pode alterar o próprio nível de acesso — peça a outro Admin.
+                      </p>
+                    )}
                     <div className="grid grid-cols-2 gap-2.5">
                       {PERMISSIONS.map(perm => {
                         const isSelected = (selectedMember.permission ?? 'Membro') === perm.value;
+                        const isSelf = selectedMember.id === currentUserId;
                         return (
                           <button
                             key={perm.value}
-                            onClick={() => updateMemberPermission(selectedMember.id, perm.value)}
+                            disabled={isSelf}
+                            style={isSelf && !isSelected ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+                            onClick={() => { if (!isSelf) updateMemberPermission(selectedMember.id, perm.value); }}
                             className={`relative text-left p-3.5 rounded-xl border-2 transition-all ${
                               isSelected
                                 ? 'border-[#1f6feb] bg-[#1f6feb]/5'

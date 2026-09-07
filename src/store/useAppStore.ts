@@ -797,9 +797,20 @@ export const useAppStore = create<AppState>()(
         };
       }),
 
-      updateMemberPermission: (memberId, permission) => set((s) => ({
-        teamMembers: s.teamMembers.map(m => m.id === memberId ? { ...m, permission } : m),
-      })),
+      updateMemberPermission: (memberId, permission) => {
+        // Conta de login acompanha a permissão: virar Externo apaga a conta
+        // (cliente não loga); sair de Externo exige definir senha no Editar.
+        const before = get().teamMembers.find(m => m.id === memberId);
+        if (before?.email && before.permission !== 'Externo' && permission === 'Externo') {
+          syncAuthAccount({ action: 'delete', email: before.email });
+        }
+        if (before?.email && before.permission === 'Externo' && permission !== 'Externo') {
+          alert('Para este membro conseguir ENTRAR no Icarus, defina uma senha em Editar → Nova senha.');
+        }
+        set((s) => ({
+          teamMembers: s.teamMembers.map(m => m.id === memberId ? { ...m, permission } : m),
+        }));
+      },
 
       addProject: (project) => set((s) => {
         // Also grant memberAccess to every member listed in teamMemberIds
