@@ -1,6 +1,6 @@
 import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus } from '../../types';
+import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus , TeamMember, Project } from '../../types';
 import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { sprintLabel, sprintOptions, currentSprint } from '../../lib/sprints';
@@ -10,6 +10,32 @@ import { localISO } from '../../lib/date';
 
 type SubtaskMode = 'collapsed' | 'expanded' | 'separate';
 
+
+
+// Seletor de responsável: TODOS os integrantes aparecem (o filtro por acesso
+// escondia quem não tinha o projeto na lista explícita — projetos novos não
+// entram nas listas antigas). Ordena: time/acesso do projeto primeiro,
+// Externos por último.
+function assignableMembers(
+  teamMembers: TeamMember[],
+  project: Project | undefined,
+  memberAccess: Record<string, string[]>,
+  memberCompanyAccess: Record<string, string[]>,
+): TeamMember[] {
+  if (!project) return teamMembers;
+  const rank = (m: TeamMember) => {
+    if (m.permission === 'Externo') return 2;
+    if (m.permission === 'Admin' || m.permission === 'Gerente') return 0;
+    if (project.teamMemberIds.includes(m.id)) return 0;
+    const theirProjects  = memberAccess[m.id];
+    const theirCompanies = memberCompanyAccess[m.id];
+    if (theirProjects?.includes(project.id)) return 0;
+    if (theirCompanies?.includes(project.companyId)) return 0;
+    if (theirProjects === undefined && theirCompanies === undefined) return 0;
+    return 1;
+  };
+  return [...teamMembers].sort((a, b) => rank(a) - rank(b));
+}
 
 function usePopover() {
   const [open, setOpen] = useState(false);
@@ -232,18 +258,8 @@ function AssigneePicker({ task }: { task: Task }) {
   const project = projects.find(p => p.id === task.projectId);
   const isBulk = _selIds.has(task.id) && _selIds.size > 1;
 
-  // Todos os usuários com acesso ao projeto
-  const members = project
-    ? teamMembers.filter(m => {
-        if (m.permission === 'Admin') return true;
-        if (project.teamMemberIds.includes(m.id)) return true;
-        const theirProjects  = memberAccess[m.id];
-        const theirCompanies = memberCompanyAccess[m.id];
-        if (theirProjects !== undefined) return theirProjects.includes(project.id);
-        if (theirCompanies !== undefined) return theirCompanies.includes(project.companyId);
-        return true;
-      })
-    : teamMembers;
+  // TODOS os integrantes, ordenados: time/acesso do projeto primeiro.
+  const members = assignableMembers(teamMembers, project, memberAccess, memberCompanyAccess);
 
   const currentIds = getAssigneeIds(task);
   const assignees  = teamMembers.filter(m => currentIds.includes(m.id));
@@ -1069,17 +1085,7 @@ type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null }) {
   const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
-  const projectMembers = project
-    ? teamMembers.filter(m => {
-        if (m.permission === 'Admin') return true;
-        if (project.teamMemberIds.includes(m.id)) return true;
-        const theirProjects  = memberAccess[m.id];
-        const theirCompanies = memberCompanyAccess[m.id];
-        if (theirProjects !== undefined) return theirProjects.includes(project.id);
-        if (theirCompanies !== undefined) return theirCompanies.includes(project.companyId);
-        return true;
-      })
-    : teamMembers;
+  const projectMembers = assignableMembers(teamMembers, project, memberAccess, memberCompanyAccess);
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');

@@ -211,18 +211,22 @@ export function TaskModal() {
   const currentAssigneeIds = getAssigneeIds(task);
   const assignees = teamMembers.filter(m => currentAssigneeIds.includes(m.id));
 
-  // Todos os usuários que têm acesso a este projeto (qualquer nível de permissão)
-  const projectMembers = project
-    ? teamMembers.filter(m => {
-        if (m.permission === 'Admin') return true;
-        if (project.teamMemberIds.includes(m.id)) return true;
-        const theirProjects  = memberAccess[m.id];
-        const theirCompanies = memberCompanyAccess[m.id];
-        if (theirProjects !== undefined) return theirProjects.includes(project.id);
-        if (theirCompanies !== undefined) return theirCompanies.includes(project.companyId);
-        return true;
-      })
-    : [];
+  // TODOS os integrantes (o filtro por acesso escondia quem não tinha o
+  // projeto na lista explícita). Ordena: time/acesso do projeto primeiro,
+  // Externos por último.
+  const projectMembers = (() => {
+    if (!project) return teamMembers;
+    const rank = (m: typeof teamMembers[number]) => {
+      if (m.permission === 'Externo') return 2;
+      if (m.permission === 'Admin' || m.permission === 'Gerente') return 0;
+      if (project.teamMemberIds.includes(m.id)) return 0;
+      if (memberAccess[m.id]?.includes(project.id)) return 0;
+      if (memberCompanyAccess[m.id]?.includes(project.companyId)) return 0;
+      if (memberAccess[m.id] === undefined && memberCompanyAccess[m.id] === undefined) return 0;
+      return 1;
+    };
+    return [...teamMembers].sort((a, b) => rank(a) - rank(b));
+  })();
 
   const toggleAssignee = (memberId: string) => {
     const next = currentAssigneeIds.includes(memberId)
