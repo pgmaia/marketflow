@@ -75,6 +75,27 @@ export default function App() {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
 
+  // ── Aviso de versão nova ──────────────────────────────────────────────────
+  // A aba fica aberta por dias; cada deploy deixava o app rodando código e
+  // estado velhos em memória ("sumiu do nada"). A cada 5 min compara o bundle
+  // servido pelo index.html com o que está em execução e oferece recarregar.
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  useEffect(() => {
+    const current = (document.querySelector('script[src*="index-"]') as HTMLScriptElement | null)
+      ?.src.match(/index-[\w-]+\.js/)?.[0];
+    if (!current) return;
+    const check = async () => {
+      try {
+        const html = await (await fetch('/', { cache: 'no-store' })).text();
+        const served = html.match(/index-[\w-]+\.js/)?.[0];
+        if (served && served !== current) setUpdateAvailable(true);
+      } catch { /* offline — tenta de novo no próximo ciclo */ }
+    };
+    const id = setInterval(check, 5 * 60 * 1000);
+    check();
+    return () => clearInterval(id);
+  }, []);
+
   // Security: if the current user was deleted while they had an active session
   // (detected via real-time Supabase update), force immediate logout.
   useEffect(() => {
@@ -148,6 +169,18 @@ export default function App() {
       </div>
 
       {activeTaskId && <TaskModal />}
+
+      {updateAvailable && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-3 bg-gray-900 text-white pl-4 pr-2 py-2 rounded-xl shadow-2xl">
+          <span className="text-[13px]">Nova versão do Icarus disponível</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-[12px] font-semibold bg-white text-gray-900 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            Recarregar
+          </button>
+        </div>
+      )}
     </div>
   );
 }
