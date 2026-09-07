@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, Check, Link, Download, MessagesSquare, GitBranch } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, ListTree, Check, Link, Download, MessagesSquare, GitBranch } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower, getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { PhaseColumn } from './PhaseColumn';
 import { TeamPanel } from './TeamPanel';
-import { TaskListView } from './TaskListView';
+import { TaskListView, SubtaskModeMenu } from './TaskListView';
+import type { SubtaskMode } from './TaskListView';
 import { CalendarView } from './CalendarView';
 import { ApplyTemplateModal } from '../templates/ApplyTemplateModal';
 import { PhaseEditor } from './PhaseEditor';
@@ -93,6 +94,8 @@ export function KanbanBoard() {
   const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>('manual');
+  const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');
+  const [showSubtaskMenu, setShowSubtaskMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const problemsRef = useRef<HTMLDivElement>(null);
@@ -433,6 +436,30 @@ export function KanbanBoard() {
               )}
             </div>
 
+            {/* ── Subtarefas: aninhadas (recolhidas/abertas) ou como tarefas
+                   independentes — só faz sentido na Lista ── */}
+            {viewMode === 'list' && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowSubtaskMenu(v => !v)}
+                  className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${subtaskMode !== 'collapsed' ? 'border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+                  title="Como mostrar as subtarefas"
+                >
+                  <ListTree size={12} />
+                  <span className="hidden sm:inline">
+                    {subtaskMode === 'collapsed' ? 'Subtarefas' : subtaskMode === 'expanded' ? 'Todas abertas' : 'Separadas'}
+                  </span>
+                </button>
+                {showSubtaskMenu && (
+                  <SubtaskModeMenu
+                    mode={subtaskMode}
+                    onChange={m => { setSubtaskMode(m); setShowSubtaskMenu(false); }}
+                    onClose={() => setShowSubtaskMenu(false)}
+                  />
+                )}
+              </div>
+            )}
+
             <button
               onClick={() => {
                 const url = `${window.location.origin}${window.location.pathname}?project=${project.id}`;
@@ -632,7 +659,7 @@ export function KanbanBoard() {
             </div>
           </div>
         ) : viewMode === 'list' ? (
-          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} sortFn={makeTaskCompareFn(sortBy, memberMap)} />
+          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} sortFn={makeTaskCompareFn(sortBy, memberMap)} subtaskMode={subtaskMode} />
         ) : null}
 
         {viewMode === 'calendar' && (

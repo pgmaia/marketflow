@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch , Copy } from 'lucide-react';
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch , Copy , CornerDownRight } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus , TeamMember, Project , Team } from '../../types';
 import { getAssigneeIds } from '../../types';
@@ -8,7 +8,7 @@ import { Avatar, AvatarGroup } from '../shared/Avatar';
 import { SaveTemplateModal } from '../templates/SaveTemplateModal';
 import { localISO } from '../../lib/date';
 
-type SubtaskMode = 'collapsed' | 'expanded' | 'separate';
+export type SubtaskMode = 'collapsed' | 'expanded' | 'separate';
 
 
 
@@ -644,6 +644,7 @@ function TaskRow({
   task,
   indent = false,
   lastChild = false,
+  parentTitle,
   subtasks,
   expanded,
   onToggle,
@@ -655,6 +656,7 @@ function TaskRow({
   task: Task;
   indent?: boolean;
   lastChild?: boolean;
+  parentTitle?: string;
   subtasks: Task[];
   expanded: boolean;
   onToggle: () => void;
@@ -762,6 +764,18 @@ function TaskRow({
               <span aria-hidden className="absolute left-4 top-1/2 bottom-0 border-l-2 border-gray-200 pointer-events-none" />
             )}
           </>
+        )}
+        {/* Modo "separadas": a subtarefa vira linha independente, mas mostra de
+            qual tarefa veio para não perder o contexto. */}
+        {parentTitle && (
+          <span
+            className="inline-flex items-center gap-1 text-[11px] text-gray-400 shrink-0 max-w-[140px]"
+            title={`Subtarefa de: ${parentTitle}`}
+          >
+            <CornerDownRight size={10} className="shrink-0" />
+            <span className="truncate">{parentTitle}</span>
+            <span className="text-gray-300">/</span>
+          </span>
         )}
         {flowGhost && (
           <span
@@ -1001,7 +1015,7 @@ function ColHeaderMenu({ col, onRename, onDelete, onClose }: {
   );
 }
 
-function SubtaskModeMenu({
+export function SubtaskModeMenu({
   mode,
   onChange,
   onClose,
@@ -1113,14 +1127,12 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
-export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null }) {
+export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, subtaskMode = 'collapsed' }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null; subtaskMode?: SubtaskMode }) {
   const { updateTask, deleteTask, duplicateTasks, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
   const projectMembers = assignableMembers(teamMembers, teamsList, project, memberAccess, memberCompanyAccess);
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
-  const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');
-  const [showModeMenu, setShowModeMenu] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [bulkPopover, setBulkPopover] = useState<BulkPopover>(null);
@@ -1352,7 +1364,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                           <TaskRow
                             key={task.id}
                             task={task}
-                            indent={!!task.parentTaskId}
+                            parentTitle={task.parentTaskId ? tasks.find(t => t.id === task.parentTaskId)?.title : undefined}
                             subtasks={[]}
                             expanded={false}
                             onToggle={() => {}}
