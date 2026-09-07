@@ -3,6 +3,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus } from '../../types';
 import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
+import { sprintLabel, sprintOptions, currentSprint } from '../../lib/sprints';
 import { Avatar, AvatarGroup } from '../shared/Avatar';
 import { SaveTemplateModal } from '../templates/SaveTemplateModal';
 import { localISO } from '../../lib/date';
@@ -42,6 +43,61 @@ const PRIORITY_META: Record<TaskPriority, { bg: string; text: string; label: str
   'High':   { bg: 'bg-orange-50',  text: 'text-orange-600',  label: 'Alta'    },
   'Urgent': { bg: 'bg-red-50',     text: 'text-red-600',     label: 'Urgente' },
 };
+
+function SprintPicker({ task }: { task: Task }) {
+  const { updateTask } = useAppStore();
+  const { open, setOpen, ref } = usePopover();
+  const isBulk = _selIds.has(task.id) && _selIds.size > 1;
+  const cur = currentSprint();
+  // A sprint gravada sempre aparece na lista, mesmo fora da janela padrão.
+  const options = sprintOptions(2, 8);
+  if (task.sprint && !options.includes(task.sprint)) options.unshift(task.sprint);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        className={`inline-flex max-w-full items-center px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap transition-opacity hover:opacity-75 ${
+          task.sprint
+            ? task.sprint === cur
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              : 'bg-sky-50 text-sky-700 border border-sky-100'
+            : 'text-gray-300'
+        }`}
+        title={task.sprint ? sprintLabel(task.sprint) : 'Definir sprint'}
+      >
+        <span className="truncate">{task.sprint ? sprintLabel(task.sprint) : '—'}</span>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white rounded-xl border border-gray-150 shadow-xl z-50 py-1 min-w-[170px] max-h-[280px] overflow-y-auto" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+          {isBulk && (
+            <p className="px-3 py-1.5 text-[10px] font-semibold text-[#1f6feb] uppercase tracking-wider border-b border-gray-50">
+              {_selIds.size} tarefas
+            </p>
+          )}
+          <button
+            onClick={e => { e.stopPropagation(); applyBulkOrSingle(task.id, { sprint: undefined }, updateTask); setOpen(false); }}
+            className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors"
+          >
+            <span className="text-[12px] text-gray-400">Sem sprint</span>
+            {!task.sprint && <span className="text-[10px] text-gray-300">✓</span>}
+          </button>
+          {options.map(sp => (
+            <button
+              key={sp}
+              onClick={e => { e.stopPropagation(); applyBulkOrSingle(task.id, { sprint: sp }, updateTask); setOpen(false); }}
+              className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 transition-colors"
+            >
+              <span className={`text-[12px] ${sp === cur ? 'font-semibold text-emerald-700' : 'text-gray-700'}`}>
+                {sprintLabel(sp)}{sp === cur ? ' · atual' : ''}
+              </span>
+              {task.sprint === sp && <span className="text-[10px] text-gray-300">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function StatusPicker({ task }: { task: Task }) {
   const { updateTask } = useAppStore();
@@ -256,23 +312,23 @@ function AssigneePicker({ task }: { task: Task }) {
   );
 }
 
-type ColWidths = { name: number; etapa: number; status: number; priority: number; dueDate: number };
-const DEFAULT_COL_WIDTHS: ColWidths = { name: 280, etapa: 150, status: 160, priority: 120, dueDate: 130 };
+type ColWidths = { name: number; etapa: number; sprint: number; status: number; priority: number; dueDate: number };
+const DEFAULT_COL_WIDTHS: ColWidths = { name: 280, etapa: 150, sprint: 130, status: 160, priority: 120, dueDate: 130 };
 const DEFAULT_CUSTOM_COL_WIDTH = 160;
 
 function makeGrid(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customPart = customCols.map(c => `${customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH}px`).join(' ');
-  return `36px 28px 16px ${w.name}px ${w.etapa}px ${w.status}px ${w.priority}px ${w.dueDate}px${customPart ? ' ' + customPart : ''} 60px 32px`;
+  return `36px 28px 16px ${w.name}px ${w.etapa}px ${w.sprint}px ${w.status}px ${w.priority}px ${w.dueDate}px${customPart ? ' ' + customPart : ''} 60px 32px`;
 }
 function makeMinW(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return `${36 + 28 + 16 + w.name + w.etapa + w.status + w.priority + w.dueDate + customTotal + 60 + 32}px`;
+  return `${36 + 28 + 16 + w.name + w.etapa + w.sprint + w.status + w.priority + w.dueDate + customTotal + 60 + 32}px`;
 }
 // Numeric version — needed so the content wrapper can declare border-box min-width
 // = grid content width + px-10 horizontal padding (40px × 2 = 80px)
 function makeMinWNum(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return 36 + 28 + 16 + w.name + w.etapa + w.status + w.priority + w.dueDate + customTotal + 60 + 32;
+  return 36 + 28 + 16 + w.name + w.etapa + w.sprint + w.status + w.priority + w.dueDate + customTotal + 60 + 32;
 }
 
 // Needed to pass grid to TaskRow without prop drilling — share via context-free pattern
@@ -700,6 +756,9 @@ function TaskRow({
         )}
       </div>
 
+      {/* Sprint */}
+      <div className="pr-2 min-w-0"><SprintPicker task={task} /></div>
+
       {/* Inline pickers */}
       <div><StatusPicker task={task} /></div>
       <div><PriorityPicker task={task} /></div>
@@ -990,7 +1049,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
         />
       </div>
       {/* Empty cells to fill the grid */}
-      <span /><span /><span /><span />
+      <span /><span /><span /><span /><span />
     </div>
   );
 }
@@ -1136,6 +1195,10 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
             <span className="relative flex items-center">
               Etapa
               <span onMouseDown={e => startResize('etapa', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+            </span>
+            <span className="relative flex items-center">
+              Sprint
+              <span onMouseDown={e => startResize('sprint', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             <span className="relative flex items-center">
               Status

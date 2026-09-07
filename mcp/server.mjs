@@ -103,6 +103,47 @@ const PRIORITY_MAP = { baixa: 'Low', low: 'Low', média: 'Medium', media: 'Mediu
 const PRIORITY_LABEL = { Low: 'Baixa', Medium: 'Média', High: 'Alta', Urgent: 'Urgente' };
 const SECTIONS = { visaoGeral: 'Visão geral', reunioes: 'Reuniões', objetivos: 'Objetivos', rotina: 'Rotina', cronograma: 'Cronograma', aFazer: 'A Fazer' };
 
+// ── Sprints quinzenais (canônico "YYYY-MM-S"; rótulo "Sprint set/2") ─────────
+const SPRINT_MONTHS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const currentSprint = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${d.getDate() <= 15 ? 1 : 2}`;
+};
+const addSprints = (s, n) => {
+  const m = s.match(/^(\d{4})-(\d{2})-([12])$/);
+  let idx = +m[1]*24 + (+m[2]-1)*2 + (+m[3]-1) + n;
+  const y = Math.floor(idx/24); idx -= y*24;
+  return `${y}-${String(Math.floor(idx/2)+1).padStart(2,'0')}-${idx%2+1}`;
+};
+const sprintLabelOf = (s) => {
+  const m = s?.match?.(/^(\d{4})-(\d{2})-([12])$/);
+  if (!m) return s ?? null;
+  const yr = +m[1] !== new Date().getFullYear() ? ` ${m[1]}` : '';
+  return `Sprint ${SPRINT_MONTHS[+m[2]-1]}/${m[3]}${yr}`;
+};
+/** Aceita "atual", "proxima"/"próxima", "anterior", "set/2", "Sprint set/2",
+ *  "2026-09-2". Meses sem ano assumem o mais próximo do presente. */
+function resolveSprint(input) {
+  if (!input) return null;
+  const t = String(input).trim().toLowerCase().replace(/^sprint\s+/, '');
+  if (t === 'atual') return currentSprint();
+  if (t === 'proxima' || t === 'próxima') return addSprints(currentSprint(), 1);
+  if (t === 'anterior') return addSprints(currentSprint(), -1);
+  if (/^\d{4}-\d{2}-[12]$/.test(t)) return t;
+  const m = t.match(/^([a-zç]{3})\/([12])(?:\s+(\d{4}))?$/);
+  if (!m) throw new Error(`Sprint inválida: "${input}". Use "atual", "próxima", "set/2" ou "2026-09-2".`);
+  const mi = SPRINT_MONTHS.indexOf(m[1]);
+  if (mi < 0) throw new Error(`Mês inválido: "${m[1]}". Use: ${SPRINT_MONTHS.join(', ')}.`);
+  let year = m[3] ? +m[3] : new Date().getFullYear();
+  if (!m[3]) {
+    // sem ano: escolhe o ano que deixa a sprint mais perto de hoje
+    const now = new Date().getFullYear()*24 + new Date().getMonth()*2;
+    const cand = [year-1, year, year+1].map(y => ({ y, d: Math.abs(y*24 + mi*2 - now) }));
+    year = cand.sort((a,b) => a.d - b.d)[0].y;
+  }
+  return `${year}-${String(mi+1).padStart(2,'0')}-${m[2]}`;
+}
+
 const localISO = (d = new Date()) => {
   const p = n => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
@@ -159,6 +200,7 @@ function fmtTask(t, members, projects) {
     prazo: t.due_date ?? null,
     responsaveis: resp || null,
     ...(t.etapa ? { etapa: t.etapa } : {}),
+    ...(t.sprint ? { sprint: sprintLabelOf(t.sprint) } : {}),
     ...(t.description ? { descricao: t.description } : {}),
     ...(t.is_milestone ? { marco: true } : {}),
     ...(t.is_meta ? { meta: `${t.meta_current ?? 0}/${t.meta_target ?? '?'} ${t.meta_unit ?? ''}`.trim() } : {}),
@@ -229,9 +271,10 @@ server.tool(
     status: z.string().optional().describe('Filtrar por status: Backlog, Sprint, Em andamento, Em revisão, Bloqueado ou Concluído'),
     responsavel: z.string().optional().describe('Filtrar por nome do responsável'),
     fase: z.string().optional().describe('Filtrar por fase do projeto'),
+    sprint: z.string().optional().describe('Filtrar por sprint: "atual", "próxima", "anterior", "set/2" ou "2026-09-2"'),
     incluir_concluidas: z.boolean().optional().describe('Incluir tarefas concluídas (padrão: false)'),
   },
-  async ({ projeto, status, responsavel, fase, incluir_concluidas }) => {
+  async ({ projeto, status, responsavel, fase, sprint, incluir_concluidas }) => {
     try {
       const proj = await resolveProject(projeto);
       const members = await getMembers();
@@ -240,6 +283,7 @@ server.tool(
       const st = normStatus(status);
       if (st) q = q.eq('status', st);
       else if (!incluir_concluidas) q = q.neq('status', 'Concluído');
+      if (sprint) q = q.eq('sprint', resolveSprint(sprint));
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       let rows = data;
@@ -287,9 +331,10 @@ server.tool(
     prioridade: z.string().optional().describe('Baixa, Média (padrão), Alta ou Urgente'),
     prazo: z.string().optional().describe('Data limite YYYY-MM-DD (padrão: 7 dias)'),
     responsaveis: z.array(z.string()).optional().describe('Nomes dos membros responsáveis'),
+    sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2"…'),
     descricao: z.string().optional(),
   },
-  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, descricao }) => {
+  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, descricao }) => {
     try {
       const proj = await resolveProject(projeto);
       const phases = (proj.phases ?? []).map(f => f.name);
@@ -312,6 +357,7 @@ server.tool(
         assignee_ids: assigneeIds,
         due_date: prazo ?? localISO(new Date(Date.now() + 7 * 86400000)),
         custom_fields: {},
+        sprint: sprint ? resolveSprint(sprint) : null,
         created_at: localISO(),
         sort_order: Date.now(),
       };
@@ -334,9 +380,10 @@ server.tool(
     fase: z.string().optional(),
     prazo: z.string().optional().describe('YYYY-MM-DD'),
     responsaveis: z.array(z.string()).optional().describe('Substitui a lista de responsáveis'),
+    sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2", ou "nenhuma" para limpar'),
     descricao: z.string().optional(),
   },
-  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, descricao }) => {
+  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, descricao }) => {
     try {
       await ensureAuth();
       const { data: existing, error: e1 } = await supabase.from('tasks').select('*').eq('id', tarefa_id).is('deleted_at', null).maybeSingle();
@@ -356,6 +403,7 @@ server.tool(
         patch.phase = hit;
       }
       if (responsaveis) patch.assignee_ids = await resolveMemberIds(responsaveis);
+      if (sprint) patch.sprint = /^(nenhuma|remover|limpar)$/i.test(sprint.trim()) ? null : resolveSprint(sprint);
       if (!Object.keys(patch).length) throw new Error('Nenhum campo para atualizar.');
       const { error } = await supabase.from('tasks').update(patch).eq('id', tarefa_id);
       if (error) throw new Error(error.message);

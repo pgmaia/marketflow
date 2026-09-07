@@ -84,6 +84,9 @@ export interface Task {
   // coluna "Etapa" na Lista e usado para aglutinar tarefas do mesmo bloco.
   // Acompanha renomeações do bloco enquanto o vínculo existir.
   etapa?: string;
+  // Sprint quinzenal, canônico "YYYY-MM-S" (S=1: dias 1–15; S=2: 16–fim).
+  // Rótulo exibido: "Sprint set/2" (ver src/lib/sprints.ts).
+  sprint?: string;
 }
 
 export interface Project {
