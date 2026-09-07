@@ -87,6 +87,9 @@ export interface Task {
   // Sprint quinzenal, canônico "YYYY-MM-S" (S=1: dias 1–15; S=2: 16–fim).
   // Rótulo exibido: "Sprint set/2" (ver src/lib/sprints.ts).
   sprint?: string;
+  // Coluna padrão "Link/Arquivo": URL simples ou lista JSON de {url, label}
+  // (mesmo formato das colunas personalizadas de link).
+  link?: string;
 }
 
 export interface Project {

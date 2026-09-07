@@ -201,6 +201,7 @@ function fmtTask(t, members, projects) {
     responsaveis: resp || null,
     ...(t.etapa ? { etapa: t.etapa } : {}),
     ...(t.sprint ? { sprint: sprintLabelOf(t.sprint) } : {}),
+    ...(t.link ? { links: (() => { try { const a = JSON.parse(t.link); return Array.isArray(a) ? a.map(e => e.url) : [t.link]; } catch { return [t.link]; } })() } : {}),
     ...(t.description ? { descricao: t.description } : {}),
     ...(t.is_milestone ? { marco: true } : {}),
     ...(t.is_meta ? { meta: `${t.meta_current ?? 0}/${t.meta_target ?? '?'} ${t.meta_unit ?? ''}`.trim() } : {}),
@@ -332,9 +333,10 @@ server.tool(
     prazo: z.string().optional().describe('Data limite YYYY-MM-DD (padrão: 7 dias)'),
     responsaveis: z.array(z.string()).optional().describe('Nomes dos membros responsáveis'),
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2"…'),
+    link: z.string().optional().describe('URL de link/arquivo da tarefa'),
     descricao: z.string().optional(),
   },
-  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, descricao }) => {
+  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, link, descricao }) => {
     try {
       const proj = await resolveProject(projeto);
       const phases = (proj.phases ?? []).map(f => f.name);
@@ -358,6 +360,7 @@ server.tool(
         due_date: prazo ?? localISO(new Date(Date.now() + 7 * 86400000)),
         custom_fields: {},
         sprint: sprint ? resolveSprint(sprint) : null,
+        link: link ?? null,
         created_at: localISO(),
         sort_order: Date.now(),
       };
@@ -381,9 +384,10 @@ server.tool(
     prazo: z.string().optional().describe('YYYY-MM-DD'),
     responsaveis: z.array(z.string()).optional().describe('Substitui a lista de responsáveis'),
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2", ou "nenhuma" para limpar'),
+    link: z.string().optional().describe('URL de link/arquivo (substitui a atual)'),
     descricao: z.string().optional(),
   },
-  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, descricao }) => {
+  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, link, descricao }) => {
     try {
       await ensureAuth();
       const { data: existing, error: e1 } = await supabase.from('tasks').select('*').eq('id', tarefa_id).is('deleted_at', null).maybeSingle();
@@ -404,6 +408,7 @@ server.tool(
       }
       if (responsaveis) patch.assignee_ids = await resolveMemberIds(responsaveis);
       if (sprint) patch.sprint = /^(nenhuma|remover|limpar)$/i.test(sprint.trim()) ? null : resolveSprint(sprint);
+      if (link !== undefined) patch.link = link || null;
       if (!Object.keys(patch).length) throw new Error('Nenhum campo para atualizar.');
       const { error } = await supabase.from('tasks').update(patch).eq('id', tarefa_id);
       if (error) throw new Error(error.message);

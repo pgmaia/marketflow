@@ -114,6 +114,7 @@ function taskToRow(t: Task): Row {
     origin: t.origin ?? null,
     etapa: t.etapa ?? null,
     sprint: t.sprint ?? null,
+    link: t.link ?? null,
     deleted_at: null,
     created_at: t.createdAt || localISO(),
     sort_order: sortOrderFor('tasks', t.id),
@@ -147,6 +148,7 @@ function rowToTask(r: Row): Task {
   if (r.origin != null) t.origin = r.origin as Task['origin'];
   if (r.etapa != null) t.etapa = r.etapa as string;
   if (r.sprint != null) t.sprint = r.sprint as string;
+  if (r.link != null) t.link = r.link as string;
   return t;
 }
 

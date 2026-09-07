@@ -312,23 +312,23 @@ function AssigneePicker({ task }: { task: Task }) {
   );
 }
 
-type ColWidths = { name: number; etapa: number; sprint: number; status: number; priority: number; dueDate: number };
-const DEFAULT_COL_WIDTHS: ColWidths = { name: 280, etapa: 150, sprint: 130, status: 160, priority: 120, dueDate: 130 };
+type ColWidths = { etapa: number; name: number; sprint: number; status: number; resp: number; dueDate: number; priority: number; link: number };
+const DEFAULT_COL_WIDTHS: ColWidths = { etapa: 150, name: 280, sprint: 130, status: 150, resp: 110, dueDate: 120, priority: 110, link: 160 };
 const DEFAULT_CUSTOM_COL_WIDTH = 160;
 
 function makeGrid(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customPart = customCols.map(c => `${customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH}px`).join(' ');
-  return `36px 28px 16px ${w.name}px ${w.etapa}px ${w.sprint}px ${w.status}px ${w.priority}px ${w.dueDate}px${customPart ? ' ' + customPart : ''} 60px 32px`;
+  return `36px 28px 16px ${w.etapa}px ${w.name}px ${w.sprint}px ${w.status}px ${w.resp}px ${w.dueDate}px ${w.priority}px ${w.link}px${customPart ? ' ' + customPart : ''} 32px`;
 }
 function makeMinW(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return `${36 + 28 + 16 + w.name + w.etapa + w.sprint + w.status + w.priority + w.dueDate + customTotal + 60 + 32}px`;
+  return `${36 + 28 + 16 + w.etapa + w.name + w.sprint + w.status + w.resp + w.dueDate + w.priority + w.link + customTotal + 32}px`;
 }
 // Numeric version — needed so the content wrapper can declare border-box min-width
 // = grid content width + px-10 horizontal padding (40px × 2 = 80px)
 function makeMinWNum(w: ColWidths, customCols: CustomColumn[], customWidths: Record<string, number>) {
   const customTotal = customCols.reduce((sum, c) => sum + (customWidths[c.id] ?? DEFAULT_CUSTOM_COL_WIDTH), 0);
-  return 36 + 28 + 16 + w.name + w.etapa + w.sprint + w.status + w.priority + w.dueDate + customTotal + 60 + 32;
+  return 36 + 28 + 16 + w.etapa + w.name + w.sprint + w.status + w.resp + w.dueDate + w.priority + w.link + customTotal + 32;
 }
 
 // Needed to pass grid to TaskRow without prop drilling — share via context-free pattern
@@ -463,12 +463,13 @@ function LinkEditor({
   );
 }
 
-function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
+function LinkCell({ task, col }: { task: Task; col?: CustomColumn }) {
   const { updateTask } = useAppStore();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const draftRef = useRef<LinkEntry[] | null>(null);
-  const raw = task.customFields?.[col.id] ?? '';
+  // Sem `col` é a coluna padrão "Link/Arquivo" (campo task.link).
+  const raw = col ? (task.customFields?.[col.id] ?? '') : (task.link ?? '');
   const entries = parseLinkEntries(raw);
 
   useEffect(() => {
@@ -487,10 +488,14 @@ function LinkCell({ task, col }: { task: Task; col: CustomColumn }) {
   const save = (newEntries: LinkEntry[]) => {
     draftRef.current = null;
     const filtered = newEntries.filter(e => e.url.trim());
-    const freshFields = useAppStore.getState().tasks.find(t => t.id === task.id)?.customFields;
-    updateTask(task.id, {
-      customFields: { ...(freshFields ?? task.customFields), [col.id]: filtered.length ? serializeLinkEntries(filtered) : '' },
-    });
+    if (col) {
+      const freshFields = useAppStore.getState().tasks.find(t => t.id === task.id)?.customFields;
+      updateTask(task.id, {
+        customFields: { ...(freshFields ?? task.customFields), [col.id]: filtered.length ? serializeLinkEntries(filtered) : '' },
+      });
+    } else {
+      updateTask(task.id, { link: filtered.length ? serializeLinkEntries(filtered) : undefined });
+    }
     setOpen(false);
   };
 
@@ -691,6 +696,20 @@ function TaskRow({
       {/* Status dot — reflects current status */}
       <span className={`w-2 h-2 rounded-full shrink-0 ${(STATUS_META[task.status] ?? STATUS_META['Backlog']).dot}`} />
 
+      {/* Etapa — bloco do fluxo de onde a tarefa veio */}
+      <div className="pl-3 pr-2 min-w-0">
+        {etapaLabel ? (
+          <span
+            className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
+            title={etapaLabel}
+          >
+            <span className="truncate">{etapaLabel}</span>
+          </span>
+        ) : (
+          <span className="text-[12px] text-gray-300">—</span>
+        )}
+      </div>
+
       {/* Task name — click opens modal */}
       <p
         onClick={() => !selectionActive && setActiveTask(task.id)}
@@ -742,33 +761,21 @@ function TaskRow({
         )}
       </p>
 
-      {/* Etapa — bloco do fluxo de onde a tarefa veio */}
-      <div className="pr-2 min-w-0">
-        {etapaLabel ? (
-          <span
-            className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
-            title={etapaLabel}
-          >
-            <span className="truncate">{etapaLabel}</span>
-          </span>
-        ) : (
-          <span className="text-[12px] text-gray-300">—</span>
-        )}
-      </div>
 
       {/* Sprint */}
       <div className="pr-2 min-w-0"><SprintPicker task={task} /></div>
 
-      {/* Inline pickers */}
+      {/* Inline pickers — sequência: Status, Responsável, Prazo, Prioridade, Link */}
       <div><StatusPicker task={task} /></div>
-      <div><PriorityPicker task={task} /></div>
+      <AssigneePicker task={task} />
       <DueDatePicker task={task} />
+      <div><PriorityPicker task={task} /></div>
+      <LinkCell task={task} />
 
       {customCols.map(col => (
         <CustomCell key={col.id} task={task} col={col} />
       ))}
 
-      <AssigneePicker task={task} />
       <div /> {/* empty cell for + column */}
     </div>
   );
@@ -1034,6 +1041,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
       <span />
       <span />
       <span className="w-2 h-2 rounded-full bg-gray-200 mx-auto block" />
+      <span /> {/* etapa */}
       <div className="pl-3 pr-2 flex items-center gap-2 col-span-1">
         <input
           autoFocus
@@ -1049,7 +1057,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
         />
       </div>
       {/* Empty cells to fill the grid */}
-      <span /><span /><span /><span /><span />
+      <span /><span /><span /><span /><span /><span />
     </div>
   );
 }
@@ -1189,12 +1197,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
             <span />
             <span />
             <span className="pl-3 relative flex items-center">
-              Nome da tarefa
-              <span onMouseDown={e => startResize('name', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
-            </span>
-            <span className="relative flex items-center">
               Etapa
               <span onMouseDown={e => startResize('etapa', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+            </span>
+            <span className="relative flex items-center">
+              Nome da tarefa
+              <span onMouseDown={e => startResize('name', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             <span className="relative flex items-center">
               Sprint
@@ -1205,12 +1213,20 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
               <span onMouseDown={e => startResize('status', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             <span className="relative flex items-center">
-              Prioridade
-              <span onMouseDown={e => startResize('priority', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+              Responsável
+              <span onMouseDown={e => startResize('resp', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             <span className="relative flex items-center">
               Prazo
               <span onMouseDown={e => startResize('dueDate', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+            </span>
+            <span className="relative flex items-center">
+              Prioridade
+              <span onMouseDown={e => startResize('priority', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
+            </span>
+            <span className="relative flex items-center">
+              Link/Arquivo
+              <span onMouseDown={e => startResize('link', e)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
             </span>
             {customColumns.map(col => (
               <span key={col.id} className="relative flex items-center gap-1 group/colhdr">
@@ -1232,7 +1248,6 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                 <span onMouseDown={e => startResize(col.id, e, true)} className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-gray-200 rounded" />
               </span>
             ))}
-            <span className="text-right pr-2">Responsável</span>
             <span className="flex items-center justify-center">
               <div className="relative">
                 <button
