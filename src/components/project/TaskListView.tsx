@@ -587,6 +587,13 @@ function TaskRow({
   const flowGhost = !!linkedFlow && !linkedFlow.nodes.some(n =>
     n.tasks.some(ft => ft.id === task.flowTaskId || (ft.subtasks ?? []).some(st => st.id === task.flowTaskId))
   );
+  // Nome da etapa: o campo gravado, ou — fallback à prova de cache velho — o
+  // título do bloco do fluxo que contém esta tarefa, derivado na hora.
+  const etapaLabel = task.etapa ?? (linkedFlow && !flowGhost
+    ? linkedFlow.nodes.find(n =>
+        n.tasks.some(ft => ft.id === task.flowTaskId || (ft.subtasks ?? []).some(st => st.id === task.flowTaskId))
+      )?.title
+    : undefined);
 
   return (
     <div
@@ -681,12 +688,12 @@ function TaskRow({
 
       {/* Etapa — bloco do fluxo de onde a tarefa veio */}
       <div className="pr-2 min-w-0">
-        {task.etapa ? (
+        {etapaLabel ? (
           <span
             className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
-            title={task.etapa}
+            title={etapaLabel}
           >
-            <span className="truncate">{task.etapa}</span>
+            <span className="truncate">{etapaLabel}</span>
           </span>
         ) : (
           <span className="text-[12px] text-gray-300">—</span>
@@ -1082,15 +1089,24 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
   const topLevelTasks = sortFn ? [...rawTopLevel].sort(sortFn) : rawTopLevel;
 
   // In "separate" mode, subtasks appear as flat rows grouped by phase
+  // Mapa flowTaskId → título do bloco, para a etapa efetiva do agrupamento.
+  const linkedBoard = useAppStore(s => s.flows.find(f => f.linkedProjectId === projectId));
+  const etapaByFlowTaskId = new Map<string, string>();
+  linkedBoard?.nodes.forEach(n => n.tasks.forEach(ft => {
+    etapaByFlowTaskId.set(ft.id, n.title);
+    (ft.subtasks ?? []).forEach(st => etapaByFlowTaskId.set(st.id, n.title));
+  }));
+
   const getPhaseRows = (phaseName: string): Task[] => {
     let parents = topLevelTasks.filter(t => t.phase === phaseName);
     // Aglutinação por Etapa (só na ordem manual, para não brigar com o
     // Ordenar): tarefas do mesmo bloco do fluxo ficam adjacentes, na ordem em
     // que cada etapa aparece; as sem etapa vêm depois, na ordem original.
     if (!sortFn) {
+      const effEtapa = (t: Task) => t.etapa ?? (t.flowTaskId ? etapaByFlowTaskId.get(t.flowTaskId) : undefined);
       const etapaOrder = new Map<string, number>();
-      parents.forEach(t => { if (t.etapa && !etapaOrder.has(t.etapa)) etapaOrder.set(t.etapa, etapaOrder.size); });
-      const rank = (t: Task) => (t.etapa && etapaOrder.has(t.etapa) ? etapaOrder.get(t.etapa)! : etapaOrder.size);
+      parents.forEach(t => { const e = effEtapa(t); if (e && !etapaOrder.has(e)) etapaOrder.set(e, etapaOrder.size); });
+      const rank = (t: Task) => { const e = effEtapa(t); return e && etapaOrder.has(e) ? etapaOrder.get(e)! : etapaOrder.size; };
       parents = [...parents].sort((a, b) => rank(a) - rank(b)); // sort é estável
     }
     if (subtaskMode !== 'separate') return parents;

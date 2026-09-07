@@ -375,6 +375,10 @@ function fetchAll(table: string, order: string[]) {
 
 // ── Carga inicial ────────────────────────────────────────────────────────────
 export async function loadFromSupabase(attempt = 0) {
+  // Espera a sessão do Auth hidratar/renovar ANTES das queries: um token
+  // expirado em voo faria o PostgREST devolver vazio/erro e o app cairia no
+  // cache local — mesma família da corrida corrigida no join do Realtime.
+  await supabase.auth.getSession();
   const queries = [
     ...ROW_ENTITIES.map(cfg => fetchAll(cfg.table, cfg.order)),
     supabase.from(ACCESS_TABLE).select('*'),
@@ -411,10 +415,16 @@ export async function loadFromSupabase(attempt = 0) {
     const current = store[cfg.storeKey] as any[];
     if (rows.length === 0 && current.length > 0 && cfg.table !== 'personal_tasks' && cfg.table !== 'trash') {
       // Tabela vazia com dados locais (fora as que podem legitimamente estar
-      // vazias por RLS/uso): mantém o local e NÃO empurra nada — investigar.
+      // vazias por RLS/uso): mantém o local, NÃO empurra nada e re-tenta —
+      // o caso típico é uma resposta vazia transitória (token/rede), não uma
+      // tabela realmente vazia.
       console.error('[rowsync] tabela ' + cfg.table + ' vazia com dados locais — mantendo dados locais');
       const localRows = current.map(cfg.toRow);
       baselines.set(cfg.table, new Map(localRows.map(r => [r.id as string, canonRow(r)])));
+      if (attempt < 5) {
+        const delay = Math.min(2000 * 2 ** attempt, 30000);
+        setTimeout(() => { void loadFromSupabase(attempt + 1); }, delay);
+      }
       continue;
     }
     patch[cfg.storeKey] = rows.map(cfg.fromRow);
