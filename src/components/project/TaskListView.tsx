@@ -1,6 +1,6 @@
 import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus , TeamMember, Project } from '../../types';
+import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus , TeamMember, Project , Team } from '../../types';
 import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { sprintLabel, sprintOptions, currentSprint } from '../../lib/sprints';
@@ -12,29 +12,37 @@ type SubtaskMode = 'collapsed' | 'expanded' | 'separate';
 
 
 
-// Seletor de responsável: TODOS os integrantes aparecem (o filtro por acesso
-// escondia quem não tinha o projeto na lista explícita — projetos novos não
-// entram nas listas antigas). Ordena: time/acesso do projeto primeiro,
-// Externos por último.
+// Quem pode ser responsável numa tarefa deste projeto:
+//  1. Se a EMPRESA do projeto tem equipe(s) definida(s) (aba Equipes), só os
+//     integrantes delas (+ o time do projeto + quem já está atribuído, para o
+//     avatar não sumir e dar para remover).
+//  2. Sem equipe definida: regra de acesso (Admin/Gerente sempre; Membro com o
+//     projeto/empresa na lista ou sem restrição; Externos só se estiverem no
+//     time do projeto).
 function assignableMembers(
   teamMembers: TeamMember[],
+  teams: Team[],
   project: Project | undefined,
   memberAccess: Record<string, string[]>,
   memberCompanyAccess: Record<string, string[]>,
+  extraIds: string[] = [],
 ): TeamMember[] {
   if (!project) return teamMembers;
-  const rank = (m: TeamMember) => {
-    if (m.permission === 'Externo') return 2;
-    if (m.permission === 'Admin' || m.permission === 'Gerente') return 0;
-    if (project.teamMemberIds.includes(m.id)) return 0;
-    const theirProjects  = memberAccess[m.id];
-    const theirCompanies = memberCompanyAccess[m.id];
-    if (theirProjects?.includes(project.id)) return 0;
-    if (theirCompanies?.includes(project.companyId)) return 0;
-    if (theirProjects === undefined && theirCompanies === undefined) return 0;
-    return 1;
-  };
-  return [...teamMembers].sort((a, b) => rank(a) - rank(b));
+  const companyTeams = teams.filter(t => t.companyId === project.companyId);
+  const ids = new Set<string>();
+  if (companyTeams.length > 0) {
+    companyTeams.forEach(t => t.memberIds.forEach(id => ids.add(id)));
+  } else {
+    for (const m of teamMembers) {
+      if (m.permission === 'Externo') continue;
+      if (m.permission === 'Admin' || m.permission === 'Gerente') { ids.add(m.id); continue; }
+      const tp = memberAccess[m.id], tc = memberCompanyAccess[m.id];
+      if (tp?.includes(project.id) || tc?.includes(project.companyId) || (tp === undefined && tc === undefined)) ids.add(m.id);
+    }
+  }
+  project.teamMemberIds.forEach(id => ids.add(id));
+  extraIds.forEach(id => ids.add(id));
+  return teamMembers.filter(m => ids.has(m.id));
 }
 
 function usePopover() {
@@ -253,13 +261,14 @@ function DueDatePicker({ task }: { task: Task }) {
 }
 
 function AssigneePicker({ task }: { task: Task }) {
-  const { updateTask, teamMembers, projects, memberAccess, memberCompanyAccess } = useAppStore();
+  const { updateTask, teamMembers, teams, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const { open, setOpen, ref } = usePopover();
   const project = projects.find(p => p.id === task.projectId);
   const isBulk = _selIds.has(task.id) && _selIds.size > 1;
 
-  // TODOS os integrantes, ordenados: time/acesso do projeto primeiro.
-  const members = assignableMembers(teamMembers, project, memberAccess, memberCompanyAccess);
+  const members = assignableMembers(
+    teamMembers, teams, project, memberAccess, memberCompanyAccess, getAssigneeIds(task)
+  );
 
   const currentIds = getAssigneeIds(task);
   const assignees  = teamMembers.filter(m => currentIds.includes(m.id));
@@ -1083,9 +1092,9 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
 export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null }) {
-  const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, projects, memberAccess, memberCompanyAccess } = useAppStore();
+  const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
-  const projectMembers = assignableMembers(teamMembers, project, memberAccess, memberCompanyAccess);
+  const projectMembers = assignableMembers(teamMembers, teamsList, project, memberAccess, memberCompanyAccess);
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');

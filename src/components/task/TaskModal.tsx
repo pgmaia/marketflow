@@ -96,7 +96,7 @@ function StyledSelect<T extends string>({ value, options, onChange }: {
 }
 
 export function TaskModal() {
-  const { activeTaskId, tasks, teamMembers, projects, updateTask, deleteTask, addTask, setActiveTask, memberAccess, memberCompanyAccess, taskTypes } = useAppStore();
+  const { activeTaskId, tasks, teamMembers, teams, projects, updateTask, deleteTask, addTask, setActiveTask, memberAccess, memberCompanyAccess, taskTypes } = useAppStore();
   const task = tasks.find(t => t.id === activeTaskId);
   const [localDescription, setLocalDescription] = useState('');
   const [descDirty, setDescDirty] = useState(false);
@@ -211,21 +211,26 @@ export function TaskModal() {
   const currentAssigneeIds = getAssigneeIds(task);
   const assignees = teamMembers.filter(m => currentAssigneeIds.includes(m.id));
 
-  // TODOS os integrantes (o filtro por acesso escondia quem não tinha o
-  // projeto na lista explícita). Ordena: time/acesso do projeto primeiro,
-  // Externos por último.
+  // Responsáveis possíveis: integrantes da(s) equipe(s) da empresa do projeto
+  // (aba Equipes) + time do projeto + já atribuídos; sem equipe definida, cai
+  // na regra de acesso (sem Externos). Espelha o assignableMembers da Lista.
   const projectMembers = (() => {
     if (!project) return teamMembers;
-    const rank = (m: typeof teamMembers[number]) => {
-      if (m.permission === 'Externo') return 2;
-      if (m.permission === 'Admin' || m.permission === 'Gerente') return 0;
-      if (project.teamMemberIds.includes(m.id)) return 0;
-      if (memberAccess[m.id]?.includes(project.id)) return 0;
-      if (memberCompanyAccess[m.id]?.includes(project.companyId)) return 0;
-      if (memberAccess[m.id] === undefined && memberCompanyAccess[m.id] === undefined) return 0;
-      return 1;
-    };
-    return [...teamMembers].sort((a, b) => rank(a) - rank(b));
+    const companyTeams = teams.filter(t => t.companyId === project.companyId);
+    const ids = new Set<string>();
+    if (companyTeams.length > 0) {
+      companyTeams.forEach(t => t.memberIds.forEach(id => ids.add(id)));
+    } else {
+      for (const m of teamMembers) {
+        if (m.permission === 'Externo') continue;
+        if (m.permission === 'Admin' || m.permission === 'Gerente') { ids.add(m.id); continue; }
+        const tp = memberAccess[m.id], tc = memberCompanyAccess[m.id];
+        if (tp?.includes(project.id) || tc?.includes(project.companyId) || (tp === undefined && tc === undefined)) ids.add(m.id);
+      }
+    }
+    project.teamMemberIds.forEach(id => ids.add(id));
+    currentAssigneeIds.forEach(id => ids.add(id));
+    return teamMembers.filter(m => ids.has(m.id));
   })();
 
   const toggleAssignee = (memberId: string) => {
