@@ -645,6 +645,7 @@ function TaskRow({
   indent = false,
   lastChild = false,
   parentTitle,
+  onDropTask,
   subtasks,
   expanded,
   onToggle,
@@ -657,6 +658,7 @@ function TaskRow({
   indent?: boolean;
   lastChild?: boolean;
   parentTitle?: string;
+  onDropTask?: (sourceId: string, targetId: string, edge: 'top' | 'bottom') => void;
   subtasks: Task[];
   expanded: boolean;
   onToggle: () => void;
@@ -677,6 +679,7 @@ function TaskRow({
   const flowGhost = !!linkedFlow && !linkedFlow.nodes.some(n =>
     n.tasks.some(ft => ft.id === task.flowTaskId || (ft.subtasks ?? []).some(st => st.id === task.flowTaskId))
   );
+  const [dropEdge, setDropEdge] = useState<'top' | 'bottom' | null>(null);
   // Nome da etapa: o campo gravado, ou — fallback à prova de cache velho — o
   // título do bloco do fluxo que contém esta tarefa, derivado na hora.
   const etapaLabel = task.etapa ?? (linkedFlow && !flowGhost
@@ -693,12 +696,41 @@ function TaskRow({
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => (e.target as HTMLElement).style.opacity = '0.4', 0);
       }}
-      onDragEnd={e => { (e.target as HTMLElement).style.opacity = '1'; }}
-      className={`grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
+      onDragEnd={e => { (e.target as HTMLElement).style.opacity = '1'; setDropEdge(null); }}
+      onDragOver={onDropTask ? (e => {
+        // Só reage ao arrasto de TAREFA (o de coluna carrega 'phaseid').
+        if (!e.dataTransfer.types.includes('taskid')) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const r = e.currentTarget.getBoundingClientRect();
+        setDropEdge(e.clientY < r.top + r.height / 2 ? 'top' : 'bottom');
+      }) : undefined}
+      onDragLeave={onDropTask ? (() => setDropEdge(null)) : undefined}
+      onDrop={onDropTask ? (e => {
+        const sourceId = e.dataTransfer.getData('taskId');
+        if (!sourceId) return;
+        e.preventDefault();
+        e.stopPropagation();   // não deixa o drop da fase sobrescrever a posição
+        // Borda calculada no PRÓPRIO evento: depender do estado do dragover
+        // erra a posição quando o usuário solta antes do React repintar.
+        const r = e.currentTarget.getBoundingClientRect();
+        const edge: 'top' | 'bottom' = e.clientY < r.top + r.height / 2 ? 'top' : 'bottom';
+        setDropEdge(null);
+        if (sourceId !== task.id) onDropTask(sourceId, task.id, edge);
+      }) : undefined}
+      className={`relative grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
         selected ? 'bg-blue-50/60' : indent ? 'bg-[#FBFBFD] hover:bg-[#F4F5F8]' : 'hover:bg-[#FAFAFA]'
       } ${flowGhost ? 'opacity-60 grayscale' : ''}`}
       style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px' }}
     >
+      {/* Guia de inserção do arrasto */}
+      {dropEdge && (
+        <span
+          aria-hidden
+          className={`absolute left-0 right-0 h-[2px] bg-[#1f6feb] z-10 pointer-events-none ${dropEdge === 'top' ? 'top-0' : 'bottom-0'}`}
+        />
+      )}
+
       {/* Checkbox */}
       <div
         className="flex items-center justify-center cursor-pointer"
@@ -1128,7 +1160,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
 export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, subtaskMode = 'collapsed' }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null; subtaskMode?: SubtaskMode }) {
-  const { updateTask, deleteTask, duplicateTasks, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
+  const { updateTask, deleteTask, duplicateTasks, moveTaskOrder, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
   const projectMembers = assignableMembers(teamMembers, teamsList, project, memberAccess, memberCompanyAccess);
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
@@ -1212,6 +1244,16 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
     etapaByFlowTaskId.set(ft.id, n.title);
     (ft.subtasks ?? []).forEach(st => etapaByFlowTaskId.set(st.id, n.title));
   }));
+
+  /** Solta a tarefa arrastada acima/abaixo da linha alvo, dentro da fase. */
+  const handleReorder = (phaseName: string) =>
+    (sourceId: string, targetId: string, edge: 'top' | 'bottom') => {
+      const list = getPhaseRows(phaseName).filter(t => !t.parentTaskId);
+      const i = list.findIndex(t => t.id === targetId);
+      const beforeId = edge === 'top' ? targetId : (list[i + 1]?.id ?? null);
+      if (beforeId === sourceId) return; // já está nessa posição
+      moveTaskOrder(sourceId, beforeId, phaseName);
+    };
 
   const getPhaseRows = (phaseName: string): Task[] => {
     let parents = topLevelTasks.filter(t => t.phase === phaseName);
@@ -1330,7 +1372,10 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
                   e.preventDefault();
                   setDragOverPhase(null);
                   const taskId = e.dataTransfer.getData('taskId');
-                  if (taskId) updateTask(taskId, { phase: ph.name });
+                  if (!taskId) return;
+                  // Soltar no espaço vazio da fase = jogar para o fim dela.
+                  if (sortFn) updateTask(taskId, { phase: ph.name });
+                  else moveTaskOrder(taskId, null, ph.name);
                 }}
                 className={dragOverPhase === ph.name ? 'ring-2 ring-inset ring-[#1f6feb]/30 rounded-lg' : ''}
               >
@@ -1388,6 +1433,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
                                 onSelect={() => toggleSelect(task.id)}
                                 selectionActive={selectedIds.size > 0}
                                 customCols={customColumns}
+                                onDropTask={sortFn ? undefined : handleReorder(ph.name)}
                               />
                               {isExpanded && subtasks.map((sub, si) => (
                                 <TaskRow

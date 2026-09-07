@@ -37,7 +37,7 @@ export function calcNextDueDate(from: string, type: RecurrenceType, daysAfter = 
 import { seedCompanies, seedProjects, seedTasks, seedTeamMembers, DEFAULT_PHASES, MEMBER_PASSWORDS } from '../data/seed';
 import { localISO } from '../lib/date';
 import { supabase } from '../lib/supabase';
-import { loadFromSupabase } from '../lib/syncSupabase';
+import { loadFromSupabase, getSortOrder, setSortOrder } from '../lib/syncSupabase';
 import { syncAuthAccount } from '../lib/memberAuth';
 
 // IDs that belong to seed data — used to distinguish user-created records
@@ -142,6 +142,7 @@ interface AppState {
   // Task CRUD
   addTask: (task: Task) => void;
   duplicateTasks: (ids: string[]) => void;
+  moveTaskOrder: (sourceId: string, targetId: string | null, phase: string) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, newPhase: string, newStatus: TaskStatus) => void;
@@ -892,6 +893,58 @@ export const useAppStore = create<AppState>()(
           }),
         });
         return { flows, tasks: [...s.tasks, { ...task, flowTaskId, etapa: host.title }] };
+      }),
+      // Reordena manualmente na Lista: leva `sourceId` para antes de
+      // `targetId` (ou para o fim da fase quando null) e ajusta a fase.
+      // A ordem persiste em tasks.sort_order por índice FRACIONÁRIO: só a
+      // linha movida é regravada — nada de reescrever a fase inteira, que
+      // atropelaria edições simultâneas de outra pessoa.
+      moveTaskOrder: (sourceId, targetId, phase) => set((s) => {
+        if (sourceId === targetId) return s;
+        const src = s.tasks.find(t => t.id === sourceId);
+        if (!src) return s;
+
+        const arr = [...s.tasks];
+        const from = arr.findIndex(t => t.id === sourceId);
+        const moved = { ...arr[from], phase };
+        arr.splice(from, 1);
+        // Alvo recalculado APÓS a remoção (senão arrastar para baixo cai uma
+        // posição além do ponto de soltura).
+        const to = targetId ? arr.findIndex(t => t.id === targetId) : -1;
+        if (to >= 0) arr.splice(to, 0, moved);
+        else {
+          // Fim da fase: depois da última tarefa dela (ou no fim da lista).
+          const lastOfPhase = arr.map((t, i) => ({ t, i }))
+            .filter(({ t }) => t.projectId === moved.projectId && !t.parentTaskId && t.phase === phase)
+            .pop();
+          arr.splice(lastOfPhase ? lastOfPhase.i + 1 : arr.length, 0, moved);
+        }
+
+        // ── nova ordem persistida: ponto médio entre os vizinhos da fase ──
+        const siblings = arr.filter(t => t.projectId === moved.projectId && !t.parentTaskId && t.phase === phase);
+        const idx = siblings.findIndex(t => t.id === sourceId);
+        const prev = idx > 0 ? siblings[idx - 1] : undefined;
+        const next = idx >= 0 && idx < siblings.length - 1 ? siblings[idx + 1] : undefined;
+        const po = prev ? getSortOrder('tasks', prev.id) : undefined;
+        const no = next ? getSortOrder('tasks', next.id) : undefined;
+        let novo: number;
+        if (po !== undefined && no !== undefined) novo = (po + no) / 2;
+        else if (po !== undefined) novo = po + 1000;
+        else if (no !== undefined) novo = no - 1000;
+        else novo = Date.now();
+        // Espaço esgotado entre os vizinhos (ordens iguais/coladas): renumera
+        // a fase com folga — caso raro, e só então vale o custo.
+        if ((po !== undefined && Math.abs(novo - po) < 1e-6) || (no !== undefined && Math.abs(no - novo) < 1e-6)) {
+          siblings.forEach((t, i) => setSortOrder('tasks', t.id, (i + 1) * 1000));
+        } else {
+          setSortOrder('tasks', sourceId, novo);
+        }
+
+        // Subtarefas seguem a mãe de fase (a lista as agrupa sob ela).
+        const tasks = arr.map(t =>
+          t.parentTaskId === sourceId && t.phase !== phase ? { ...t, phase } : t
+        );
+        return { tasks };
       }),
       // Duplica uma ou várias tarefas. Passa por addTask para reaproveitar o
       // espelhamento no fluxo (a cópia nasce como tarefa NOVA do projeto: não

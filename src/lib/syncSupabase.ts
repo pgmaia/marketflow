@@ -66,6 +66,17 @@ type Row = Record<string, unknown>;
 type RowChangePayload = { eventType?: string; new?: Row; old?: Row };
 type StoreState = ReturnType<typeof useAppStore.getState>;
 
+/** Ordem persistida de uma linha (usada pela reordenação manual da Lista). */
+export function getSortOrder(table: string, id: string): number | undefined {
+  return sortOrders.get(table)?.get(id);
+}
+/** Grava a nova ordem de uma linha; o diff detecta a mudança e envia só ela. */
+export function setSortOrder(table: string, id: string, value: number) {
+  let m = sortOrders.get(table);
+  if (!m) { m = new Map(); sortOrders.set(table, m); }
+  m.set(id, value);
+}
+
 const ts = (v: unknown) => (v ? new Date(v as string).toISOString() : null);
 
 /** Canon de uma linha: ignora created_at/updated_at (o banco os controla) e
