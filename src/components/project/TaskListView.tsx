@@ -643,6 +643,7 @@ function CustomCell({ task, col }: { task: Task; col: CustomColumn }) {
 function TaskRow({
   task,
   indent = false,
+  lastChild = false,
   subtasks,
   expanded,
   onToggle,
@@ -653,6 +654,7 @@ function TaskRow({
 }: {
   task: Task;
   indent?: boolean;
+  lastChild?: boolean;
   subtasks: Task[];
   expanded: boolean;
   onToggle: () => void;
@@ -690,7 +692,9 @@ function TaskRow({
         setTimeout(() => (e.target as HTMLElement).style.opacity = '0.4', 0);
       }}
       onDragEnd={e => { (e.target as HTMLElement).style.opacity = '1'; }}
-      className={`grid items-center border-b border-[#F3F4F6] transition-colors cursor-default ${selected ? 'bg-blue-50/60' : 'hover:bg-[#FAFAFA]'} ${flowGhost ? 'opacity-60 grayscale' : ''}`}
+      className={`grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
+        selected ? 'bg-blue-50/60' : indent ? 'bg-[#FBFBFD] hover:bg-[#F4F5F8]' : 'hover:bg-[#FAFAFA]'
+      } ${flowGhost ? 'opacity-60 grayscale' : ''}`}
       style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px' }}
     >
       {/* Checkbox */}
@@ -706,7 +710,6 @@ function TaskRow({
       {/* Expand/collapse toggle */}
       <div
         className="flex items-center justify-center"
-        style={{ paddingLeft: indent ? '16px' : '0' }}
         onClick={e => { if (hasSubtasks) { e.stopPropagation(); onToggle(); } }}
       >
         {!indent && hasSubtasks ? (
@@ -719,11 +722,11 @@ function TaskRow({
       </div>
 
       {/* Status dot — reflects current status */}
-      <span className={`w-2 h-2 rounded-full shrink-0 ${(STATUS_META[task.status] ?? STATUS_META['Backlog']).dot}`} />
+      <span className={`rounded-full shrink-0 ${indent ? 'w-1.5 h-1.5 opacity-70' : 'w-2 h-2'} ${(STATUS_META[task.status] ?? STATUS_META['Backlog']).dot}`} />
 
-      {/* Etapa — bloco do fluxo de onde a tarefa veio */}
+      {/* Etapa — bloco do fluxo de onde a tarefa veio (subtarefa herda a da mãe) */}
       <div className="pl-3 pr-2 min-w-0">
-        {etapaLabel ? (
+        {indent ? null : etapaLabel ? (
           <span
             className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
             title={etapaLabel}
@@ -738,9 +741,28 @@ function TaskRow({
       {/* Task name — click opens modal */}
       <p
         onClick={() => !selectionActive && setActiveTask(task.id)}
-        className={`text-[13px] font-medium pl-3 truncate cursor-pointer ${isDone ? 'line-through text-gray-400' : task.isMilestone ? 'font-semibold text-blue-700' : task.isMeta ? 'font-semibold text-green-700' : 'text-[#111]'} transition-colors flex items-center gap-1.5`}
+        className={`relative truncate cursor-pointer transition-colors flex items-center gap-1.5 ${
+          indent ? 'pl-9 text-[12.5px] font-normal' : 'pl-3 text-[13px] font-medium'
+        } ${
+          isDone ? 'line-through text-gray-400'
+            : task.isMilestone ? 'font-semibold text-blue-700'
+            : task.isMeta ? 'font-semibold text-green-700'
+            : indent ? 'text-gray-600' : 'text-[#111]'
+        }`}
       >
-        {indent && <span className="text-gray-300 mr-2">↳</span>}
+        {/* Conector em árvore: cotovelo até o nome + linha que desce ao próximo
+            irmão (some no último filho, fechando o grupo). */}
+        {indent && (
+          <>
+            <span
+              aria-hidden
+              className="absolute left-4 top-0 w-3.5 h-1/2 border-l-2 border-b-2 border-gray-200 rounded-bl-md pointer-events-none"
+            />
+            {!lastChild && (
+              <span aria-hidden className="absolute left-4 top-1/2 bottom-0 border-l-2 border-gray-200 pointer-events-none" />
+            )}
+          </>
+        )}
         {flowGhost && (
           <span
             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[10px] font-bold border border-gray-200 shrink-0"
@@ -1355,11 +1377,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                                 selectionActive={selectedIds.size > 0}
                                 customCols={customColumns}
                               />
-                              {isExpanded && subtasks.map(sub => (
+                              {isExpanded && subtasks.map((sub, si) => (
                                 <TaskRow
                                   key={sub.id}
                                   task={sub}
                                   indent
+                                  lastChild={si === subtasks.length - 1}
                                   subtasks={[]}
                                   expanded={false}
                                   onToggle={() => {}}
@@ -1437,11 +1460,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
                         selectionActive={selectedIds.size > 0}
                         customCols={customColumns}
                       />
-                      {isExpanded && subtasks.map(sub => (
+                      {isExpanded && subtasks.map((sub, si) => (
                         <TaskRow
                           key={sub.id}
                           task={sub}
                           indent
+                          lastChild={si === subtasks.length - 1}
                           subtasks={[]}
                           expanded={false}
                           onToggle={() => {}}
