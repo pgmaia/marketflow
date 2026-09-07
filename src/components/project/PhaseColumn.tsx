@@ -123,10 +123,10 @@ export function PhaseColumn({ phase, phaseId, index, tasks, onAddTask, onReorder
       </div>
 
       {/* ── Task cards ── */}
-      <div className={`flex flex-col gap-2.5 flex-1 overflow-y-auto pb-2 rounded-xl transition-colors ${dragOver ? 'bg-gray-100/60 ring-2 ring-dashed ring-gray-300' : ''}`}>
+      <div className={`flex flex-col gap-2.5 flex-1 min-h-0 overflow-y-auto pb-2 rounded-xl transition-colors ${dragOver ? 'bg-gray-100/60 ring-2 ring-dashed ring-gray-300' : ''}`}>
         {metas.length > 0 && (
           <>
-            <p className="text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1.5 mt-1">Metas</p>
+            <p className="shrink-0 text-[10px] font-bold text-green-700 uppercase tracking-wider mb-1.5 mt-1">Metas</p>
             {metas.map(task => (
               <TaskCard key={task.id} task={task} />
             ))}
@@ -134,7 +134,7 @@ export function PhaseColumn({ phase, phaseId, index, tasks, onAddTask, onReorder
         )}
         {milestones.length > 0 && (
           <>
-            <p className="text-[10px] font-bold text-[#1f6feb] uppercase tracking-wider mb-1.5 mt-1">Marcos</p>
+            <p className="shrink-0 text-[10px] font-bold text-[#1f6feb] uppercase tracking-wider mb-1.5 mt-1">Marcos</p>
             {milestones.map(task => (
               <TaskCard key={task.id} task={task} />
             ))}
@@ -146,7 +146,7 @@ export function PhaseColumn({ phase, phaseId, index, tasks, onAddTask, onReorder
 
         <button
           onClick={() => onAddTask(phase)}
-          className="flex items-center gap-2 px-3.5 py-3 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#1f6feb]/40 hover:text-[#1f6feb] hover:bg-[#1f6feb]/3 transition-all"
+          className="shrink-0 flex items-center gap-2 px-3.5 py-3 rounded-xl border border-dashed border-gray-200 text-[12px] text-gray-400 hover:border-[#1f6feb]/40 hover:text-[#1f6feb] hover:bg-[#1f6feb]/3 transition-all"
         >
           <Plus size={13} />
           Nova tarefa

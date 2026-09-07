@@ -49,7 +49,7 @@ export function TaskCard({ task }: TaskCardProps) {
     return (
       <div
         onClick={() => setActiveTask(task.id)}
-        className={`cursor-pointer group relative rounded-xl border-2 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${isDone ? 'border-green-200 bg-green-50/50' : 'border-[#1f6feb]/30 bg-orange-50/40'}`}
+        className={`shrink-0 cursor-pointer group relative rounded-xl border-2 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${isDone ? 'border-green-200 bg-green-50/50' : 'border-[#1f6feb]/30 bg-orange-50/40'}`}
       >
         <div className="px-3 py-2.5 flex items-center gap-2.5">
           {/* Diamond icon: a rotated square */}
@@ -76,7 +76,7 @@ export function TaskCard({ task }: TaskCardProps) {
     return (
       <div
         onClick={() => setActiveTask(task.id)}
-        className={`cursor-pointer group relative rounded-xl border-2 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${isDone ? 'border-green-200 bg-green-50/50' : 'border-green-200 bg-emerald-50/40'}`}
+        className={`shrink-0 cursor-pointer group relative rounded-xl border-2 overflow-hidden transition-all hover:shadow-md hover:-translate-y-0.5 ${isDone ? 'border-green-200 bg-green-50/50' : 'border-green-200 bg-emerald-50/40'}`}
       >
         <div className="px-3 py-2.5">
           <div className="flex items-center gap-2.5 mb-2">
@@ -114,7 +114,7 @@ export function TaskCard({ task }: TaskCardProps) {
       }}
       onDragEnd={e => { (e.target as HTMLElement).style.opacity = '1'; }}
       onClick={() => setActiveTask(task.id)}
-      className={`bg-white rounded-xl border ${statusRing[task.status] ?? 'border-gray-100'} cursor-grab active:cursor-grabbing hover:shadow-md hover:-translate-y-0.5 transition-all group relative overflow-hidden`}
+      className={`shrink-0 bg-white rounded-xl border ${statusRing[task.status] ?? 'border-gray-100'} cursor-grab active:cursor-grabbing hover:shadow-md hover:-translate-y-0.5 transition-all group relative overflow-hidden`}
     >
       {/* Priority accent bar */}
       <div
