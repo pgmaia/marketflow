@@ -1,4 +1,4 @@
-import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch } from 'lucide-react';
+import { AlertCircle, Calendar, ChevronDown, ChevronRight, ExternalLink, Flag, Hash, Layers, Link2, List, MoreHorizontal, Pencil, Plus, RefreshCw, Target, Text, Trash2, Type, X , GitBranch , Copy } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { CustomColumn, CustomColumnType, ProjectPhase, Task, TaskPriority, TaskStatus , TeamMember, Project , Team } from '../../types';
 import { getAssigneeIds } from '../../types';
@@ -1092,7 +1092,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
 export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null }) {
-  const { updateTask, deleteTask, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
+  const { updateTask, deleteTask, duplicateTasks, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
   const projectMembers = assignableMembers(teamMembers, teamsList, project, memberAccess, memberCompanyAccess);
   const [collapsedPhases, setCollapsedPhases] = useState<Record<string, boolean>>({});
@@ -1608,6 +1608,16 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn }
             </div>
 
             <div className="w-px h-4 bg-gray-700 mx-1" />
+
+            {/* ── Duplicar ── */}
+            <button
+              onClick={() => { duplicateTasks(selectedTasks.map(t => t.id)); clearSelection(); }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors"
+              title="Duplicar selecionadas (com subtarefas)"
+            >
+              <Copy size={12} />
+              Duplicar
+            </button>
 
             {/* ── Excluir ── */}
             <button

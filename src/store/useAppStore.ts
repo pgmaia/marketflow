@@ -141,6 +141,7 @@ interface AppState {
 
   // Task CRUD
   addTask: (task: Task) => void;
+  duplicateTasks: (ids: string[]) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   moveTask: (taskId: string, newPhase: string, newStatus: TaskStatus) => void;
@@ -892,6 +893,32 @@ export const useAppStore = create<AppState>()(
         });
         return { flows, tasks: [...s.tasks, { ...task, flowTaskId, etapa: host.title }] };
       }),
+      // Duplica uma ou várias tarefas. Passa por addTask para reaproveitar o
+      // espelhamento no fluxo (a cópia nasce como tarefa NOVA do projeto: não
+      // herda flowTaskId/origin, senão viraria gêmea da mesma tarefa do fluxo).
+      // Subtarefas do original vêm junto; uma subtarefa selecionada com o pai
+      // não é duplicada duas vezes.
+      duplicateTasks: (ids) => {
+        const snapshot = get().tasks;
+        const picked = ids
+          .map(id => snapshot.find(t => t.id === id))
+          .filter((t): t is Task => !!t);
+        const pickedIds = new Set(picked.map(t => t.id));
+        const roots = picked.filter(t => !t.parentTaskId || !pickedIds.has(t.parentTaskId));
+        const ts = Date.now();
+        const created = localISO();
+        roots.forEach((src, i) => {
+          const newId = `t${ts}-c${i}`;
+          const { id: _id, flowTaskId: _f, origin: _o, ...rest } = src;
+          get().addTask({ ...rest, id: newId, title: `${src.title} (cópia)`, createdAt: created });
+          snapshot
+            .filter(st => st.parentTaskId === src.id)
+            .forEach((st, si) => {
+              const { id: _sid, flowTaskId: _sf, origin: _so, ...srest } = st;
+              get().addTask({ ...srest, id: `${newId}-s${si}`, parentTaskId: newId, createdAt: created });
+            });
+        });
+      },
       updateTask: (id, updates) =>
         set((s) => {
           const existing = s.tasks.find(t => t.id === id);

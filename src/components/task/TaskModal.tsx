@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { X, Trash2, ChevronDown, Plus, CheckCircle2, Circle, RefreshCw, Flag, Target, Save, Check, Link } from 'lucide-react';
+import { X, Trash2, Copy, ChevronDown, Plus, CheckCircle2, Circle, RefreshCw, Flag, Target, Save, Check, Link } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority, TaskRecurrence, RecurrenceType } from '../../types';
 import { getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -96,7 +96,7 @@ function StyledSelect<T extends string>({ value, options, onChange }: {
 }
 
 export function TaskModal() {
-  const { activeTaskId, tasks, teamMembers, teams, projects, updateTask, deleteTask, addTask, setActiveTask, memberAccess, memberCompanyAccess, taskTypes } = useAppStore();
+  const { activeTaskId, tasks, teamMembers, teams, projects, updateTask, deleteTask, duplicateTasks, addTask, setActiveTask, memberAccess, memberCompanyAccess, taskTypes } = useAppStore();
   const task = tasks.find(t => t.id === activeTaskId);
   const [localDescription, setLocalDescription] = useState('');
   const [descDirty, setDescDirty] = useState(false);
@@ -312,6 +312,13 @@ export function TaskModal() {
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors"
             >
               <Trash2 size={14} />
+            </button>
+            <button
+              onClick={() => { duplicateTasks([task.id]); setActiveTask(null); }}
+              title="Duplicar tarefa (com subtarefas)"
+              className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <Copy size={14} />
             </button>
             <button
               onClick={() => { if (descDirty) saveDescription(localDescription); if (notesDirty) saveNotes(localNotes); setActiveTask(null); }}
