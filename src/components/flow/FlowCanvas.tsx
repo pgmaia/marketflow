@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus, ZoomIn, ZoomOut, Maximize2, Trash2, ArrowLeft, X, Check, Layers, FolderKanban, Building2, CheckCircle2 , Copy , FileDown } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
-import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase, TemplateTask, TaskType } from '../../types';
+import type { FlowNode, FlowEdge, FlowNodeTask, FlowNodeType, FlowBoard, FlowLane, Project, Task, ProjectPhase, TemplateTask, TaskType , TaskTemplate} from '../../types';
 import { localISO } from '../../lib/date';
+import { structFromTemplate } from '../../lib/flowTemplate';
 import html2canvas from 'html2canvas-pro';
 import { jsPDF } from 'jspdf';
 
@@ -977,7 +978,7 @@ function SaveAsProjectModal({ board, onClose }: { board: FlowBoard; onClose: () 
 // ─── Main canvas ──────────────────────────────────────────────────────────────
 
 export function FlowCanvas({ boardId, embedded = false }: { boardId: string; embedded?: boolean }) {
-  const { flows, templates, projects, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, duplicateFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane } = useAppStore();
+  const { flows, templates, projects, addFlowNode, addFlowEdge, deleteFlowEdge, deleteFlowNode, duplicateFlowNode, addTemplate, addFlowLane, updateFlowLane, deleteFlowLane, updateFlow } = useAppStore();
   const board = flows.find(f => f.id === boardId);
 
   const [pan, setPan] = useState({ x: 60, y: 60 });
@@ -1188,7 +1189,7 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     setSelectedLaneId(lane.id);
   };
 
-    const handleAddFromTemplate = (tpl: { id: string; name: string; tasks: Array<{ title: string; type?: string; subtasks?: Array<{ title: string }> }> }) => {
+  const handleAddFromTemplate = (tpl: TaskTemplate) => {
     const rect = wrapperRef.current?.getBoundingClientRect();
     const w = 220;
     // Offset each new node slightly so they don't stack
@@ -1196,6 +1197,23 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
     const cy = rect ? (rect.height / 2 - pan.y) / zoom - 80 + (board?.nodes.length ?? 0) * 20 : 100;
     const tplIndex = templates.findIndex(t => t.id === tpl.id);
     const color = TEMPLATE_PALETTE[tplIndex % TEMPLATE_PALETTE.length];
+
+    // ── Template de FLUXO INTEIRO: recria faixas, blocos e setas ───────────
+    // Antes, qualquer template virava UM bloco com todas as tarefas dentro —
+    // um fluxo de 23 blocos voltava como um bloco só com 38 tarefas.
+    const struct = structFromTemplate(tpl, Date.now());
+    if (struct && board) {
+      const nodes = struct.nodes.map(n => ({ ...n, x: n.x + cx, y: n.y + cy }));
+      const lanes = struct.lanes.map(l => ({ ...l, x: l.x + cx }));
+      updateFlow(boardId, {
+        nodes: [...board.nodes, ...nodes],
+        lanes: [...(board.lanes ?? []), ...lanes],
+        edges: [...board.edges, ...struct.edges],
+      });
+      setSelectedId(nodes[0]?.id ?? null);
+      return;
+    }
+
     const node: FlowNode = {
       id: `fn${Date.now()}`,
       type: 'stage',
@@ -1321,6 +1339,12 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
       name: board.name,
       description: board.description ?? `Template do fluxo ${board.name}`,
       tasks: tplTasks,
+      // Desenho completo, para reconstruir o fluxo e não um bloco só.
+      flow: {
+        lanes: (board.lanes ?? []).map(l => ({ ...l })),
+        nodes: board.nodes.map(n => ({ ...n, tasks: n.tasks.map(t => ({ ...t, subtasks: (t.subtasks ?? []).map(st => ({ ...st })) })) })),
+        edges: board.edges.map(e => ({ ...e })),
+      },
       createdAt: localISO(),
     });
     setBoardTplSaved(true);
@@ -1647,7 +1671,9 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
                       </span>
                     </div>
                     <p className="text-[10px] text-gray-400 pl-4">
-                      {tpl.tasks.length} {tpl.tasks.length === 1 ? 'tarefa' : 'tarefas'}
+                      {tpl.flow
+                        ? `${tpl.flow.nodes.length} blocos · ${tpl.tasks.length} tarefas`
+                        : `${tpl.tasks.length} ${tpl.tasks.length === 1 ? 'tarefa' : 'tarefas'}`}
                     </p>
                   </button>
                 ))

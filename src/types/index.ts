@@ -126,11 +126,22 @@ export interface TemplateTask {
   subtasks?: Array<Omit<TemplateTask, 'subtasks'>>;
 }
 
+/** Estrutura do fluxo guardada no template: permite recriar o quadro inteiro
+ *  (faixas, blocos e setas), não só a lista de tarefas. */
+export interface FlowTemplate {
+  lanes: FlowLane[];
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
 export interface TaskTemplate {
   id: string;
   name: string;
   description?: string;
   tasks: TemplateTask[];
+  // Presente quando o template veio de um fluxo inteiro ("Salvar como
+  // template" no canvas): usar no fluxo recria o desenho, não um bloco só.
+  flow?: FlowTemplate;
   createdAt: string;
 }
 

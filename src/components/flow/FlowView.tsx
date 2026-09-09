@@ -5,8 +5,9 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { FlowCanvas } from './FlowCanvas';
-import type { FlowBoard, FlowNode, FlowEdge, FlowNodeTask, Project, Task, ProjectPhase } from '../../types';
+import type { FlowBoard, FlowNode, FlowEdge, FlowNodeTask, Project, Task, ProjectPhase , FlowLane} from '../../types';
 import { localISO } from '../../lib/date';
+import { structFromTemplate } from '../../lib/flowTemplate';
 
 // ─── Color palette for auto-assigning phase colors ───────────────────────────
 
@@ -41,9 +42,22 @@ function NewBoardModal({ onClose, onCreate }: {
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
 
   // ── Build nodes from template (shared between both save paths) ──────────────
-  const buildNodesFromTemplate = (templateId: string, ts: number): { nodes: FlowNode[]; edges: FlowEdge[] } => {
+  const buildNodesFromTemplate = (templateId: string, ts: number): { nodes: FlowNode[]; edges: FlowEdge[]; lanes: FlowLane[] } => {
     const tpl = templates.find(t => t.id === templateId);
-    if (!tpl) return { nodes: [], edges: [] };
+    if (!tpl) return { nodes: [], edges: [], lanes: [] };
+
+    // Template que carrega o desenho do fluxo (ou etapas): volta igual ao
+    // original. Antes montava UM bloco por FASE, então um fluxo de 23 blocos
+    // em 6 faixas voltava como 6 blocos em fila.
+    const struct = structFromTemplate(tpl, ts);
+    if (struct) {
+      const OFF = 60;
+      return {
+        nodes: struct.nodes.map(n => ({ ...n, x: n.x + OFF, y: n.y + OFF })),
+        lanes: struct.lanes.map(l => ({ ...l, x: l.x + OFF })),
+        edges: struct.edges,
+      };
+    }
 
     const seenPhases: string[] = [];
     for (const t of tpl.tasks) {
@@ -79,7 +93,7 @@ function NewBoardModal({ onClose, onCreate }: {
       toId: nodes[i + 1].id,
     }));
 
-    return { nodes, edges };
+    return { nodes, edges, lanes: [] };
   };
 
   const handleCreate = () => {
@@ -90,6 +104,7 @@ function NewBoardModal({ onClose, onCreate }: {
     // ── Resolve name, description, nodes, edges ─────────────────────────────
     let nodes: FlowNode[] = [];
     let edges: FlowEdge[] = [];
+    let lanes: FlowLane[] = [];
 
     if (mode === 'blank') {
       if (!name.trim()) return;
@@ -98,6 +113,7 @@ function NewBoardModal({ onClose, onCreate }: {
       const built = buildNodesFromTemplate(selectedTemplate.id, ts);
       nodes = built.nodes;
       edges = built.edges;
+      lanes = built.lanes;
     }
 
     const boardName = mode === 'blank' ? name.trim() : (name.trim() || selectedTemplate!.name);
@@ -107,7 +123,7 @@ function NewBoardModal({ onClose, onCreate }: {
     if (saveType === 'flow') {
       onCreate({
         type: 'flow',
-        board: { id, name: boardName, description: boardDesc, nodes, edges, createdAt: now },
+        board: { id, name: boardName, description: boardDesc, nodes, edges, lanes, createdAt: now },
       });
       return;
     }
@@ -118,9 +134,12 @@ function NewBoardModal({ onClose, onCreate }: {
     const projectId = `proj-${ts}`;
 
     // Each node → a phase
-    const phases: ProjectPhase[] = nodes.length
-      ? nodes.map((n, i) => ({ id: `ph-${ts}-${i}`, name: n.title }))
-      : [{ id: `ph-${ts}`, name: 'Tarefas' }];
+    // Com faixas, quem vira fase do projeto é a FAIXA — os blocos são etapas.
+    const phases: ProjectPhase[] = lanes.length
+      ? lanes.map((l, i) => ({ id: `ph-${ts}-${i}`, name: l.title }))
+      : nodes.length
+        ? nodes.map((n, i) => ({ id: `ph-${ts}-${i}`, name: n.title }))
+        : [{ id: `ph-${ts}`, name: 'Tarefas' }];
 
     const endDate = localISO(new Date(ts + 90 * 86400000));
 
