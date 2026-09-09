@@ -34,6 +34,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
           type: t.type,
           phase: t.phase,
           priority: t.priority,
+          etapa: t.etapa,
           description: t.description,
           notes: t.notes,
           subtasks: subs.length > 0
@@ -42,6 +43,7 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
                 type: s.type,
                 phase: s.phase,
                 priority: s.priority,
+                etapa: s.etapa ?? t.etapa,
                 description: s.description,
                 notes: s.notes,
               }))

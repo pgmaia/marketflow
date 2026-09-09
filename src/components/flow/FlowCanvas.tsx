@@ -1262,11 +1262,41 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
       }
       return best.title;
     };
+    // Percorre os blocos na ordem em que se LÊ o fluxo — faixa a faixa (da
+    // esquerda para a direita) e, dentro da faixa, por coluna e de cima para
+    // baixo. Sem isso o template saía na ordem de CRIAÇÃO dos blocos, que não
+    // tem relação com o desenho e fazia o template parecer outro fluxo.
+    const laneIndex = (n: FlowNode) => {
+      if (lanes.length === 0) return 0;
+      const title = phaseOf(n);
+      const i = lanes.findIndex(l => l.title === title);
+      return i < 0 ? lanes.length : i;
+    };
+    // Blocos empilhados na mesma coluna raramente têm o MESMO x (diferem por
+    // alguns pixels do arrasto). Ordenar por x puro embaralhava a coluna toda;
+    // então agrupamos por proximidade horizontal e, dentro da coluna, lemos de
+    // cima para baixo.
+    const COL_TOL = 150; // ~meia largura de bloco
+    const column = new Map<string, number>();
+    let col = 0, prevX = -Infinity;
+    for (const n of [...board.nodes].sort((a, b) => a.x - b.x)) {
+      if (n.x - prevX > COL_TOL) col++;
+      column.set(n.id, col);
+      prevX = n.x;
+    }
+    const ordered = [...board.nodes].sort((a, b) =>
+      laneIndex(a) - laneIndex(b) ||
+      (column.get(a.id)! - column.get(b.id)!) ||
+      a.y - b.y || a.x - b.x
+    );
+
     const tplTasks: TemplateTask[] = [];
-    for (const n of board.nodes) {
+    for (const n of ordered) {
       const phase = phaseOf(n);
+      // Bloco vazio: vira uma tarefa com o nome do bloco para o bloco não se
+      // perder — mas já marcada com a etapa, para reaparecer agrupada.
       if (n.tasks.length === 0) {
-        tplTasks.push({ title: n.title, type: 'Copy', phase, priority: 'Medium' });
+        tplTasks.push({ title: n.title, type: 'Copy', phase, priority: 'Medium', etapa: n.title });
         continue;
       }
       for (const t of n.tasks) {
@@ -1275,11 +1305,13 @@ export function FlowCanvas({ boardId, embedded = false }: { boardId: string; emb
           type: (t.type ?? 'Copy') as TaskType,
           phase,
           priority: 'Medium',
+          etapa: n.title,
           subtasks: (t.subtasks ?? []).map(st => ({
             title: st.title,
             type: (t.type ?? 'Copy') as TaskType,
             phase,
             priority: 'Medium' as const,
+            etapa: n.title,
           })),
         });
       }

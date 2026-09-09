@@ -119,6 +119,8 @@ export interface TemplateTask {
   type: TaskType;
   phase: Phase;
   priority: TaskPriority;
+  // Bloco (etapa) de origem — preserva o agrupamento do fluxo no template.
+  etapa?: string;
   description?: string;
   notes?: string;
   subtasks?: Array<Omit<TemplateTask, 'subtasks'>>;

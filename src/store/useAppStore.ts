@@ -1110,6 +1110,7 @@ export const useAppStore = create<AppState>()(
               priority: tt.priority,
               description: tt.description,
               notes: tt.notes,
+              etapa: tt.etapa,
               dueDate: today,
               createdAt: today,
             });
@@ -1124,6 +1125,7 @@ export const useAppStore = create<AppState>()(
                 priority: st.priority,
                 description: st.description,
                 notes: st.notes,
+                etapa: st.etapa ?? tt.etapa,
                 dueDate: today,
                 createdAt: today,
                 parentTaskId: parentId,
