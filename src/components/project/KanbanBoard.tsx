@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, ListTree, Check, Link, Download, MessagesSquare, GitBranch } from 'lucide-react';
+import { Plus, LayoutGrid, List, CalendarDays, Users, AlertTriangle, Layers, Settings2, EyeOff, Eye, Clock, Ban, X, Trash2, Pencil, FileText, ArrowUpDown, ListTree, WrapText, Check, Link, Download, MessagesSquare, GitBranch } from 'lucide-react';
 import type { Task } from '../../types';
 import { hasAdminPower, getAssigneeIds } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
@@ -95,6 +95,10 @@ export function KanbanBoard() {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortBy>('manual');
   const [subtaskMode, setSubtaskMode] = useState<SubtaskMode>('collapsed');
+  // Preferência de leitura por pessoa/navegador — lembrada entre sessões.
+  const [wrapText, setWrapText] = useState(() => {
+    try { return localStorage.getItem('icarus-wrap-text') === '1'; } catch { return false; }
+  });
   const [showSubtaskMenu, setShowSubtaskMenu] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -436,6 +440,22 @@ export function KanbanBoard() {
               )}
             </div>
 
+            {/* ── Quebrar texto: nomes longos em várias linhas em vez de "…" ── */}
+            {viewMode === 'list' && (
+              <button
+                onClick={() => setWrapText(v => {
+                  const next = !v;
+                  try { localStorage.setItem('icarus-wrap-text', next ? '1' : '0'); } catch { /* modo privado */ }
+                  return next;
+                })}
+                className={`h-7 flex items-center gap-1.5 px-2.5 rounded-md text-[12px] font-medium border transition-colors ${wrapText ? 'border-[#1f6feb]/30 bg-[#1f6feb]/5 text-[#1f6feb]' : 'border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300'}`}
+                title={wrapText ? 'Voltar a cortar os nomes longos' : 'Mostrar o nome inteiro das tarefas'}
+              >
+                <WrapText size={12} />
+                <span className="hidden sm:inline">Quebrar texto</span>
+              </button>
+            )}
+
             {/* ── Subtarefas: aninhadas (recolhidas/abertas) ou como tarefas
                    independentes — só faz sentido na Lista ── */}
             {viewMode === 'list' && (
@@ -659,7 +679,7 @@ export function KanbanBoard() {
             </div>
           </div>
         ) : viewMode === 'list' ? (
-          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} sortFn={makeTaskCompareFn(sortBy, memberMap)} subtaskMode={subtaskMode} />
+          <TaskListView tasks={filteredTasks} projectColor={project.color} phases={project.phases} projectId={project.id} customColumns={project.customColumns ?? []} sortFn={makeTaskCompareFn(sortBy, memberMap)} subtaskMode={subtaskMode} wrapText={wrapText} />
         ) : null}
 
         {viewMode === 'calendar' && (

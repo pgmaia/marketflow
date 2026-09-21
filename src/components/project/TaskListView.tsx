@@ -363,6 +363,10 @@ let _minWRef = makeMinW(DEFAULT_COL_WIDTHS, [], {});
 // ── Bulk-edit bridge ──────────────────────────────────────────────────────────
 // Updated by TaskListView on every render so that individual row pickers can
 // detect whether their task is part of a multi-selection and fan-out changes.
+// Quebra de texto nos nomes (botão na barra do projeto): idem _gridRef, é
+// lido pelas linhas sem precisar descer por prop em cada ponto de uso.
+let _wrapText = false;
+
 let _selIds: Set<string> = new Set();
 let _selUpdateAll: (changes: Partial<Task>) => void = () => {};
 
@@ -721,7 +725,7 @@ function TaskRow({
       className={`relative grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
         selected ? 'bg-blue-50/60' : indent ? 'bg-[#FBFBFD] hover:bg-[#F4F5F8]' : 'hover:bg-[#FAFAFA]'
       } ${flowGhost ? 'opacity-60 grayscale' : ''}`}
-      style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px' }}
+      style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px', height: _wrapText ? 'auto' : undefined }}
     >
       {/* Guia de inserção do arrasto */}
       {dropEdge && (
@@ -775,7 +779,9 @@ function TaskRow({
       {/* Task name — click opens modal */}
       <p
         onClick={() => !selectionActive && setActiveTask(task.id)}
-        className={`relative truncate cursor-pointer transition-colors flex items-center gap-1.5 ${
+        className={`relative cursor-pointer transition-colors flex items-center gap-1.5 ${
+          _wrapText ? 'flex-wrap py-2' : 'truncate'
+        } ${
           indent ? 'pl-9 text-[12.5px] font-normal' : 'pl-3 text-[13px] font-medium'
         } ${
           isDone ? 'line-through text-gray-400'
@@ -838,7 +844,7 @@ function TaskRow({
             Meta
           </span>
         ) : null}
-        <span className="truncate">{task.title}</span>
+        <span className={_wrapText ? 'whitespace-normal break-words leading-snug' : 'truncate'}>{task.title}</span>
         {task.isMeta && task.metaTarget ? (
           <span className="text-[11px] text-green-600 font-normal shrink-0 ml-1">
             {task.metaCurrent ?? 0}/{task.metaTarget}{task.metaUnit ? ` ${task.metaUnit}` : ''} · {Math.round(((task.metaCurrent ?? 0) / task.metaTarget) * 100)}%
@@ -1159,7 +1165,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
 type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
 
-export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, subtaskMode = 'collapsed' }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null; subtaskMode?: SubtaskMode }) {
+export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, subtaskMode = 'collapsed', wrapText = false }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null; subtaskMode?: SubtaskMode; wrapText?: boolean }) {
   const { updateTask, deleteTask, duplicateTasks, moveTaskOrder, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
   const project = projects.find(p => p.id === projectId);
   const projectMembers = assignableMembers(teamMembers, teamsList, project, memberAccess, memberCompanyAccess);
@@ -1188,6 +1194,7 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
   }, [bulkPopover, selectedIds]);
 
   // Sync module-level refs so TaskRow picks them up on re-render
+  _wrapText = wrapText;
   _gridRef = makeGrid(colWidths, customColumns, customColWidths);
   _minWRef = makeMinW(colWidths, customColumns, customColWidths);
   _selIds = selectedIds;
@@ -1200,12 +1207,16 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
       : colWidths[col as keyof ColWidths];
     resizeRef.current = { col, startX: e.clientX, startW, isCustom };
     const onMove = (ev: MouseEvent) => {
-      if (!resizeRef.current) return;
-      const newW = Math.max(60, resizeRef.current.startW + ev.clientX - resizeRef.current.startX);
-      if (resizeRef.current.isCustom) {
-        setCustomColWidths(w => ({ ...w, [resizeRef.current!.col]: newW }));
+      // Lê o estado do arrasto AGORA: os atualizadores abaixo rodam depois, e
+      // se o mouse for solto no meio (onUp zera a ref) eles quebravam a tela
+      // inteira ao ler `.col` de null.
+      const st = resizeRef.current;
+      if (!st) return;
+      const newW = Math.max(60, st.startW + ev.clientX - st.startX);
+      if (st.isCustom) {
+        setCustomColWidths(w => ({ ...w, [st.col]: newW }));
       } else {
-        setColWidths(w => ({ ...w, [resizeRef.current!.col]: newW }));
+        setColWidths(w => ({ ...w, [st.col as keyof ColWidths]: newW }));
       }
     };
     const onUp = () => {
