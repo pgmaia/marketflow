@@ -725,6 +725,7 @@ function TaskRow({
   lastChild = false,
   parentTitle,
   onDropTask,
+  onAddSubtask,
   subtasks,
   expanded,
   onToggle,
@@ -738,6 +739,7 @@ function TaskRow({
   lastChild?: boolean;
   parentTitle?: string;
   onDropTask?: (sourceId: string, targetId: string, edge: 'top' | 'bottom') => void;
+  onAddSubtask?: () => void;
   subtasks: Task[];
   expanded: boolean;
   onToggle: () => void;
@@ -797,7 +799,7 @@ function TaskRow({
         setDropEdge(null);
         if (sourceId !== task.id) onDropTask(sourceId, task.id, edge);
       }) : undefined}
-      className={`relative grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
+      className={`group/row relative grid items-center border-b transition-colors cursor-default ${indent ? 'border-[#F7F8FA]' : 'border-[#F3F4F6]'} ${
         selected ? 'bg-blue-50/60' : indent ? 'bg-[#FBFBFD] hover:bg-[#F4F5F8]' : 'hover:bg-[#FAFAFA]'
       } ${flowGhost ? 'opacity-60 grayscale' : ''}`}
       style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: indent ? '44px' : '52px', height: _wrapText ? 'auto' : undefined }}
@@ -923,6 +925,16 @@ function TaskRow({
           <span className="ml-2 text-[11px] text-gray-400 font-normal">
             {subtasks.filter(s => s.status === 'Concluído').length}/{subtasks.length}
           </span>
+        )}
+        {/* Criar subtarefa sem abrir a tarefa (aparece ao passar o mouse) */}
+        {!indent && onAddSubtask && (
+          <button
+            onClick={e => { e.stopPropagation(); onAddSubtask(); }}
+            title="Adicionar subtarefa"
+            className="ml-1.5 w-5 h-5 shrink-0 flex items-center justify-center rounded opacity-0 group-hover/row:opacity-100 text-gray-300 hover:text-[#1f6feb] hover:bg-[#1f6feb]/5 transition-all"
+          >
+            <Plus size={12} />
+          </button>
         )}
       </p>
 
@@ -1175,7 +1187,7 @@ export function SubtaskModeMenu({
 
 // ─── Inline add-task row ──────────────────────────────────────────────────────
 
-function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; projectId: string; onDone: () => void }) {
+function InlineAddTaskRow({ phase, projectId, onDone, parent }: { phase: string; projectId: string; onDone: () => void; parent?: Task }) {
   const { addTask } = useAppStore();
   const [title, setTitle] = useState('');
 
@@ -1183,16 +1195,19 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
     if (!title.trim()) { onDone(); return; }
     const now = localISO();
     const due = localISO(new Date(Date.now() + 7 * 86400000));
+    // Subtarefa herda fase, etapa e prazo da mãe — mesmo critério do app
+    // quando a subtarefa nasce pelo modal ou pelo fluxo.
     addTask({
       id: `t${Date.now()}`,
       projectId,
-      phase,
+      phase: parent ? parent.phase : phase,
       title: title.trim(),
-      type: 'Copy',
+      type: parent ? parent.type : 'Copy',
       status: 'Backlog',
       priority: 'Medium',
-      dueDate: due,
+      dueDate: parent?.dueDate || due,
       createdAt: now,
+      ...(parent ? { parentTaskId: parent.id, etapa: parent.etapa } : {}),
     });
     setTitle('');
     if (andClose) onDone();
@@ -1200,14 +1215,17 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
   return (
     <div
-      className="grid items-center border-b border-[#F3F4F6] bg-[#FAFBFF]"
+      className={`grid items-center border-b border-[#F3F4F6] ${parent ? 'bg-[#FBFBFD]' : 'bg-[#FAFBFF]'}`}
       style={{ gridTemplateColumns: _gridRef, minWidth: _minWRef, minHeight: '44px' }}
     >
       <span />
       <span />
-      <span className="w-2 h-2 rounded-full bg-gray-200 mx-auto block" />
+      <span className={`rounded-full bg-gray-200 mx-auto block ${parent ? 'w-1.5 h-1.5' : 'w-2 h-2'}`} />
       <span /> {/* etapa */}
-      <div className="pl-3 pr-2 flex items-center gap-2 col-span-1">
+      <div className={`${parent ? 'pl-9' : 'pl-3'} pr-2 flex items-center gap-2 col-span-1 relative`}>
+        {parent && (
+          <span aria-hidden className="absolute left-4 top-0 w-3.5 h-1/2 border-l-2 border-b-2 border-gray-200 rounded-bl-md pointer-events-none" />
+        )}
         <input
           autoFocus
           value={title}
@@ -1217,7 +1235,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
             if (e.key === 'Escape') onDone();
           }}
           onBlur={() => { if (!title.trim()) onDone(); else create(true); }}
-          placeholder="Nome da tarefa... (Enter para criar, Esc para fechar)"
+          placeholder={parent ? 'Nome da subtarefa... (Enter para criar, Esc para fechar)' : 'Nome da tarefa... (Enter para criar, Esc para fechar)'}
           className="flex-1 text-[13px] text-[#111] bg-transparent outline-none placeholder-gray-300"
         />
       </div>
@@ -1242,6 +1260,8 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
   const [bulkPopover, setBulkPopover] = useState<BulkPopover>(null);
   const [dragOverPhase, setDragOverPhase] = useState<string | null>(null);
   const [addingToPhase, setAddingToPhase] = useState<string | null>(null);
+  // Tarefa que está recebendo uma subtarefa criada direto na Lista.
+  const [addingSubtaskTo, setAddingSubtaskTo] = useState<string | null>(null);
   const [colWidths, setColWidths] = useState<ColWidths>(DEFAULT_COL_WIDTHS);
   const [customColWidths, setCustomColWidths] = useState<Record<string, number>>({});
   const [showAddCol, setShowAddCol] = useState(false);
@@ -1517,6 +1537,11 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
                                 selectionActive={selectedIds.size > 0}
                                 customCols={customColumns}
                                 onDropTask={sortFn ? undefined : handleReorder(ph.name)}
+                                onAddSubtask={() => {
+                                  // Abre a tarefa e foca a linha nova no fim das subtarefas.
+                                  setExpandedTasks(p => ({ ...p, [task.id]: true }));
+                                  setAddingSubtaskTo(task.id);
+                                }}
                               />
                               {isExpanded && subtasks.map((sub, si) => (
                                 <TaskRow
@@ -1533,6 +1558,14 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
                                   customCols={customColumns}
                                 />
                               ))}
+                              {addingSubtaskTo === task.id && (
+                                <InlineAddTaskRow
+                                  phase={ph.name}
+                                  projectId={projectId}
+                                  parent={task}
+                                  onDone={() => setAddingSubtaskTo(null)}
+                                />
+                              )}
                             </div>
                           );
                         })
