@@ -229,6 +229,7 @@ function fmtTask(t, members, projects) {
     prazo: t.due_date ?? null,
     responsaveis: resp || null,
     ...(t.etapa ? { etapa: t.etapa } : {}),
+    ...(t.etapa ? { etapa: t.etapa } : {}),
     ...(t.sprint ? { sprint: sprintLabelOf(t.sprint) } : {}),
     ...(t.parent_task_id ? { subtarefa_de: t.parent_task_id } : {}),
     ...(t.link ? { links: (() => { try { const a = JSON.parse(t.link); return Array.isArray(a) ? a.map(e => e.url) : [t.link]; } catch { return [t.link]; } })() } : {}),
@@ -299,7 +300,7 @@ server.tool(
   'Lista as tarefas de um projeto, com filtros opcionais. Por padrão omite as concluídas.',
   {
     projeto: z.string().describe('Nome ou id do projeto'),
-    status: z.string().optional().describe('Filtrar por status: Backlog, Sprint, Em andamento, Em revisão, Bloqueado ou Concluído'),
+    status: z.string().optional().describe('Filtrar por status: Backlog, Sprint, Em andamento, Em revisão, Alteração, Bloqueado ou Concluído'),
     responsavel: z.string().optional().describe('Filtrar por nome do responsável'),
     fase: z.string().optional().describe('Filtrar por fase do projeto'),
     sprint: z.string().optional().describe('Filtrar por sprint: "atual", "próxima", "anterior", "set/2" ou "2026-09-2"'),
@@ -323,7 +324,25 @@ server.tool(
         const ids = await resolveMemberIds([responsavel]);
         rows = rows.filter(t => (t.assignee_ids ?? []).includes(ids[0]));
       }
-      return ok({ projeto: proj.name, total: rows.length, tarefas: rows.map(t => fmtTask(t, members)) });
+      // Aninha as subtarefas sob a mãe — sem isso quem lê não enxerga a
+      // hierarquia e acaba tratando subtarefa como tarefa solta.
+      const porId = new Map(rows.map(t => [t.id, t]));
+      const filhosDe = new Map();
+      for (const t of rows) {
+        if (t.parent_task_id && porId.has(t.parent_task_id)) {
+          if (!filhosDe.has(t.parent_task_id)) filhosDe.set(t.parent_task_id, []);
+          filhosDe.get(t.parent_task_id).push(t);
+        }
+      }
+      const topo = rows.filter(t => !t.parent_task_id || !porId.has(t.parent_task_id));
+      const tarefas = topo.map(t => {
+        const base = fmtTask(t, members);
+        const subs = filhosDe.get(t.id);
+        // A mãe já diz de quem a subtarefa é; repetir o vínculo polui.
+        if (subs) base.subtarefas = subs.map(st => { const f = fmtTask(st, members); delete f.subtarefa_de; return f; });
+        return base;
+      });
+      return ok({ projeto: proj.name, total: rows.length, tarefas });
     } catch (e) { return fail(e); }
   }
 );
@@ -365,9 +384,10 @@ server.tool(
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2"…'),
     link: z.string().optional().describe('URL de link/arquivo da tarefa'),
     tarefa_pai: z.string().optional().describe('Id ou título da tarefa de que esta é SUBTAREFA (herda projeto, fase e etapa da mãe)'),
+    etapa: z.string().optional().describe('Etapa (agrupador dentro da fase, ex.: "Briefing", "Página de Captura")'),
     descricao: z.string().optional(),
   },
-  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, link, tarefa_pai, descricao }) => {
+  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, link, tarefa_pai, etapa, descricao }) => {
     try {
       const proj = await resolveProject(projeto);
       const phases = (proj.phases ?? []).map(f => f.name);
@@ -389,7 +409,8 @@ server.tool(
         id: `t${Date.now()}`,
         project_id: parent ? parent.project_id : proj.id,
         parent_task_id: parent ? parent.id : null,
-        etapa: parent ? parent.etapa : null,
+        // Etapa explícita ganha da herdada da mãe.
+        etapa: etapa ?? (parent ? parent.etapa : null),
         phase: phaseName,
         title: titulo,
         description: descricao ?? null,
@@ -430,9 +451,10 @@ server.tool(
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2", ou "nenhuma" para limpar'),
     link: z.string().optional().describe('URL de link/arquivo (substitui a atual)'),
     tarefa_pai: z.string().optional().describe('Torna esta tarefa SUBTAREFA da indicada (id ou título); "nenhuma" a promove a tarefa de topo'),
+    etapa: z.string().optional().describe('Etapa (agrupador dentro da fase); "nenhuma" para limpar'),
     descricao: z.string().optional(),
   },
-  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, link, tarefa_pai, descricao }) => {
+  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, link, tarefa_pai, etapa, descricao }) => {
     try {
       await ensureAuth();
       const { data: existing, error: e1 } = await supabase.from('tasks').select('*').eq('id', tarefa_id).is('deleted_at', null).maybeSingle();
@@ -454,6 +476,7 @@ server.tool(
       if (responsaveis) patch.assignee_ids = await resolveMemberIds(responsaveis);
       if (sprint) patch.sprint = /^(nenhuma|remover|limpar)$/i.test(sprint.trim()) ? null : resolveSprint(sprint);
       if (link !== undefined) patch.link = link || null;
+      if (etapa !== undefined) patch.etapa = /^(nenhuma|nenhum|remover|limpar)$/i.test(etapa.trim()) ? null : etapa.trim();
       if (tarefa_pai) {
         if (/^(nenhuma|nenhum|remover|limpar|topo)$/i.test(tarefa_pai.trim())) {
           patch.parent_task_id = null;

@@ -10,10 +10,10 @@ Servidor MCP que permite consultar e alterar os projetos do Icarus via prompt
 | `listar_empresas` | Empresas cadastradas + nº de projetos |
 | `listar_projetos` | Projetos (filtro opcional por empresa), com fases e período |
 | `listar_membros` | Equipe (para usar como responsáveis) |
-| `listar_tarefas` | Tarefas de um projeto, com filtros (status, fase, responsável) |
+| `listar_tarefas` | Tarefas de um projeto **com as subtarefas aninhadas**, filtros (status, fase, responsável, sprint) |
 | `buscar_tarefas` | Busca por texto no título e/ou por prazo, em todos os projetos |
-| `criar_tarefa` | Cria tarefa ou **subtarefa** (`tarefa_pai`), com fase, prioridade, prazo, responsáveis, sprint e link |
-| `atualizar_tarefa` | Edita status, título, prazo, fase, prioridade, responsáveis, sprint, link, tarefa-mãe |
+| `criar_tarefa` | Cria tarefa ou **subtarefa** (`tarefa_pai`), com fase, **etapa**, prioridade, prazo, responsáveis, sprint e link |
+| `atualizar_tarefa` | Edita status, título, prazo, fase, **etapa**, prioridade, responsáveis, sprint, link e tarefa-mãe |
 | `listar_documentacao` | Lê os registros de Documentação de um projeto |
 | `adicionar_registro_documentacao` | Adiciona registro assinado numa seção |
 
