@@ -187,6 +187,35 @@ async function resolveMemberIds(names) {
   });
 }
 
+/** Resolve a tarefa-mãe por id ou por trecho do título (dentro do projeto,
+ *  quando informado). Só tarefas de TOPO podem ser mãe — o app tem um nível
+ *  de subtarefa, e aninhar mais deixaria itens invisíveis na Lista. */
+async function resolveParent(ref, projectId) {
+  await ensureAuth();
+  const byId = await supabase.from('tasks').select('*').eq('id', ref).is('deleted_at', null).maybeSingle();
+  let parent = byId.data;
+  if (!parent) {
+    let q = supabase.from('tasks').select('*').is('deleted_at', null).ilike('title', `%${ref}%`).limit(10);
+    if (projectId) q = q.eq('project_id', projectId);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const cands = (data ?? []).filter(t => !t.parent_task_id);
+    if (cands.length === 0) {
+      // Achou pelo título, mas só subtarefas: o motivo real da recusa.
+      if ((data ?? []).length > 0) {
+        throw new Error(`"${data[0].title}" já é uma subtarefa — o Icarus tem um nível de subtarefa. Escolha a tarefa de topo.`);
+      }
+      throw new Error(`Tarefa-mãe "${ref}" não encontrada. Use listar_tarefas para pegar o id.`);
+    }
+    if (cands.length > 1) throw new Error(`"${ref}" é ambíguo: ${cands.map(t => `${t.title} (${t.id})`).join(' | ')}. Passe o id.`);
+    parent = cands[0];
+  }
+  if (parent.parent_task_id) {
+    throw new Error(`"${parent.title}" já é uma subtarefa — o Icarus tem um nível de subtarefa. Escolha a tarefa de topo.`);
+  }
+  return parent;
+}
+
 function fmtTask(t, members, projects) {
   const resp = (t.assignee_ids ?? []).map(id => members.find(m => m.id === id)?.name ?? id).join(', ');
   const proj = projects?.find(p => p.id === t.project_id)?.name;
@@ -201,6 +230,7 @@ function fmtTask(t, members, projects) {
     responsaveis: resp || null,
     ...(t.etapa ? { etapa: t.etapa } : {}),
     ...(t.sprint ? { sprint: sprintLabelOf(t.sprint) } : {}),
+    ...(t.parent_task_id ? { subtarefa_de: t.parent_task_id } : {}),
     ...(t.link ? { links: (() => { try { const a = JSON.parse(t.link); return Array.isArray(a) ? a.map(e => e.url) : [t.link]; } catch { return [t.link]; } })() } : {}),
     ...(t.description ? { descricao: t.description } : {}),
     ...(t.is_milestone ? { marco: true } : {}),
@@ -334,9 +364,10 @@ server.tool(
     responsaveis: z.array(z.string()).optional().describe('Nomes dos membros responsáveis'),
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2"…'),
     link: z.string().optional().describe('URL de link/arquivo da tarefa'),
+    tarefa_pai: z.string().optional().describe('Id ou título da tarefa de que esta é SUBTAREFA (herda projeto, fase e etapa da mãe)'),
     descricao: z.string().optional(),
   },
-  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, link, descricao }) => {
+  async ({ projeto, titulo, fase, status, prioridade, prazo, responsaveis, sprint, link, tarefa_pai, descricao }) => {
     try {
       const proj = await resolveProject(projeto);
       const phases = (proj.phases ?? []).map(f => f.name);
@@ -346,10 +377,19 @@ server.tool(
         if (!hit) throw new Error(`Fase "${fase}" não existe em ${proj.name}. Fases: ${phases.join(', ')}.`);
         phaseName = hit;
       }
+      // Subtarefa: herda projeto, fase e etapa da mãe (é assim que o app trata
+      // — a subtarefa aparece aninhada sob ela na Lista).
+      let parent = null;
+      if (tarefa_pai) {
+        parent = await resolveParent(tarefa_pai, proj.id);
+        if (!fase) phaseName = parent.phase;
+      }
       const assigneeIds = (await resolveMemberIds(responsaveis)) ?? [];
       const row = {
         id: `t${Date.now()}`,
-        project_id: proj.id,
+        project_id: parent ? parent.project_id : proj.id,
+        parent_task_id: parent ? parent.id : null,
+        etapa: parent ? parent.etapa : null,
         phase: phaseName,
         title: titulo,
         description: descricao ?? null,
@@ -367,7 +407,11 @@ server.tool(
       const { error } = await supabase.from('tasks').insert(row);
       if (error) throw new Error(error.message);
       const members = await getMembers();
-      return ok({ criada: fmtTask(row, members), projeto: proj.name });
+      return ok({
+        criada: fmtTask(row, members),
+        ...(parent ? { subtarefa_de: parent.title } : {}),
+        projeto: proj.name,
+      });
     } catch (e) { return fail(e); }
   }
 );
@@ -385,9 +429,10 @@ server.tool(
     responsaveis: z.array(z.string()).optional().describe('Substitui a lista de responsáveis'),
     sprint: z.string().optional().describe('Sprint: "atual", "próxima", "set/2", ou "nenhuma" para limpar'),
     link: z.string().optional().describe('URL de link/arquivo (substitui a atual)'),
+    tarefa_pai: z.string().optional().describe('Torna esta tarefa SUBTAREFA da indicada (id ou título); "nenhuma" a promove a tarefa de topo'),
     descricao: z.string().optional(),
   },
-  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, link, descricao }) => {
+  async ({ tarefa_id, titulo, status, prioridade, fase, prazo, responsaveis, sprint, link, tarefa_pai, descricao }) => {
     try {
       await ensureAuth();
       const { data: existing, error: e1 } = await supabase.from('tasks').select('*').eq('id', tarefa_id).is('deleted_at', null).maybeSingle();
@@ -409,6 +454,22 @@ server.tool(
       if (responsaveis) patch.assignee_ids = await resolveMemberIds(responsaveis);
       if (sprint) patch.sprint = /^(nenhuma|remover|limpar)$/i.test(sprint.trim()) ? null : resolveSprint(sprint);
       if (link !== undefined) patch.link = link || null;
+      if (tarefa_pai) {
+        if (/^(nenhuma|nenhum|remover|limpar|topo)$/i.test(tarefa_pai.trim())) {
+          patch.parent_task_id = null;
+        } else {
+          // Tem subtarefa? Então não pode virar subtarefa (um nível só).
+          const { data: filhas } = await supabase.from('tasks').select('id')
+            .eq('parent_task_id', tarefa_id).is('deleted_at', null).limit(1);
+          if (filhas?.length) throw new Error('Esta tarefa já tem subtarefas — mova as subtarefas antes de torná-la subtarefa de outra.');
+          const parent = await resolveParent(tarefa_pai, existing.project_id);
+          if (parent.id === tarefa_id) throw new Error('Uma tarefa não pode ser subtarefa dela mesma.');
+          patch.parent_task_id = parent.id;
+          patch.project_id = parent.project_id;
+          if (!fase) patch.phase = parent.phase;
+          patch.etapa = parent.etapa;
+        }
+      }
       if (!Object.keys(patch).length) throw new Error('Nenhum campo para atualizar.');
       const { error } = await supabase.from('tasks').update(patch).eq('id', tarefa_id);
       if (error) throw new Error(error.message);
