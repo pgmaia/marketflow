@@ -35,7 +35,7 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
 
 const PRIORITY_ORDER: Record<string, number> = { Urgent: 0, High: 1, Medium: 2, Low: 3 };
 const STATUS_ORDER: Record<string, number> = {
-  'Em andamento': 0, 'Sprint': 1, 'Em revisão': 2, 'Bloqueado': 3, 'Backlog': 4, 'Concluído': 5,
+  'Em andamento': 0, 'Sprint': 1, 'Em revisão': 2, 'Alteração': 3, 'Bloqueado': 4, 'Backlog': 5, 'Concluído': 6,
 };
 
 export function makeTaskCompareFn(sortBy: SortBy, memberMap: Record<string, string>): ((a: Task, b: Task) => number) | null {

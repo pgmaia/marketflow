@@ -8,6 +8,7 @@ const statusOptions: { value: TaskStatus | 'All'; label: string }[] = [
   { value: 'Sprint',       label: 'Sprint'         },
   { value: 'Em andamento', label: 'Em andamento'   },
   { value: 'Em revisão',   label: 'Em revisão'     },
+  { value: 'Alteração',    label: 'Alteração'      },
   { value: 'Bloqueado',    label: 'Bloqueado'      },
   { value: 'Concluído',    label: 'Concluído'      },
 ];

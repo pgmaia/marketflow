@@ -1,4 +1,4 @@
-export type TaskStatus = 'Backlog' | 'Sprint' | 'Em andamento' | 'Em revisão' | 'Bloqueado' | 'Concluído';
+export type TaskStatus = 'Backlog' | 'Sprint' | 'Em andamento' | 'Em revisão' | 'Alteração' | 'Bloqueado' | 'Concluído';
 export type TaskPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
 export type TaskType = string;
 
@@ -123,7 +123,10 @@ export interface TemplateTask {
   etapa?: string;
   description?: string;
   notes?: string;
-  subtasks?: Array<Omit<TemplateTask, 'subtasks'>>;
+  // Recursivo: o template guarda a ÁRVORE inteira (o ClickUp de onde os
+  // processos vêm chega a 4 níveis). Ao aplicar, a profundidade vira
+  // Etapa → Tarefa → Subtarefa (ver applyTemplate).
+  subtasks?: TemplateTask[];
 }
 
 /** Estrutura do fluxo guardada no template: permite recriar o quadro inteiro

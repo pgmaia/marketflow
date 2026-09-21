@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { X, Layers, Tag } from 'lucide-react';
-import type { Task, TaskTemplate } from '../../types';
+import type { Task, TaskTemplate , TemplateTask} from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 import { localISO } from '../../lib/date';
 
@@ -23,6 +23,21 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
     const trimmed = name.trim();
     if (!trimmed) { inputRef.current?.focus(); return; }
 
+    // Monta a subárvore de uma tarefa (sem limite de profundidade).
+    const mapTree = (t: Task): TemplateTask => {
+      const subs = subtasksOf(t.id);
+      return {
+        title: t.title,
+        type: t.type,
+        phase: t.phase,
+        priority: t.priority,
+        etapa: t.etapa,
+        description: t.description,
+        notes: t.notes,
+        subtasks: subs.length > 0 ? subs.map(mapTree) : undefined,
+      };
+    };
+
     const template: TaskTemplate = {
       id: `tpl-${Date.now()}`,
       name: trimmed,
@@ -37,17 +52,8 @@ export function SaveTemplateModal({ tasks, onClose, onSaved }: Props) {
           etapa: t.etapa,
           description: t.description,
           notes: t.notes,
-          subtasks: subs.length > 0
-            ? subs.map(s => ({
-                title: s.title,
-                type: s.type,
-                phase: s.phase,
-                priority: s.priority,
-                etapa: s.etapa ?? t.etapa,
-                description: s.description,
-                notes: s.notes,
-              }))
-            : undefined,
+          // Recursivo: guarda a árvore inteira, em qualquer profundidade.
+          subtasks: subs.length > 0 ? subs.map(s => mapTree(s)) : undefined,
         };
       }),
       createdAt: localISO(),

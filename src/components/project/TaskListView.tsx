@@ -59,7 +59,7 @@ function usePopover() {
   return { open, setOpen, ref };
 }
 
-const ALL_STATUSES: TaskStatus[] = ['Backlog', 'Sprint', 'Em andamento', 'Em revisão', 'Bloqueado', 'Concluído'];
+const ALL_STATUSES: TaskStatus[] = ['Backlog', 'Sprint', 'Em andamento', 'Em revisão', 'Alteração', 'Bloqueado', 'Concluído'];
 const ALL_PRIORITIES: TaskPriority[] = ['Low', 'Medium', 'High', 'Urgent'];
 
 const STATUS_META: Record<TaskStatus, { bg: string; dot: string; text: string; label: string }> = {
@@ -67,6 +67,7 @@ const STATUS_META: Record<TaskStatus, { bg: string; dot: string; text: string; l
   'Sprint':       { bg: 'bg-violet-50',  dot: 'bg-violet-500', text: 'text-violet-700', label: 'Sprint'      },
   'Em andamento': { bg: 'bg-blue-50',    dot: 'bg-blue-500',   text: 'text-blue-700',  label: 'Em andamento' },
   'Em revisão':   { bg: 'bg-amber-50',   dot: 'bg-amber-500',  text: 'text-amber-700', label: 'Em revisão'   },
+  'Alteração':    { bg: 'bg-rose-50',    dot: 'bg-rose-500',   text: 'text-rose-700',  label: 'Alteração'    },
   'Bloqueado':    { bg: 'bg-red-50',     dot: 'bg-red-500',    text: 'text-red-700',   label: 'Bloqueado'    },
   'Concluído':    { bg: 'bg-green-50',   dot: 'bg-green-500',  text: 'text-green-700', label: 'Concluído'    },
 };
@@ -77,6 +78,80 @@ const PRIORITY_META: Record<TaskPriority, { bg: string; text: string; label: str
   'High':   { bg: 'bg-orange-50',  text: 'text-orange-600',  label: 'Alta'    },
   'Urgent': { bg: 'bg-red-50',     text: 'text-red-600',     label: 'Urgente' },
 };
+
+// Etapas já usadas no projeto — alimentam o seletor sem inventar cadastro novo.
+let _etapasDoProjeto: string[] = [];
+
+function EtapaPicker({ task, label }: { task: Task; label?: string }) {
+  const { updateTask } = useAppStore();
+  const { open, setOpen, ref } = usePopover();
+  const [novo, setNovo] = useState('');
+  const isBulk = _selIds.has(task.id) && _selIds.size > 1;
+  const aplicar = (v: string | undefined) => {
+    applyBulkOrSingle(task.id, { etapa: v }, updateTask);
+    setOpen(false);
+    setNovo('');
+  };
+  return (
+    <div ref={ref} className="relative min-w-0">
+      <button
+        onClick={e => { e.stopPropagation(); setOpen(v => !v); }}
+        className="inline-flex max-w-full items-center transition-opacity hover:opacity-75"
+        title={label ? `Etapa: ${label}` : 'Definir etapa'}
+      >
+        {label ? (
+          <span className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100">
+            <span className="truncate">{label}</span>
+          </span>
+        ) : (
+          <span className="text-[12px] text-gray-300 hover:text-gray-500">—</span>
+        )}
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white rounded-xl border border-gray-150 shadow-xl z-50 py-1 min-w-[200px]" style={{ boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+          {isBulk && (
+            <p className="px-3 py-1.5 text-[10px] font-semibold text-[#1f6feb] uppercase tracking-wider border-b border-gray-50">
+              {_selIds.size} tarefas
+            </p>
+          )}
+          {task.flowTaskId && (
+            <p className="px-3 py-1.5 text-[10px] text-amber-600 border-b border-gray-50 leading-snug">
+              Vem do bloco no fluxo — renomear o bloco lá sobrescreve.
+            </p>
+          )}
+          <div className="px-2 py-1.5 border-b border-gray-50">
+            <input
+              value={novo}
+              onChange={e => setNovo(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && novo.trim()) aplicar(novo.trim()); }}
+              onClick={e => e.stopPropagation()}
+              placeholder="Nova etapa… (Enter)"
+              className="w-full text-[12px] px-2 py-1 rounded border border-gray-150 outline-none focus:border-[#1f6feb]"
+            />
+          </div>
+          <button
+            onClick={e => { e.stopPropagation(); aplicar(undefined); }}
+            className="w-full text-left px-3 py-2 text-[12px] text-gray-500 hover:bg-gray-50 transition-colors"
+          >
+            Sem etapa
+          </button>
+          <div className="max-h-52 overflow-y-auto">
+            {_etapasDoProjeto.map(et => (
+              <button
+                key={et}
+                onClick={e => { e.stopPropagation(); aplicar(et); }}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-[12px] hover:bg-gray-50 transition-colors ${label === et ? 'text-violet-700 font-semibold' : 'text-gray-700'}`}
+              >
+                <span className="truncate">{et}</span>
+                {label === et && <span className="text-[10px] text-gray-300 shrink-0">✓</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function SprintPicker({ task }: { task: Task }) {
   const { updateTask } = useAppStore();
@@ -762,18 +837,9 @@ function TaskRow({
       {/* Status dot — reflects current status */}
       <span className={`rounded-full shrink-0 ${indent ? 'w-1.5 h-1.5 opacity-70' : 'w-2 h-2'} ${(STATUS_META[task.status] ?? STATUS_META['Backlog']).dot}`} />
 
-      {/* Etapa — bloco do fluxo de onde a tarefa veio (subtarefa herda a da mãe) */}
+      {/* Etapa — editável; a subtarefa herda a da mãe, então não repete */}
       <div className="pl-3 pr-2 min-w-0">
-        {indent ? null : etapaLabel ? (
-          <span
-            className="inline-flex max-w-full items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[11px] font-medium border border-violet-100"
-            title={etapaLabel}
-          >
-            <span className="truncate">{etapaLabel}</span>
-          </span>
-        ) : (
-          <span className="text-[12px] text-gray-300">—</span>
-        )}
+        {indent ? null : <EtapaPicker task={task} label={etapaLabel} />}
       </div>
 
       {/* Task name — click opens modal */}
@@ -1163,7 +1229,7 @@ function InlineAddTaskRow({ phase, projectId, onDone }: { phase: string; project
 
 // ─── Main list view ───────────────────────────────────────────────────────────
 
-type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | null;
+type BulkPopover = 'status' | 'priority' | 'assignee' | 'date' | 'phase' | 'etapa' | null;
 
 export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, subtaskMode = 'collapsed', wrapText = false }: { tasks: Task[]; projectColor?: string; phases: ProjectPhase[]; projectId: string; customColumns: CustomColumn[]; sortFn?: ((a: Task, b: Task) => number) | null; subtaskMode?: SubtaskMode; wrapText?: boolean }) {
   const { updateTask, deleteTask, duplicateTasks, moveTaskOrder, addCustomColumn, removeCustomColumn, renameCustomColumn, teamMembers, teams: teamsList, projects, memberAccess, memberCompanyAccess } = useAppStore();
@@ -1250,6 +1316,12 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
   // In "separate" mode, subtasks appear as flat rows grouped by phase
   // Mapa flowTaskId → título do bloco, para a etapa efetiva do agrupamento.
   const linkedBoard = useAppStore(s => s.flows.find(f => f.linkedProjectId === projectId));
+  // Etapas em uso no projeto (do fluxo vinculado + das próprias tarefas).
+  _etapasDoProjeto = [...new Set([
+    ...tasks.map(t => t.etapa).filter((e): e is string => !!e),
+    ...(linkedBoard?.nodes.map(n => n.title) ?? []),
+  ])].sort((a, b) => a.localeCompare(b));
+
   const etapaByFlowTaskId = new Map<string, string>();
   linkedBoard?.nodes.forEach(n => n.tasks.forEach(ft => {
     etapaByFlowTaskId.set(ft.id, n.title);
@@ -1696,6 +1768,49 @@ export function TaskListView({ tasks, phases, projectId, customColumns, sortFn, 
                       {ph.name}
                     </button>
                   ))}
+                </div>
+              )}
+            </div>
+
+            {/* ── Etapa ── */}
+            <div className="relative">
+              <button
+                onClick={() => setBulkPopover(v => v === 'etapa' ? null : 'etapa')}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[12px] font-medium transition-colors ${bulkPopover === 'etapa' ? 'bg-gray-700 text-white' : 'hover:bg-gray-700 text-gray-300'}`}
+              >
+                Etapa
+              </button>
+              {bulkPopover === 'etapa' && (
+                <div className="absolute bottom-full mb-2 left-0 bg-white rounded-xl border border-gray-100 shadow-2xl py-1 min-w-[190px]" style={{ boxShadow: '0 -8px 32px rgba(0,0,0,0.18)' }}>
+                  <div className="px-2 py-1.5 border-b border-gray-50">
+                    <input
+                      autoFocus
+                      placeholder="Nova etapa… (Enter)"
+                      onKeyDown={e => {
+                        const v = (e.target as HTMLInputElement).value.trim();
+                        if (e.key === 'Enter' && v) {
+                          selectedTasks.forEach(t => updateTask(t.id, { etapa: v }));
+                          setBulkPopover(null);
+                        }
+                      }}
+                      className="w-full text-[12px] px-2 py-1 rounded border border-gray-150 outline-none focus:border-[#1f6feb] text-gray-800"
+                    />
+                  </div>
+                  <button
+                    onClick={() => { selectedTasks.forEach(t => updateTask(t.id, { etapa: undefined })); setBulkPopover(null); }}
+                    className="w-full text-left px-3 py-2 text-[12px] text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    Sem etapa
+                  </button>
+                  <div className="max-h-48 overflow-y-auto">
+                    {_etapasDoProjeto.map(et => (
+                      <button key={et}
+                        onClick={() => { selectedTasks.forEach(t => updateTask(t.id, { etapa: et })); setBulkPopover(null); }}
+                        className="w-full text-left px-3 py-2 text-[12px] text-gray-700 hover:bg-gray-50 transition-colors truncate">
+                        {et}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

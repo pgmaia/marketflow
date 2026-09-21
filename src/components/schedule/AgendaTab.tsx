@@ -23,6 +23,7 @@ const STATUS_LABELS: Record<string, string> = {
   'Em andamento': 'Em andamento',
   'Em revisão':   'Em revisão',
   'Concluído':    'Concluída',
+  'Alteração':    'Em alteração',
   'Bloqueado':    'Bloqueada',
 };
 

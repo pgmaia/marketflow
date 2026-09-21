@@ -30,6 +30,7 @@ const STATUS_DOT: Record<TaskStatus, string> = {
   'Em andamento': 'bg-blue-400',
   'Em revisão':   'bg-amber-400',
   'Concluído':    'bg-green-400',
+  'Alteração':    'bg-rose-400',
   'Bloqueado':    'bg-red-400',
 };
 
@@ -39,6 +40,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   'Em andamento': 'Em andamento',
   'Em revisão':   'Em revisão',
   'Concluído':    'Concluída',
+  'Alteração':    'Em alteração',
   'Bloqueado':    'Bloqueada',
 };
 

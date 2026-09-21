@@ -25,6 +25,7 @@ const STATUS_DOT: Record<TaskStatus, string> = {
   Sprint:         '#8b5cf6',
   'Em andamento': '#3b82f6',
   'Em revisão':   '#f59e0b',
+  'Alteração':     '#f43f5e',
   Bloqueado:      '#ef4444',
   Concluído:      '#22c55e',
 };

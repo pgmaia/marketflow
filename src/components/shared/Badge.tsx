@@ -6,6 +6,7 @@ const statusConfig: Record<TaskStatus, { bg: string; text: string; dot: string }
   'Sprint':       { bg: 'bg-violet-50',  text: 'text-violet-700', dot: 'bg-violet-500' },
   'Em andamento': { bg: 'bg-blue-50',    text: 'text-blue-700',   dot: 'bg-blue-500'   },
   'Em revisão':   { bg: 'bg-amber-50',   text: 'text-amber-700',  dot: 'bg-amber-500'  },
+  'Alteração':    { bg: 'bg-rose-50',    text: 'text-rose-700',   dot: 'bg-rose-500'   },
   'Bloqueado':    { bg: 'bg-red-50',     text: 'text-red-700',    dot: 'bg-red-500'    },
   'Concluído':    { bg: 'bg-green-50',   text: 'text-green-700',  dot: 'bg-green-500'  },
 };
@@ -15,6 +16,7 @@ const statusLabel: Record<TaskStatus, string> = {
   'Sprint':       'Sprint',
   'Em andamento': 'Em andamento',
   'Em revisão':   'Em revisão',
+  'Alteração':    'Alteração',
   'Bloqueado':    'Bloqueado',
   'Concluído':    'Concluído',
 };

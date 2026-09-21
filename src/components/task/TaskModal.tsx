@@ -11,6 +11,7 @@ const STATUSES: { value: TaskStatus; label: string }[] = [
   { value: 'Sprint',       label: 'Sprint'       },
   { value: 'Em andamento', label: 'Em andamento' },
   { value: 'Em revisão',   label: 'Em revisão'   },
+  { value: 'Alteração',    label: 'Alteração'    },
   { value: 'Bloqueado',    label: 'Bloqueado'    },
   { value: 'Concluído',    label: 'Concluído'    },
 ];
@@ -26,6 +27,7 @@ const statusColors: Record<TaskStatus, string> = {
   'Sprint':       '#8b5cf6',
   'Em andamento': '#3b82f6',
   'Em revisão':   '#f59e0b',
+  'Alteração':    '#f43f5e',
   'Bloqueado':    '#ef4444',
   'Concluído':    '#22c55e',
 };

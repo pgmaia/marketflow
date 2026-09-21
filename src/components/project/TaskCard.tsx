@@ -15,6 +15,7 @@ const statusRing: Record<string, string> = {
   'Em andamento': 'border-blue-100',
   'Em revisão':   'border-amber-100',
   'Concluído':    'border-green-100',
+  'Alteração':    'border-rose-100',
   'Bloqueado':    'border-red-100',
 };
 
@@ -24,6 +25,7 @@ const statusDot: Record<string, string> = {
   'Em andamento': 'bg-blue-400',
   'Em revisão':   'bg-amber-400',
   'Concluído':    'bg-green-400',
+  'Alteração':    'bg-rose-400',
   'Bloqueado':    'bg-red-400',
 };
 

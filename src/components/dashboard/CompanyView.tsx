@@ -17,6 +17,7 @@ const STATUS_META: Record<TaskStatus, { dot: string; bg: string; text: string; l
   'Sprint':       { dot: 'bg-violet-500', bg: 'bg-violet-50',  text: 'text-violet-700', label: 'Sprint'       },
   'Em andamento': { dot: 'bg-blue-500',   bg: 'bg-blue-50',    text: 'text-blue-700',   label: 'Em andamento' },
   'Em revisão':   { dot: 'bg-amber-500',  bg: 'bg-amber-50',   text: 'text-amber-700',  label: 'Em revisão'   },
+  'Alteração':    { dot: 'bg-rose-500',   bg: 'bg-rose-50',    text: 'text-rose-700',   label: 'Alteração'    },
   'Bloqueado':    { dot: 'bg-red-500',    bg: 'bg-red-50',     text: 'text-red-700',    label: 'Bloqueado'    },
   'Concluído':    { dot: 'bg-green-500',  bg: 'bg-green-50',   text: 'text-green-700',  label: 'Concluído'    },
 };
@@ -34,6 +35,7 @@ const STATUS_FILTERS: { value: TaskStatus | 'all'; label: string }[] = [
   { value: 'Sprint',       label: 'Sprint'       },
   { value: 'Em andamento', label: 'Em andamento' },
   { value: 'Em revisão',   label: 'Em revisão'   },
+  { value: 'Alteração',    label: 'Alteração'    },
   { value: 'Bloqueado',    label: 'Bloqueadas'   },
   { value: 'Concluído',    label: 'Concluídas'   },
 ];

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskType, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane, FlowNodeSubtask } from '../types';
+import type { Company, CustomColumn, Project, ProjectPhase, PhaseTemplate, Task, TaskType, TaskTemplate, Team, TeamMember, AppFilters, TaskStatus, RecurrenceType, FlowBoard, FlowNode, FlowEdge, FlowNodeTask, UserPermission, TrashItem, PersonalTask, TaskTypeConfig, DocEntry, DocSection, FlowLane, FlowNodeSubtask, TemplateTask} from '../types';
 
 // ─── Recurrence helper ────────────────────────────────────────────────────────
 
@@ -227,6 +227,14 @@ const DEFAULT_TASK_TYPES: TaskTypeConfig[] = [
   { value: 'Analytics', label: 'Analytics', emoji: '📊',  color: 'bg-indigo-50 text-indigo-700' },
   { value: 'Meeting',   label: 'Reunião',   emoji: '🗓️', color: 'bg-gray-100 text-gray-700'    },
   { value: 'Comercial', label: 'Comercial', emoji: '💼',  color: 'bg-green-50 text-green-700'   },
+  // Alinhados às "Áreas" que a equipe já usa no ClickUp.
+  { value: 'Infra', label: 'Infra/Automações', emoji: '🤖', color: 'bg-slate-100 text-slate-700' },
+  { value: 'Estrategia', label: 'Estratégia', emoji: '🧭', color: 'bg-violet-50 text-violet-700' },
+  { value: 'Gestao', label: 'Gestão', emoji: '📋', color: 'bg-amber-50 text-amber-700' },
+  { value: 'Audiovisual', label: 'Audiovisual', emoji: '🎥', color: 'bg-fuchsia-50 text-fuchsia-700' },
+  { value: 'Webdesign', label: 'Webdesign/Programação', emoji: '💻', color: 'bg-teal-50 text-teal-700' },
+  { value: 'Suporte', label: 'Suporte/Atendimento', emoji: '🎧', color: 'bg-lime-50 text-lime-700' },
+  { value: 'Expert', label: 'Expert', emoji: '🧑‍🏫', color: 'bg-rose-50 text-rose-700' },
 ];
 
 const seedFlow: FlowBoard = {
@@ -1098,7 +1106,20 @@ export const useAppStore = create<AppState>()(
           const ts = Date.now();
           const newTasks: Task[] = [];
 
-          template.tasks.forEach((tt, i) => {
+          // Profundidade da árvore do template → estrutura do Icarus:
+          //   3+ níveis: nível 1 vira ETAPA, 2 vira tarefa, 3+ vira subtarefa
+          //   até 2 níveis: nível 1 vira tarefa, 2 vira subtarefa (como antes)
+          // É o mapeamento natural para processos importados de ferramentas
+          // que aninham fundo (o "Lançamento Modelo" do ClickUp tem 4 níveis).
+          const profundidade = (t: TemplateTask): number =>
+            1 + Math.max(0, ...(t.subtasks ?? []).map(profundidade));
+          const maxProf = Math.max(0, ...template.tasks.map(profundidade));
+
+          /** Achata a subárvore em subtarefas (níveis extras entram como irmãos). */
+          const achatar = (t: TemplateTask): TemplateTask[] =>
+            [t, ...(t.subtasks ?? []).flatMap(achatar)];
+
+          const criar = (tt: TemplateTask, i: string, etapa: string | undefined) => {
             const parentId = `t${ts}-${i}`;
             newTasks.push({
               id: parentId,
@@ -1110,11 +1131,11 @@ export const useAppStore = create<AppState>()(
               priority: tt.priority,
               description: tt.description,
               notes: tt.notes,
-              etapa: tt.etapa,
+              etapa: etapa ?? tt.etapa,
               dueDate: today,
               createdAt: today,
             });
-            (tt.subtasks ?? []).forEach((st, j) => {
+            (tt.subtasks ?? []).flatMap(achatar).forEach((st, j) => {
               newTasks.push({
                 id: `t${ts}-${i}-s${j}`,
                 projectId,
@@ -1125,12 +1146,21 @@ export const useAppStore = create<AppState>()(
                 priority: st.priority,
                 description: st.description,
                 notes: st.notes,
-                etapa: st.etapa ?? tt.etapa,
+                etapa: etapa ?? tt.etapa,
                 dueDate: today,
                 createdAt: today,
                 parentTaskId: parentId,
               });
             });
+          };
+
+          template.tasks.forEach((tt, i) => {
+            if (maxProf >= 3 && (tt.subtasks?.length ?? 0) > 0) {
+              // Árvore funda: este nó é a ETAPA; os filhos viram as tarefas.
+              tt.subtasks!.forEach((filho, j) => criar(filho, `${i}-${j}`, tt.title));
+            } else {
+              criar(tt, String(i), undefined);
+            }
           });
 
           // A template carries its source project's phase names. If the target

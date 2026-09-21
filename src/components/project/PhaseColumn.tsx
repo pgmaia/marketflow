@@ -46,7 +46,7 @@ export function PhaseColumn({ phase, phaseId, index, tasks, onAddTask, onReorder
   const done = tasks.filter(t => t.status === 'Concluído').length;
   const progress = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
 
-  const statusOrder = ['Bloqueado', 'Em andamento', 'Em revisão', 'Sprint', 'Backlog', 'Concluído'];
+  const statusOrder = ['Bloqueado', 'Em andamento', 'Em revisão', 'Alteração', 'Sprint', 'Backlog', 'Concluído'];
   const sorted = [...tasks].sort((a, b) => statusOrder.indexOf(a.status) - statusOrder.indexOf(b.status));
   const milestones = sorted.filter(t => t.isMilestone);
   const metas = sorted.filter(t => t.isMeta);

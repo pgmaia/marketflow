@@ -98,7 +98,7 @@ async function currentMemberId() {
 }
 
 // ── Vocabulário do app ───────────────────────────────────────────────────────
-const STATUSES = ['Backlog', 'Sprint', 'Em andamento', 'Em revisão', 'Bloqueado', 'Concluído'];
+const STATUSES = ['Backlog', 'Sprint', 'Em andamento', 'Em revisão', 'Alteração', 'Bloqueado', 'Concluído'];
 const PRIORITY_MAP = { baixa: 'Low', low: 'Low', média: 'Medium', media: 'Medium', medium: 'Medium', alta: 'High', high: 'High', urgente: 'Urgent', urgent: 'Urgent' };
 const PRIORITY_LABEL = { Low: 'Baixa', Medium: 'Média', High: 'Alta', Urgent: 'Urgente' };
 const SECTIONS = { visaoGeral: 'Visão geral', reunioes: 'Reuniões', objetivos: 'Objetivos', rotina: 'Rotina', cronograma: 'Cronograma', aFazer: 'A Fazer' };
