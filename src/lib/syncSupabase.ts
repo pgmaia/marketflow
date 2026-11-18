@@ -423,6 +423,7 @@ export async function loadFromSupabase(attempt = 0) {
 
   const store = useAppStore.getState();
   const patch: Record<string, unknown> = {};
+  let needsRetry = false;
 
   for (let i = 0; i < ROW_ENTITIES.length; i++) {
     const cfg = ROW_ENTITIES[i];
@@ -436,10 +437,13 @@ export async function loadFromSupabase(attempt = 0) {
       console.error('[rowsync] tabela ' + cfg.table + ' vazia com dados locais — mantendo dados locais');
       const localRows = current.map(cfg.toRow);
       baselines.set(cfg.table, new Map(localRows.map(r => [r.id as string, canonRow(r)])));
-      if (attempt < 5) {
-        const delay = Math.min(2000 * 2 ** attempt, 30000);
-        setTimeout(() => { void loadFromSupabase(attempt + 1); }, delay);
-      }
+      // Marca e agenda UMA vez depois do laço. Agendar aqui dentro criava um
+      // leque exponencial: cada tabela vazia marcava sua própria re-tentativa,
+      // e cada re-tentativa remarcava todas de novo (N^5 cargas). Logo após um
+      // logout, quando toda tabela volta vazia com dados locais na memória, a
+      // aba estourava os sockets (ERR_INSUFFICIENT_RESOURCES) e só voltava a
+      // funcionar com reload — inclusive o login seguinte falhava.
+      needsRetry = true;
       continue;
     }
     patch[cfg.storeKey] = rows.map(cfg.fromRow);
@@ -475,6 +479,14 @@ export async function loadFromSupabase(attempt = 0) {
   isSyncing = false;
   snapshotRefs();
   rowsLoaded = true;
+
+  // Uma única re-tentativa por carga, não importa quantas tabelas vieram
+  // vazias — ver o comentário no laço acima.
+  if (needsRetry && attempt < 5) {
+    const delay = Math.min(2000 * 2 ** attempt, 30000);
+    setTimeout(() => { void loadFromSupabase(attempt + 1); }, delay);
+  }
+
   maybeDailyBackup();
 }
 
