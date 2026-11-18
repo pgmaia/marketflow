@@ -5,6 +5,7 @@ import { loadFromSupabase, scheduleSave, subscribeToRealtime } from './lib/syncS
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { ManagementView } from './components/management/ManagementView';
 import { VisualizadorView } from './components/dashboard/VisualizadorView';
 import { CompanyView } from './components/dashboard/CompanyView';
 import { KanbanBoard } from './components/project/KanbanBoard';
@@ -22,6 +23,7 @@ export default function App() {
   const currentMember = teamMembers.find(m => m.id === currentUserId);
   const isAdmin        = currentMember?.permission === 'Admin';
   const isVisualizador = currentMember?.permission === 'Visualizador';
+  const canManage      = isAdmin || currentMember?.permission === 'Gerente';
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Supabase sync — runs only for an authenticated session. With RLS on, a
@@ -111,7 +113,10 @@ export default function App() {
     if (!isAdmin && (view === 'users' || view === 'trash' || view === 'backup')) {
       useAppStore.getState().setView('dashboard');
     }
-  }, [isAdmin, view]);
+    if (!canManage && view === 'management') {
+      useAppStore.getState().setView('dashboard');
+    }
+  }, [isAdmin, canManage, view]);
 
   if (!isAuthenticated) return <LoginView />;
 
@@ -158,6 +163,7 @@ export default function App() {
 
         <main className="flex flex-1 min-h-0 overflow-hidden">
           {view === 'dashboard' && (isVisualizador ? <VisualizadorView /> : <DashboardView />)}
+          {view === 'management' && canManage && <ManagementView />}
           {view === 'company' && (isVisualizador ? <VisualizadorView /> : <CompanyView />)}
           {view === 'project' && <KanbanBoard />}
           {view === 'users' && isAdmin && <UserManagementView />}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LayoutDashboard, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays, Shield, Search } from 'lucide-react';
+import { LayoutDashboard, GaugeCircle, ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen, Users, GitBranch, Plus, X, Building2, Trash2, ChevronUp, LogOut, CalendarDays, Shield, Search } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import type { UserPermission } from '../../types';
 
@@ -170,6 +170,9 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   // Access helpers — Admins see everything
   const currentMember = teamMembers.find(m => m.id === currentUserId);
   const isAdmin = currentMember?.permission === 'Admin';
+  // Gerenciamento é leitura transversal de TODAS as tarefas — mesma fatia que
+  // o RLS já entrega a Admin e Gerente (has_project_access).
+  const canManage = isAdmin || currentMember?.permission === 'Gerente';
   const uid = currentUserId ?? '';
 
   // A project is visible if it's in the explicit memberAccess list.
@@ -419,6 +422,22 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             <LayoutDashboard size={15} />
             Início
           </button>
+          {canManage && (
+            <button
+              onClick={nav(() => setView('management'))}
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"
+              style={{
+                fontSize: '13px',
+                color: view === 'management' ? '#fff' : 'rgba(255,255,255,0.6)',
+                backgroundColor: view === 'management' ? 'rgba(255,255,255,0.08)' : 'transparent',
+              }}
+              onMouseEnter={e => { if (view !== 'management') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.9)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'rgba(255,255,255,0.06)'; } }}
+              onMouseLeave={e => { if (view !== 'management') { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.6)'; (e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'; } }}
+            >
+              <GaugeCircle size={15} />
+              Gerenciamento
+            </button>
+          )}
           <button
             onClick={nav(() => setView('schedule'))}
             className="flex items-center gap-2.5 px-3 py-2 rounded-md transition-colors w-full text-left"

@@ -44,7 +44,7 @@ import { syncAuthAccount } from '../lib/memberAuth';
 const SEED_COMPANY_IDS = new Set(seedCompanies.map(c => c.id));
 const SEED_MEMBER_IDS  = new Set(seedTeamMembers.map(m => m.id));
 
-type AppView = 'dashboard' | 'company' | 'project' | 'users' | 'flow' | 'trash' | 'schedule' | 'backup';
+type AppView = 'dashboard' | 'management' | 'company' | 'project' | 'users' | 'flow' | 'trash' | 'schedule' | 'backup';
 
 interface AppState {
   companies: Company[];
