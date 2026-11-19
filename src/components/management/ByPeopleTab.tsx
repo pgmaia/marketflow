@@ -4,8 +4,8 @@ import { useAppStore } from '../../store/useAppStore';
 import { getAssigneeIds } from '../../types';
 import { currentSprint, sprintLabel } from '../../lib/sprints';
 import {
-  BUCKET_META, BUCKET_ORDER, StatusBar, TaskRow, bucketOf, byDue, localDateStr,
-  type DueBucket, type WorkItem,
+  BUCKET_META, BUCKET_ORDER, GroupCheckbox, StatusBar, TaskRow, bucketOf, byDue, isAssignable,
+  localDateStr, type DueBucket, type WorkItem,
 } from './shared';
 
 interface PersonLoad {
@@ -39,14 +39,22 @@ function PersonCard({ load, orphan = false }: { load: PersonLoad; orphan?: boole
   }, [load.open]);
 
   const empty = load.open.length === 0;
+  const openIds = useMemo(() => load.open.map(i => i.task.id), [load.open]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       <button
         onClick={() => setOpen(v => !v)}
         disabled={empty}
-        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left ${empty ? 'cursor-default' : 'hover:bg-gray-50'} transition-colors`}
+        className={`group w-full flex items-center gap-3 px-4 py-3.5 text-left ${empty ? 'cursor-default' : 'hover:bg-gray-50'} transition-colors`}
       >
+        {!empty && (
+          <GroupCheckbox
+            ids={openIds}
+            title={`Marcar as ${openIds.length} de ${load.name}`}
+          />
+        )}
+
         <div className="shrink-0 text-gray-300">
           {empty ? <span className="block w-4" /> : open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </div>
@@ -89,17 +97,22 @@ function PersonCard({ load, orphan = false }: { load: PersonLoad; orphan?: boole
 
       {open && !empty && (
         <div className="border-t border-gray-50 px-2 pb-2">
-          {BUCKET_ORDER.filter(b => byBucket.has(b)).map(b => (
-            <div key={b} className="pt-2">
-              <div className="flex items-center gap-2 px-3 pb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: BUCKET_META[b].color }}>
-                  {BUCKET_META[b].label}
-                </span>
-                <span className="text-[10px] text-gray-300">{byBucket.get(b)!.length}</span>
+          {BUCKET_ORDER.filter(b => byBucket.has(b)).map(b => {
+            const list = byBucket.get(b)!;
+            const ids = list.map(i => i.task.id);
+            return (
+              <div key={b} className="pt-2">
+                <div className="group flex items-center gap-2 px-3 pb-1">
+                  <GroupCheckbox ids={ids} title={`Marcar as ${ids.length} em ${BUCKET_META[b].label.toLowerCase()}`} />
+                  <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: BUCKET_META[b].color }}>
+                    {BUCKET_META[b].label}
+                  </span>
+                  <span className="text-[10px] text-gray-300">{list.length}</span>
+                </div>
+                {list.map(item => <TaskRow key={item.task.id} item={item} group={ids} />)}
               </div>
-              {byBucket.get(b)!.map(item => <TaskRow key={item.task.id} item={item} />)}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -151,10 +164,7 @@ export function ByPeopleTab({ items }: { items: WorkItem[] }) {
 
     // Gente que pode receber trabalho aparece mesmo com zero tarefas — saber
     // quem está livre vale tanto quanto saber quem está afogado.
-    const assignable = teamMembers.filter(m => {
-      const p = m.permission ?? 'Membro';
-      return p === 'Admin' || p === 'Gerente' || p === 'Membro';
-    });
+    const assignable = teamMembers.filter(isAssignable);
     const withWork = new Set(items.flatMap(i => getAssigneeIds(i.task)));
     const people = teamMembers.filter(m => assignable.includes(m) || withWork.has(m.id));
 

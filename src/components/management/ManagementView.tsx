@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CalendarClock, LayoutList, Users } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import { getAssigneeIds } from '../../types';
 import { ByPeopleTab } from './ByPeopleTab';
 import { ByDeadlineTab } from './ByDeadlineTab';
-import { localDateStr, type WorkItem } from './shared';
+import { BulkBar } from './BulkBar';
+import { SelectionProvider, localDateStr, type WorkItem } from './shared';
 
 type Tab = 'people' | 'deadline';
 
@@ -13,8 +14,15 @@ export function ManagementView() {
   const [tab, setTab] = useState<Tab>('people');
   const [companyId, setCompanyId] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
 
   const today = localDateStr();
+
+  // A seleção não atravessa filtro nem aba: o que está marcado tem que ser o
+  // que está na tela. Sem zerar aqui dava para filtrar uma empresa, marcar 20
+  // tarefas, trocar o filtro e excluir trabalho de outra empresa sem nunca ter
+  // visto as linhas.
+  useEffect(() => { setSelected(new Set()); }, [companyId, projectId, tab]);
 
   // Projetos do seletor acompanham a empresa escolhida.
   const projectOptions = useMemo(
@@ -59,7 +67,17 @@ export function ManagementView() {
     };
   }, [items, today]);
 
+  // As ações em massa só alcançam tarefa que está no filtro atual. É cinto e
+  // suspensório junto com o reset acima: id que sobrou de um filtro anterior
+  // nunca chega ao updateTask.
+  const selectedItems = useMemo(
+    () => items.filter(i => selected.has(i.task.id)),
+    [items, selected],
+  );
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
   return (
+    <SelectionProvider selected={selected} setSelected={setSelected}>
     <div className="flex flex-col flex-1 min-h-0 bg-[#f8f8f7]">
 
       {/* ── Cabeçalho ──────────────────────────────────────────────────────── */}
@@ -109,6 +127,9 @@ export function ManagementView() {
           <span className="ml-auto text-[11px] text-gray-300 hidden sm:flex items-center gap-1.5">
             <LayoutList size={12} />
             {items.length} tarefas no filtro
+            {selected.size === 0 && (
+              <span className="text-gray-300">· marque linhas para agir em massa</span>
+            )}
           </span>
         </div>
 
@@ -124,10 +145,19 @@ export function ManagementView() {
       </div>
 
       {/* ── Conteúdo ───────────────────────────────────────────────────────── */}
-      <div className="flex-1 min-h-0 overflow-auto">
-        {tab === 'people' ? <ByPeopleTab items={items} /> : <ByDeadlineTab items={items} />}
+      {/* O wrapper não rola; a lista rola dentro dele. A barra de ações é
+          ancorada no wrapper para ficar parada no rodapé — dentro do container
+          que rola ela subiria junto com o conteúdo e sairia de vista. */}
+      <div className="relative flex-1 min-h-0">
+        <div className="absolute inset-0 overflow-auto">
+          {tab === 'people' ? <ByPeopleTab items={items} /> : <ByDeadlineTab items={items} />}
+        </div>
+        {selectedItems.length > 0 && (
+          <BulkBar items={selectedItems} onClear={clearSelection} />
+        )}
       </div>
     </div>
+    </SelectionProvider>
   );
 }
 

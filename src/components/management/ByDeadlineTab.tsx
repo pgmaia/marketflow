@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { CalendarClock, ChevronDown, ChevronRight } from 'lucide-react';
 import {
-  BUCKET_META, BUCKET_ORDER, TaskRow, bucketOf, byDue, daysLate, localDateStr,
+  BUCKET_META, BUCKET_ORDER, GroupCheckbox, TaskRow, bucketOf, byDue, daysLate, localDateStr,
   type DueBucket, type WorkItem,
 } from './shared';
 
@@ -23,12 +23,16 @@ function BucketSection({ bucket, items, open, onToggle }: {
     ? Math.max(...items.map(i => daysLate(i.task.dueDate)))
     : 0;
 
+  const ids = items.map(i => i.task.id);
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+        className="group w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left"
       >
+        <GroupCheckbox ids={ids} title={`Marcar as ${ids.length} em ${meta.label.toLowerCase()}`} />
+
         <div className="shrink-0 text-gray-300">
           {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         </div>
@@ -52,7 +56,7 @@ function BucketSection({ bucket, items, open, onToggle }: {
 
       {open && (
         <div className="border-t border-gray-50 px-2 py-2">
-          {items.map(item => <TaskRow key={item.task.id} item={item} showAssignees />)}
+          {items.map(item => <TaskRow key={item.task.id} item={item} showAssignees group={ids} />)}
         </div>
       )}
     </div>
